@@ -81,6 +81,9 @@ async function loadHosts() {
                             onclick="toggleLatencyChart('${h.name}')">
                             Ver gráfico de latência
                         </button>
+                        <button onclick="openEditModal('${h.name}','${h.address}','${h.port ?? ""}')">
+                            Editar
+                        </button>
                         <button class="delete-btn"
                             onclick="softDeleteHost('${h.name}')">
                             Deletar
@@ -203,6 +206,44 @@ async function toggleLatencyChart(name) {
     }
 }
 
+let currentEditHost = null;
+
+function openEditModal(name, ip, port) {
+    currentEditHost = name;
+
+    document.getElementById("modal-name").value = name;
+    document.getElementById("modal-ip").value = ip;
+    document.getElementById("modal-port").value = port;
+
+    document.getElementById("editModal").classList.remove("hidden");
+}
+
+function closeModal() {
+    document.getElementById("editModal").classList.add("hidden");
+}
+
+async function submitModalEdit() {
+    const newName = document.getElementById("modal-name").value;
+    const newIp = document.getElementById("modal-ip").value;
+    const newPort = document.getElementById("modal-port").value;
+
+    const res = await fetch(`${API}/host/update/${currentEditHost}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            name: newName,
+            address: newIp,
+            port: newPort ? parseInt(newPort) : null
+        })
+    });
+
+    if (res.ok) {
+        closeModal();
+        await loadHosts();
+    } else {
+        alert("Erro ao salvar");
+    }
+}
 
 async function loadLatencyChart(name) {
     if (charts[name]) charts[name].destroy();
