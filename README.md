@@ -3,7 +3,7 @@
 ![NetSpot Architecture](https://img.shields.io/badge/Architecture-Clean%20Architecture-blue)
 ![Python](https://img.shields.io/badge/Backend-FastAPI%20%7C%20Python%203.11-green)
 ![Docker](https://img.shields.io/badge/Container-Docker%20%26%20Docker%20Compose-blueviolet)
-![Tests](https://img.shields.io/badge/Tests-31%2F31%20Passed%20(100%25)-brightgreen)
+![Tests](https://img.shields.io/badge/Tests-38%2F38%20Passed%20(100%25)-brightgreen)
 ![License](https://img.shields.io/badge/License-MIT-orange)
 
 **NetSpot** é um sistema completo e moderno de **Network Operations Center (NOC Lite)** desenvolvido para monitoramento em tempo real de infraestruturas de TI, servidores, ativos de rede e conectividade.
@@ -83,15 +83,17 @@ NetSpot/
 │   ├── services/               # Circuit Breaker, Retenção, Métricas, Checadores e Notificações
 │   ├── snmp/                   # Módulo SNMP Multivendor (Discovery, Cache, Resolvers)
 │   ├── routes/                 # Endpoints RESTful e Rota /healthz
-│   ├── tests/                  # Suíte de Testes Automatizados (31 Tests Pytest)
+│   ├── tests/                  # Suíte de Testes Automatizados (38 Testes Pytest)
 │   │   ├── conftest.py         # Fixtures de teste e cliente HTTP
+│   │   ├── test_alert_logic.py # Testes do Ciclo de Vida de Incidentes e Anti-Flapping
 │   │   ├── test_checker.py     # Testes de Ping, TCP, HTTP e DNS
 │   │   ├── test_metrics.py     # Testes de Saúde, SLA, Jitter e Tendências
 │   │   ├── test_retention.py   # Testes da Política de Retenção de Dados
 │   │   ├── test_snmp.py        # Testes do Módulo SNMP e Conversores
 │   │   ├── test_api_routes.py  # Testes de Integração das Rotas RESTful
 │   │   ├── test_self_healing.py # Testes dos Módulos de Autocura e Resiliência
-│   │   └── test_models_schemas.py # Testes de Modelos e DTOs
+│   │   ├── test_models_schemas.py # Testes de Modelos e DTOs
+│   │   └── alert_logic_checklist.py # Smoke Test Standalone para CLI
 │   ├── main.py                 # Ponto de Entrada da Aplicação (Graceful Shutdown)
 │   ├── scheduler.py            # Orquestrador de Polling e Coleta Assíncrona
 │   └── snmp_engine.py          # Motor de Coleta SNMP de Alta Performance
@@ -157,7 +159,7 @@ O Docker Compose irá inicializar automaticamente os 5 serviços:
 
 ## 🧪 Suíte de Testes Automatizados (Pytest)
 
-O NetSpot inclui uma suíte de testes assíncronos cobrindo checadores de rede, métricas NOC, retenção de dados, módulo SNMP, modelos ORM, rotas RESTful e módulos de autocura (**31/31 testes aprovados**).
+O NetSpot inclui uma suíte de testes assíncronos cobrindo checadores de rede, métricas NOC, retenção de dados, módulo SNMP, modelos ORM, rotas RESTful, módulos de autocura e máquina de estados de incidentes (**38/38 testes aprovados**).
 
 Para executar os testes dentro do container backend, rode:
 

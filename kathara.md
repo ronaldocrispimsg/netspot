@@ -53,6 +53,20 @@ A topologia simulada representa um ambiente corporativo/acadêmico dividido em *
    - Agente SNMP (MIBs)                 - Agente SNMP (MIBs)                 - Agente SNMP (MIBs)
 ```
 
+### 📋 Mapeamento Formal dos 40 Nós Monitorados no `lab.conf`:
+- **Sub-rede Laboratório 1 (`10.0.1.0/24`)**: 15 estações clientes (`pc1` a `pc15`).
+- **Sub-rede Laboratório 2 (`10.0.2.0/24`)**: 15 estações clientes (`pc16` a `pc30`).
+- **Sub-rede Servidores de Aplicação (`10.0.3.0/24`)**: 10 servidores dedicados:
+  - 3 Servidores Web (`web_server1`, `web_server2`, `web_server3`).
+  - 3 Servidores de Banco de Dados (`db_server1`, `db_server2`, `db_server3`).
+  - 2 Servidores DNS BIND9 (`dns_server1`, `dns_server2`).
+  - 2 Servidores de Aplicação (`app_server1`, `app_server2`).
+- **Roteadores e Infraestrutura de Enlace**:
+  - `router_core` (interconexão com o container `netspot-backend` na sub-rede `192.168.100.0/24`).
+  - `router_lab1`, `router_lab2`, `router_lab3` (roteamento inter-LAN). *Nota de implementação*: a configuração destes roteadores é injetada 100% em tempo de boot via diretivas `[exec]` no `lab.conf`, dispensando arquivos estáticos locais.
+  - As pastas `pc31` a `pc40` no diretório são remanescentes de testes iniciais e não integram a topologia do `lab.conf` (que é delimitada aos 40 hosts acima).
+
+
 ---
 
 ## 🔬 3. Cenários de Testes Práticos e Simulação de Falhas
