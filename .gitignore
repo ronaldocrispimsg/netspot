@@ -1,3 +1,5 @@
+.agents/*
+
 # ===== Python =====
 __pycache__/
 *.py[cod]
@@ -57,3 +59,8 @@ scripts/script_para_gerar_diagramas.py
 script_para_gerar_diagramas.py
 
 
+RabbitMQ/data/
+N8N/data/
+Database/postgres_data/
+estrutura.txt
+*Zone.Identifier
