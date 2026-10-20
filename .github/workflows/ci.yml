@@ -37,11 +37,12 @@ jobs:
           pip install -r requirements.txt
 
       - name: Run Pytest Test Suite
+        # Nao definir DATABASE_URL com SQLite: Backend/database.py usa
+        # max_overflow/pool_timeout, invalidos para SQLite (quebra o import).
+        # Os testes atuais nao abrem conexao com o PostgreSQL (engine e preguicoso).
         env:
           PYTHONPATH: .
           NETSPOT_SECRET_KEY: test_secret_key_ci_environment_only_12345
-          NETSPOT_DEFAULT_ADMIN_PASSWORD: test_admin_password_ci_only
-          DATABASE_URL: "sqlite:///:memory:"
           RABBITMQ_HOST: localhost
         run: |
           pytest Backend/tests -v --durations=10

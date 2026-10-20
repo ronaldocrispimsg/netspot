@@ -89,19 +89,6 @@ async def lifespan(app: FastAPI):
     await mq_manager.start_consumers()
     await monitor_engine.start()
 
-    # Registra signal handlers para shutdown gracioso (Linux/POSIX)
-    try:
-        loop = asyncio.get_running_loop()
-        for sig in (signal.SIGTERM, signal.SIGINT):
-            try:
-                loop.add_signal_handler(
-                    sig,
-                    lambda s=sig: logger.info(f"[SHUTDOWN] Sinal {s.name} recebido. Encerrando serviços graciosamente...")
-                )
-            except (NotImplementedError, AttributeError):
-                pass
-    except Exception:
-        pass
 
     try:
         yield
