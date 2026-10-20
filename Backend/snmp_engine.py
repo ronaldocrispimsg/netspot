@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import asyncio
 from sqlalchemy import select
 
@@ -67,7 +67,7 @@ def reset_snmp_backoff(host_id=None):
 def can_attempt_snmp(host_id):
     state = get_snmp_state(host_id)
     pause_until = state["pause_until"]
-    if pause_until and datetime.utcnow() < pause_until:
+    if pause_until and datetime.now(timezone.utc).replace(tzinfo=None) < pause_until:
         return False
     return True
 
@@ -90,7 +90,7 @@ def register_snmp_failure(host_id, host_name):
 
     level = max(state["backoff_level"], 0)
     wait_seconds = min(SNMP_BACKOFF_BASE_SECONDS * (2 ** level), SNMP_BACKOFF_MAX_SECONDS)
-    state["pause_until"] = datetime.utcnow() + timedelta(seconds=wait_seconds)
+    state["pause_until"] = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(seconds=wait_seconds)
     state["failures_in_burst"] = 0
     state["backoff_level"] += 1
 
@@ -471,7 +471,7 @@ async def update_host_snmp(host, db):
 
     # ---------- 4. REDE (Melhor interface) ----------
     iface_index = await get_best_interface_index(ip, comm)
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
 
     if iface_index:
         current_in, current_out, counter_bits, baseline_only = await _select_interface_octets(
@@ -524,7 +524,7 @@ async def update_host_snmp(host, db):
             host.last_net_out_octets = current_out
             host.last_net_check = now
 
-    host.last_snmp_check = datetime.utcnow()
+    host.last_snmp_check = datetime.now(timezone.utc).replace(tzinfo=None)
 
     metric = SNMPMetric(
         host_id=host.id,

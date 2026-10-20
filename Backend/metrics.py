@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 from Backend.models import CheckResult, Incident
 
@@ -404,7 +404,7 @@ def total_downtime(db, host_name):
     return sum(i.duration_seconds for i in incidents)
 
 def availability_last_10_min(db, host_name):
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     since = now - timedelta(minutes=10)
 
     incidents = (

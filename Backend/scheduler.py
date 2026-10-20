@@ -2,7 +2,7 @@ import logging
 import os
 import time
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from threading import Lock
 
 from sqlalchemy import select
@@ -280,7 +280,7 @@ async def _host_check_async(host_id: int) -> None:
             if (
                 (
                     not host.last_ttl_alert
-                    or (datetime.utcnow() - host.last_ttl_alert).total_seconds() > 3600
+                    or (datetime.now(timezone.utc).replace(tzinfo=None) - host.last_ttl_alert).total_seconds() > 3600
                 )
                 and _alert_cooldown_passed(
                     host.id, "DNS_TTL_LOW", 3600, fingerprint=str(ttl)
@@ -299,14 +299,14 @@ async def _host_check_async(host_id: int) -> None:
                     "host_name": host.name,
                     "host_address": host.address,
                     "ttl": ttl,
-                    "timestamp": datetime.utcnow().isoformat()
+                    "timestamp": datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
                 })
-                host.last_ttl_alert = datetime.utcnow()
+                host.last_ttl_alert = datetime.now(timezone.utc).replace(tzinfo=None)
 
         if not ips:
             host.status = "DOWN"
             host.last_resolved_ip = None
-            host.last_check = datetime.utcnow()
+            host.last_check = datetime.now(timezone.utc).replace(tzinfo=None)
             if baseline_pending:
                 host.baseline_pending = False
 
@@ -385,7 +385,7 @@ async def _host_check_async(host_id: int) -> None:
                     "host_address": host.address,
                     "old_ip": old_ip,
                     "new_ip": new_ip,
-                    "timestamp": datetime.utcnow().isoformat()
+                    "timestamp": datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
                 })
 
         host.last_resolved_ip = ip
@@ -478,7 +478,7 @@ async def _host_check_async(host_id: int) -> None:
                 "host_name": host.name,
                 "host_address": host.address,
                 "health_score": score,
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
             })
 
         new_status, primary_check, service_up_without_icmp = determine_operational_state(
@@ -530,7 +530,7 @@ async def _host_check_async(host_id: int) -> None:
                     "new_status": new_status,
                     "fail_streak": host.fail_streak,
                     "check_used": primary_check,
-                    "timestamp": datetime.utcnow().isoformat()
+                    "timestamp": datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
                 })
             elif is_real_recovery:
                 db.add(
@@ -545,10 +545,10 @@ async def _host_check_async(host_id: int) -> None:
                     "host_name": host.name,
                     "host_address": host.address,
                     "old_status": old_status,
-                    "timestamp": datetime.utcnow().isoformat()
+                    "timestamp": datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
                 })
 
-        host.last_check = datetime.utcnow()
+        host.last_check = datetime.now(timezone.utc).replace(tzinfo=None)
 
         db.add(
             CheckResult(
@@ -716,7 +716,7 @@ async def _host_check_async(host_id: int) -> None:
         if host.severity in ("WARNING", "DEGRADED", "CRITICAL"):
             if (
                 not host.last_preventive_alert
-                or datetime.utcnow() - host.last_preventive_alert > timedelta(minutes=30)
+                or datetime.now(timezone.utc).replace(tzinfo=None) - host.last_preventive_alert > timedelta(minutes=30)
             ):
                 severity_labels = {
                     "WARNING": "Atenção",
@@ -755,9 +755,9 @@ async def _host_check_async(host_id: int) -> None:
                         "host_address": host.address,
                         "condition": condition_text,
                         "details": details_text,
-                        "timestamp": datetime.utcnow().isoformat()
+                        "timestamp": datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
                     })
-                    host.last_preventive_alert = datetime.utcnow()
+                    host.last_preventive_alert = datetime.now(timezone.utc).replace(tzinfo=None)
 
         await db.commit()
     except Exception:

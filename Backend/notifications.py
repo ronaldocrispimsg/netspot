@@ -41,7 +41,7 @@ _DISPLAY_TZ = ZoneInfo(DISPLAY_TIMEZONE)
 
 
 def _fmt_ts(ts=None):
-    value = ts or datetime.utcnow()
+    value = ts or datetime.now(timezone.utc)
     if isinstance(value, datetime):
         # Valores sem tz no sistema são UTC; convertemos para timezone de exibição.
         dt = value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
