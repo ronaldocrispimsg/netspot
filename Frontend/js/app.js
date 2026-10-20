@@ -1607,6 +1607,7 @@ function chartCommonOptions(yMin = null, yMax = null, yLabel = "") {
     return {
         responsive: true,
         maintainAspectRatio: false,
+        interaction: { mode: "index", intersect: false },
         plugins: {
             legend: {
                 labels: {
@@ -1616,7 +1617,8 @@ function chartCommonOptions(yMin = null, yMax = null, yLabel = "") {
                         size: 11,
                         weight: '500'
                     },
-                    boxWidth: 12,
+                    boxWidth: 8,
+                    usePointStyle: true,
                     padding: 15
                 }
             },
@@ -1884,12 +1886,16 @@ async function loadLatencyChart(name) {
         return {
             label: series.label,
             data: values,
-            borderColor: colors.line,
-            backgroundColor: colors.fill,
-            tension: 0.3,
-            spanGaps: true,
+            ...window.NetSpotChartTheme.lineStyle(colors.line, { fill: orderedSeries.length === 1 }),
         };
     });
+
+    window.NetSpotChartTheme.renderSummary(ctx, datasets.map((ds) => ({
+        label: ds.label,
+        color: ds.borderColor,
+        values: ds.data,
+        fmt: (v) => `${v.toFixed(1)} ms`,
+    })));
 
     updateOrCreateChart(chartKey, ctx, {
         type: "line",
@@ -1935,90 +1941,62 @@ async function loadSnmpChart(name) {
     const ctx = document.getElementById("snmp-chart-" + name);
     if (!ctx) return;
 
+    const T = window.NetSpotChartTheme;
+    T.renderSummary(ctx, [
+        { label: "CPU", color: cpuColor, values: cpu, fmt: metricPercent },
+        { label: "RAM", color: ramColor, values: ram, fmt: metricPercent },
+        { label: "Disco", color: diskColor, values: disk, fmt: metricPercent },
+        { label: "Download", color: rxColor, values: rx, fmt: formatBps },
+        { label: "Upload", color: txColor, values: tx, fmt: formatBps },
+    ]);
+
+    // Eixos: % (esquerda, com faixas de limiar) e bps (direita, agora visível e legível).
+    const opts = chartCommonOptions();
+    const axisTitle = opts.scales.y.title;
+    const axisTicks = opts.scales.y.ticks;
+    opts.scales = {
+        x: opts.scales.x,
+        y_percent: {
+            ...opts.scales.y,
+            type: "linear",
+            position: "left",
+            min: 0,
+            max: 100,
+            title: { ...axisTitle, display: true, text: "Uso (%)" },
+        },
+        y_bps: {
+            type: "linear",
+            position: "right",
+            min: 0,
+            grid: { drawOnChartArea: false },
+            title: { ...axisTitle, display: true, text: "Rede" },
+            ticks: { ...axisTicks, callback: (v) => formatBps(v) },
+        },
+    };
+    opts.plugins.thresholdBands = T.thresholdBands("y_percent", T.percentBands(80, 95));
+    opts.plugins.tooltip.callbacks = {
+        label: (c) => {
+            if (c.dataset.yAxisID === "y_percent") {
+                const value = Number(c.parsed.y);
+                return `${c.dataset.label}: ${Number.isFinite(value) ? value.toFixed(2) : "N/A"}%`;
+            }
+            return `${c.dataset.label}: ${formatBps(c.parsed.y)}`;
+        }
+    };
+
     updateOrCreateChart(chartKey, ctx, {
         type: "line",
         data: {
             labels,
             datasets: [
-                {
-                    label: "CPU (%)",
-                    data: cpu,
-                    borderColor: cpuColor,
-                    backgroundColor: cpuColor + "33",
-                    yAxisID: "y_percent",
-                    tension: 0.3
-                },
-                {
-                    label: "RAM (%)",
-                    data: ram,
-                    borderColor: ramColor,
-                    backgroundColor: ramColor + "33",
-                    yAxisID: "y_percent",
-                    tension: 0.3
-                },
-                {
-                    label: "Disco (%)",
-                    data: disk,
-                    borderColor: diskColor,
-                    backgroundColor: diskColor + "33",
-                    yAxisID: "y_percent",
-                    tension: 0.3
-                },
-                {
-                    label: "Download (RX)",
-                    data: rx,
-                    borderColor: rxColor,
-                    backgroundColor: rxColor + "33",
-                    yAxisID: "y_bps",
-                    tension: 0.3
-                },
-                {
-                    label: "Upload (TX)",
-                    data: tx,
-                    borderColor: txColor,
-                    backgroundColor: txColor + "33",
-                    yAxisID: "y_bps",
-                    tension: 0.3
-                }
+                { label: "CPU (%)", data: cpu, ...T.lineStyle(cpuColor, { yAxisID: "y_percent" }) },
+                { label: "RAM (%)", data: ram, ...T.lineStyle(ramColor, { fill: false, yAxisID: "y_percent" }) },
+                { label: "Disco (%)", data: disk, ...T.lineStyle(diskColor, { fill: false, yAxisID: "y_percent" }) },
+                { label: "Download (RX)", data: rx, ...T.lineStyle(rxColor, { fill: false, yAxisID: "y_bps" }) },
+                { label: "Upload (TX)", data: tx, ...T.lineStyle(txColor, { fill: false, yAxisID: "y_bps" }) }
             ]
         },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                tooltip: {
-                    callbacks: {
-                        label: (ctx) => {
-                            if (ctx.dataset.yAxisID === "y_percent") {
-                                const value = Number(ctx.parsed.y);
-                                return `${ctx.dataset.label}: ${Number.isFinite(value) ? value.toFixed(2) : "N/A"}%`;
-                            }
-                            return `${ctx.dataset.label}: ${formatBps(ctx.parsed.y)}`;
-                        }
-                    }
-                }
-            },
-            scales: {
-                y_percent: {
-                    type: "linear",
-                    position: "left",
-                    min: 0,
-                    max: 100,
-                    title: {
-                        display: true,
-                        text: "Uso (%)"
-                    }
-                },
-                y_bps: {
-                    type: "linear",
-                    position: "right",
-                    display: false,
-                    grid: {
-                        drawOnChartArea: false
-                    }
-                }
-            }
-        }
+        options: opts
     });
 }
 
@@ -2061,38 +2039,30 @@ async function loadAvailabilityChartType(name) {
     const tcpColor = isDark ? "#8ab4f8" : "#1a73e8";
     const httpColor = isDark ? "#fde293" : "#f9ab00";
 
+    const T = window.NetSpotChartTheme;
+    T.renderSummary(ctx, [
+        { label: "Ping", color: pingColor, values: pingValues, fmt: (v) => `${v.toFixed(1)}%` },
+        { label: "TCP", color: tcpColor, values: tcpValues, fmt: (v) => `${v.toFixed(1)}%` },
+        { label: "HTTP", color: httpColor, values: httpValues, fmt: (v) => `${v.toFixed(1)}%` },
+    ]);
+
+    const availOpts = chartCommonOptions(0, 100, "Disponibilidade (%)");
+    availOpts.plugins.thresholdBands = T.thresholdBands("y", [
+        { from: 0, to: 85, color: "rgba(217,48,37,0.08)" },
+        { from: 85, to: 95, color: "rgba(249,171,0,0.09)" },
+    ]);
+
     updateOrCreateChart(chartKey, ctx, {
         type: "line",
         data: {
             labels: labels,
             datasets: [
-                {
-                    label: "Disponibilidade Ping (%)",
-                    data: pingValues,
-                    borderColor: pingColor,
-                    backgroundColor: pingColor + "33",
-                    tension: 0.3,
-                    fill: true
-                },
-                {
-                    label: "Disponibilidade TCP (%)",
-                    data: tcpValues,
-                    borderColor: tcpColor,
-                    backgroundColor: tcpColor + "33",
-                    tension: 0.3,
-                    fill: true
-                },
-                {
-                    label: "Disponibilidade HTTP (%)",
-                    data: httpValues,
-                    borderColor: httpColor,
-                    backgroundColor: httpColor + "33",
-                    tension: 0.3,
-                    fill: true
-                }
+                { label: "Disponibilidade Ping (%)", data: pingValues, ...T.lineStyle(pingColor, { fill: false }) },
+                { label: "Disponibilidade TCP (%)", data: tcpValues, ...T.lineStyle(tcpColor, { fill: false }) },
+                { label: "Disponibilidade HTTP (%)", data: httpValues, ...T.lineStyle(httpColor, { fill: false }) }
             ]
         },
-        options: chartCommonOptions(null, null, "Disponibilidade (%)")
+        options: availOpts
     });
 }
 
@@ -2631,6 +2601,17 @@ async function loadAvailability(name) {
         const isDark = document.body.classList.contains("dark-theme") || document.documentElement.classList.contains("dark-theme");
         const availColor = isDark ? "#81c995" : "#1e8e3e";
 
+        const T = window.NetSpotChartTheme;
+        T.renderSummary(ctx, [
+            { label: "Disponibilidade", color: availColor, values, fmt: (v) => `${v.toFixed(2)}%` },
+        ]);
+
+        const availOpts = chartCommonOptions(0, 100, "Disponibilidade (%)");
+        availOpts.plugins.thresholdBands = T.thresholdBands("y", [
+            { from: 0, to: 85, color: "rgba(217,48,37,0.08)" },
+            { from: 85, to: 95, color: "rgba(249,171,0,0.09)" },
+        ]);
+
         updateOrCreateChart(chartKey, ctx, {
             type: 'line',
             data: {
@@ -2638,15 +2619,10 @@ async function loadAvailability(name) {
                 datasets: [{
                     label: 'Disponibilidade Host (%)',
                     data: values,
-                    borderColor: availColor,
-                    backgroundColor: availColor + "33",
-                    tension: 0.3,
-                    fill: true
+                    ...T.lineStyle(availColor)
                 }]
             },
-            options: {
-                ...chartCommonOptions(null, null, "Disponibilidade (%)")
-            }
+            options: availOpts
         });
     } catch (err) {
         console.error("Erro ao carregar disponibilidade:", err);

@@ -3285,3 +3285,72 @@ textarea::placeholder {
     border-color: var(--line) !important;
     color: var(--text-main) !important;
 }
+/* ===== Gráficos: mini cards de resumo e wrapper do canvas (plano visual, Fase 1) ===== */
+.chart-canvas-wrap {
+    position: relative;
+}
+
+.chart-canvas-wrap canvas {
+    display: block;
+}
+
+.chart-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.chart-summary.hidden {
+    display: none;
+}
+
+.chart-summary-chip {
+    --chip-color: var(--primary);
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 108px;
+    padding: 7px 11px 7px 12px;
+    background: var(--bg-panel);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--chip-color);
+    border-radius: 8px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+    transition: transform .15s ease, box-shadow .15s ease;
+}
+
+.chart-summary-chip:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 3px 8px rgba(15, 23, 42, 0.12);
+}
+
+.chart-summary-label {
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: var(--text-soft);
+}
+
+.chart-summary-value {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--text-main);
+    line-height: 1.2;
+}
+
+.chart-summary-detail {
+    font-size: 0.68rem;
+    color: var(--text-soft);
+}
+
+.dark-theme .chart-summary-chip {
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .chart-summary-chip {
+        transition: none;
+    }
+}
