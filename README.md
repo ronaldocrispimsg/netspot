@@ -123,7 +123,22 @@ NetSpot/
 * **Docker** (versão 20.10 ou superior)
 * **Docker Compose** (versão 2.0 ou superior)
 
-### 1. Iniciar todos os Containers
+### 1. Configurar Variáveis de Ambiente (.env)
+
+Antes de iniciar os containers, crie o arquivo `.env` a partir do modelo `.env.example` e configure senhas fortes:
+
+```bash
+cp .env.example .env
+```
+
+Edite as principais variáveis no `.env`:
+* **PostgreSQL**: `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` e `DATABASE_URL`.
+* **Segurança da API**: `NETSPOT_SECRET_KEY` (chave de assinatura JWT) e `NETSPOT_DEFAULT_ADMIN_PASSWORD` (senha do primeiro acesso admin).
+* **RabbitMQ**: `RABBITMQ_USER` e `RABBITMQ_PASSWORD`.
+* **N8N Automation**: `N8N_BASIC_AUTH_USER` e `N8N_BASIC_AUTH_PASSWORD`.
+* **Telegram**: `NETSPOT_TELEGRAM_BOT_TOKEN` e `NETSPOT_TELEGRAM_CHAT_ID`.
+
+### 2. Iniciar todos os Containers
 
 Na raiz do projeto, execute:
 
