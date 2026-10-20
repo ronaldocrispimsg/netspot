@@ -1,7 +1,13 @@
 from sqlalchemy import Boolean, Column, Float, Integer, String, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from datetime import datetime, timezone
 from Backend.database import Base
+
+
+def _utcnow_naive():
+    """Retorna datetime UTC sem tzinfo para persistência segura em banco."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
 
 
 class Host(Base):
@@ -99,7 +105,7 @@ class CheckResult(Base):
     status_code = Column(Integer, nullable=True)
     tcp_port = Column(Integer, nullable=True)
     
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    timestamp = Column(DateTime, default=_utcnow_naive)
 
     host = relationship("Host", back_populates="checks")
 
@@ -113,7 +119,7 @@ class Alert(Base):
     old_status = Column(String)
     new_status = Column(String)
 
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    timestamp = Column(DateTime, default=_utcnow_naive)
 
 class Incident(Base):
     __tablename__ = "incidents"
@@ -122,7 +128,7 @@ class Incident(Base):
     host_name = Column(String, index=True)
     status = Column(String, default="OPEN")
     reason = Column(String)
-    started_time = Column(DateTime, default=datetime.utcnow)
+    started_time = Column(DateTime, default=_utcnow_naive)
     ended_time = Column(DateTime, nullable=True)
     duration_seconds = Column(Integer, nullable=True)
 
@@ -162,4 +168,4 @@ class SNMPMetric(Base):
     network_out_bps = Column(Float, nullable=True)
     network_total_bps = Column(Float, nullable=True)
 
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    timestamp = Column(DateTime, default=_utcnow_naive)

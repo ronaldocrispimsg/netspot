@@ -562,7 +562,7 @@ async def update_host_snmp(host, db):
             ):
                 elapsed = (now - host.last_net_check).total_seconds()
 
-                if elapsed > 0:
+                if 0 < elapsed <= 300:
                     delta_in = _compute_delta_octets(
                         current_in,
                         host.last_net_in_octets,

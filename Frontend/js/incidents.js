@@ -63,20 +63,27 @@ function renderIncidents(items) {
         return;
     }
 
-    box.innerHTML = items.map((inc) => `
-        <div class="incident-row">
+    box.innerHTML = items.map((inc) => {
+        const isClosed = String(inc.status || "").toUpperCase() === "CLOSED";
+        const stateClass = isClosed ? "incident-closed" : "incident-open";
+        const statusLabel = isClosed ? "Fechado" : "Aberto";
+        const durationFormatted = inc.duration
+            ? `${Math.max(1, Math.round(inc.duration / 60))} min`
+            : "Em andamento";
+        return `
+        <div class="incident-row ${stateClass}">
             <div class="incident-row-main">
                 <strong>${escapeHtml(inc.host_name || "Host")}</strong>
-                <small>${escapeHtml(inc.status || "N/A")} • ${escapeHtml(inc.incident_type || "GENERIC")}</small>
+                <small class="incident-status-tag ${stateClass}">${statusLabel} • ${escapeHtml(inc.incident_type || "GENERIC")}</small>
             </div>
             <div class="incident-row-meta">
                 <small>Início: ${escapeHtml(formatDateTime(inc.started_time))}</small>
                 <small>Fim: ${escapeHtml(formatDateTime(inc.ended_time))}</small>
-                <small>Duração: ${escapeHtml(inc.duration || "Em andamento")}</small>
+                <small>Duração: ${escapeHtml(durationFormatted)}</small>
             </div>
             <div class="incident-row-reason">${escapeHtml(inc.reason_text || inc.reason || "Sem descrição")}</div>
         </div>
-    `).join("");
+    `}).join("");
 }
 
 function applySearch() {
@@ -91,22 +98,50 @@ function applySearch() {
     renderIncidents(filtered);
 }
 
-async function loadIncidents() {
-    setIncidentsState("Carregando incidentes...", "info");
-    const res = await fetchWithAuth(`${API}/incidents/latest`);
-    if (!res || !res.ok) {
-        setIncidentsState("Não foi possível carregar os incidentes.", "error");
-        return;
+async function loadIncidents(silent = false) {
+    const refreshBtn = document.getElementById("refreshIncidentsBtn");
+    const refreshIcon = refreshBtn?.querySelector(".refresh-icon");
+    if (refreshIcon) refreshIcon.classList.add("spin");
+
+    if (!silent) {
+        setIncidentsState("Carregando incidentes...", "info");
     }
-    const data = await res.json();
-    incidentsCache = Array.isArray(data) ? data : [];
-    applySearch();
+
+    try {
+        const res = await fetchWithAuth(`${API}/incidents/latest`);
+        if (!res || !res.ok) {
+            if (!silent) {
+                setIncidentsState("Não foi possível carregar os incidentes.", "error");
+            }
+            return;
+        }
+        const data = await res.json();
+        incidentsCache = Array.isArray(data) ? data : [];
+        applySearch();
+    } finally {
+        if (refreshIcon) {
+            setTimeout(() => refreshIcon.classList.remove("spin"), 400);
+        }
+    }
 }
 
 window.addEventListener("DOMContentLoaded", async () => {
     const searchInput = document.getElementById("incidentsSearch");
     if (searchInput) searchInput.addEventListener("input", applySearch);
+
+    const refreshBtn = document.getElementById("refreshIncidentsBtn");
+    if (refreshBtn) {
+        refreshBtn.addEventListener("click", () => loadIncidents(false));
+    }
+
     await loadIncidents();
+
+    // Auto-refresh leve a cada 20 segundos em segundo plano (se a aba estiver visível)
+    setInterval(() => {
+        if (!document.hidden) {
+            loadIncidents(true);
+        }
+    }, 20000);
 });
 
 /* ==========================================================================

@@ -51,6 +51,10 @@
         <article class="overview-card incidents-page-card">
             <div class="incidents-toolbar">
                 <input id="incidentsSearch" type="text" placeholder="Buscar por nome do host...">
+                <button id="refreshIncidentsBtn" class="refresh-pill-btn" type="button" title="Atualizar lista de incidentes" aria-label="Atualizar lista de incidentes">
+                    <svg class="refresh-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+                    <span>Atualizar</span>
+                </button>
             </div>
             <div id="incidentsList" class="incidents-list" aria-live="polite">
                 <small>Carregando incidentes...</small>

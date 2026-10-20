@@ -63,5 +63,18 @@ class HostCircuitBreaker:
             self.state[host_id] = "OPEN"
             self.opened_at[host_id] = time.time()
 
+    def clear_host(self, host_id: int):
+        """Limpa o rastreamento do host quando ele é excluído ou desativado."""
+        self.failures.pop(host_id, None)
+        self.state.pop(host_id, None)
+        self.opened_at.pop(host_id, None)
+
+    def reset_all(self):
+        """Reseta todos os circuitos (utilizado em reinicializações e testes)."""
+        self.failures.clear()
+        self.state.clear()
+        self.opened_at.clear()
+
 
 circuit_breaker = HostCircuitBreaker()
+

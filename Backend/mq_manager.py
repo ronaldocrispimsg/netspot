@@ -141,15 +141,17 @@ class QueueManager:
         logger.info("Consumidores do RabbitMQ iniciados com sucesso.")
 
     async def _process_host_check_message(self, message: aio_pika.IncomingMessage):
-        async with message.process():
+        async with message.process(requeue=False):
             try:
                 data = json.loads(message.body.decode())
-                host_id = data.get("host_id")
-                if host_id:
-                    logger.debug("Mensagem de checagem recebida para host_id=%s", host_id)
-                    await process_host_check(host_id)
-            except Exception:
-                logger.exception("Erro ao processar mensagem de checagem do host")
+            except Exception as e:
+                logger.error("Mensagem corrompida em netspot.host_checks: %s. Roteando para DLQ.", e)
+                raise
+
+            host_id = data.get("host_id")
+            if host_id:
+                logger.debug("Mensagem de checagem recebida para host_id=%s", host_id)
+                await process_host_check(host_id)
 
     async def _ensure_connection_active(self) -> bool:
         """Garante que a conexao e canal estejam ativos antes de publicar."""

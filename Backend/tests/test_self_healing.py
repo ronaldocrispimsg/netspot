@@ -60,6 +60,20 @@ def test_2_circuit_breaker_logic():
     assert cb.state[host_id] == "CLOSED"
     assert cb.failures[host_id] == 0
 
+    # Limpeza individual por host (exclusão de host)
+    cb.clear_host(host_id)
+    assert host_id not in cb.failures
+    assert host_id not in cb.state
+    assert host_id not in cb.opened_at
+    assert cb.is_allowed(host_id) is True
+
+    # Reset global de circuitos
+    cb.record_failure(101)
+    cb.reset_all()
+    assert len(cb.failures) == 0
+    assert len(cb.state) == 0
+
+
 
 def test_3_rabbitmq_dlq_configuration():
     """Valida se o QueueManager possui suporte a Dead Letter Queue (DLQ)."""

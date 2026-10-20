@@ -419,22 +419,8 @@ def total_downtime(db, host_name):
 
     return sum(i.duration_seconds for i in incidents)
 
-def availability_last_10_min(db, host_name):
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
-    since = now - timedelta(minutes=10)
-
-    incidents = (
-    db.query(Incident)
-    .filter(
-        Incident.host_name == host_name,
-        Incident.started_time <= now,
-        (Incident.ended_time == None) | (Incident.ended_time >= since)
-    )
-    .all()
-)
-
+def calculate_availability_from_incidents(incidents, now, since, total_period: int = 600) -> float:
     downtime = 0
-
     for incident in incidents:
         start = incident.started_time
         end = incident.ended_time or now
@@ -445,10 +431,24 @@ def availability_last_10_min(db, host_name):
         if overlap_end > overlap_start:
             downtime += (overlap_end - overlap_start).total_seconds()
 
-    total_period = 600
     availability = ((total_period - downtime) / total_period) * 100
+    return round(max(0.0, availability), 4)
 
-    return round(max(0, availability), 4)
+def availability_last_10_min(db, host_name):
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    since = now - timedelta(minutes=10)
+
+    incidents = (
+        db.query(Incident)
+        .filter(
+            Incident.host_name == host_name,
+            Incident.started_time <= now,
+            (Incident.ended_time == None) | (Incident.ended_time >= since)
+        )
+        .all()
+    )
+
+    return calculate_availability_from_incidents(incidents, now, since)
 
 def apply_preventive_logic(host, snmp_data=None, ignore_ping_metrics: bool = False):
     reasons = []

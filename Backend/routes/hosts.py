@@ -9,10 +9,12 @@ import subprocess
 import xml.etree.ElementTree as ET
 import psutil
 from Backend.database import get_db
-from Backend.metrics import total_downtime, total_incidents, availability_last_10_min, compute_health
+from Backend.metrics import total_downtime, total_incidents, availability_last_10_min, compute_health, calculate_availability_from_incidents
 from Backend.models import CheckResult, Host, Alert, Incident, User, SNMPMetric
 from Backend.checker import ping_host, tcp_check, resolve_dns_cached_sync
 from Backend.notifications import telegram_health_check
+from Backend.services.circuit_breaker import circuit_breaker
+from Backend.snmp_engine import reset_snmp_backoff
 from Backend.schemas import (
     HostCreate,
     HostUpdate,
@@ -406,6 +408,8 @@ def _deactivate_host_entity(host: Host) -> None:
     host.active = False
     host.active_time = datetime.utcnow()
     host.deleted_at = datetime.utcnow()
+    circuit_breaker.clear_host(host.id)
+    reset_snmp_backoff(host.id)
 
 
 def _is_icmp_blocked_but_service_up(
@@ -422,6 +426,21 @@ def _is_icmp_blocked_but_service_up(
     return tcp_ok or http_ok
 
 def infer_probable_cause(db: Session, host: Host) -> str:
+    # 1. Caminho rápido antecipado para hosts comprovadamente saudáveis:
+    # Se host é UP, status_ping é UP e severidade é HEALTHY/UNKNOWN sem sobrecarga,
+    # sabemos com certeza que ICMP não está bloqueado e a operação é normal,
+    # eliminando 4 queries SQL (get_last_check) por host saudável.
+    is_healthy = host.status == "UP" and host.severity in ("HEALTHY", "UNKNOWN", None)
+    has_normal_resources = (
+        (host.cpu_usage is None or host.cpu_usage < 90)
+        and (host.ram_usage is None or host.ram_usage < 90)
+        and (host.disk_usage is None or host.disk_usage < 90)
+        and (host.jitter_ms_ping is None or host.jitter_ms_ping < 120)
+    )
+    if is_healthy and has_normal_resources and getattr(host, "status_ping", None) == "UP":
+        host.icmp_blocked_but_service_up = False
+        return "Operação normal"
+
     last_dns = get_last_check(db, host.id, "dns")
     last_ping = get_last_check(db, host.id, "ping")
     last_tcp = get_last_check(db, host.id, "tcp")
@@ -437,14 +456,6 @@ def infer_probable_cause(db: Session, host: Host) -> str:
     if icmp_blocked_but_service_up:
         return "ICMP bloqueado por firewall\nServiço operando normalmente"
 
-    # Otimização de caminho rápido: hosts UP com boa saúde operacional
-    is_healthy = host.status == "UP" and host.severity in ("HEALTHY", "UNKNOWN", None)
-    has_normal_resources = (
-        (host.cpu_usage is None or host.cpu_usage < 90)
-        and (host.ram_usage is None or host.ram_usage < 90)
-        and (host.disk_usage is None or host.disk_usage < 90)
-        and (host.jitter_ms_ping is None or host.jitter_ms_ping < 120)
-    )
     if is_healthy and has_normal_resources:
         return "Operação normal"
 
@@ -487,13 +498,17 @@ def create_host(data: HostCreate, db: Session = Depends(get_db), user: str = Dep
     if not normalized_name:
         raise HTTPException(status_code=400, detail="Nome do host é obrigatório")
 
+    normalized_address = (data.address or "").strip()
+    if not normalized_address:
+        raise HTTPException(status_code=400, detail="Endereço do host é obrigatório")
+
     existing_host = db.query(Host).filter(Host.name == normalized_name).first()
     resolved = None
 
-    if is_ip(data.address):
-        resolved = reverse_dns(data.address)
+    if is_ip(normalized_address):
+        resolved = reverse_dns(normalized_address)
     else:
-        dns_result = resolve_dns_cached_sync(data.address, db)  # Verifica se o endereço é válido
+        dns_result = resolve_dns_cached_sync(normalized_address, db)  # Verifica se o endereço é válido
         ips = extract_ips_from_dns_result(dns_result)
         
         if not ips:
@@ -504,12 +519,14 @@ def create_host(data: HostCreate, db: Session = Depends(get_db), user: str = Dep
             existing_host.active = True
             existing_host.active_time = None
             existing_host.deleted_at = None
+            circuit_breaker.clear_host(existing_host.id)
+            reset_snmp_backoff(existing_host.id)
             existing_ports = _host_ports(existing_host)
             if data.ports is None and data.port is None:
                 ports = existing_ports
             else:
                 ports = _normalize_ports(data.ports, data.port)
-            existing_host.address = data.address
+            existing_host.address = normalized_address
             _store_host_ports(existing_host, ports)
             existing_host.hostname_resolved = resolved
             _reset_host_operational_state(existing_host)
@@ -533,7 +550,7 @@ def create_host(data: HostCreate, db: Session = Depends(get_db), user: str = Dep
         comm = (getattr(data, "snmp_community", "netspot") or "netspot").strip() or "netspot"
         host = Host(
             name=normalized_name,
-            address=data.address,
+            address=normalized_address,
             active=True,
             active_time=None,
             deleted_at=None,
@@ -652,6 +669,8 @@ def network_import(
                 existing_host.deleted_at = None
                 existing_host.snmp_enabled = target_snmp_enabled
                 existing_host.snmp_community = target_snmp_community
+                circuit_breaker.clear_host(existing_host.id)
+                reset_snmp_backoff(existing_host.id)
             skipped_count += 1
             results.append({
                 "name": existing_host.name if existing_host else (raw_name or _slug_ip_name(address)),
@@ -711,17 +730,36 @@ def list_hosts(db: Session = Depends(get_db), user: str = Depends(get_current_us
         .filter(Incident.status == "OPEN")
         .all()
     }
-    
+
+    # Batch de incidentes recentes (últimos 10 min) para eliminar N+1 queries de availability
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    since = now - timedelta(minutes=10)
+    recent_incidents = (
+        db.query(Incident)
+        .filter(
+            Incident.started_time <= now,
+            (Incident.ended_time == None) | (Incident.ended_time >= since)
+        )
+        .all()
+    )
+    incidents_by_host = {}
+    for inc in recent_incidents:
+        incidents_by_host.setdefault(inc.host_name, []).append(inc)
+
     # Métricas em tempo real no objeto antes de enviar
     for h in hosts:
         h.ports = _host_ports(h)
         h.url = h.http_url
         h.http_protocol = h.last_http_protocol
-        h.availability_10m = availability_last_10_min(db, h.name)
+        host_incidents = incidents_by_host.get(h.name)
+        if host_incidents:
+            h.availability_10m = calculate_availability_from_incidents(host_incidents, now, since)
+        else:
+            h.availability_10m = 100.0
         h.probable_cause = infer_probable_cause(db, h)
         h.icmp_blocked_but_service_up = bool(getattr(h, "icmp_blocked_but_service_up", False))
         h.has_open_incident = h.name in open_incident_hosts
-        
+
     return hosts
 
 
@@ -911,6 +949,8 @@ def restore_host(
     host.active = True
     host.active_time = None
     host.deleted_at = None
+    circuit_breaker.clear_host(host.id)
+    reset_snmp_backoff(host.id)
     _reset_host_operational_state(host)
 
     db.commit()
@@ -945,6 +985,8 @@ def hard_delete_host(
     db.query(Alert).filter(Alert.host_id == host.id).delete(synchronize_session=False)
     db.query(SNMPMetric).filter(SNMPMetric.host_id == host.id).delete(synchronize_session=False)
     db.query(Incident).filter(Incident.host_name == host.name).delete(synchronize_session=False)
+    circuit_breaker.clear_host(host.id)
+    reset_snmp_backoff(host.id)
     db.delete(host)
     db.commit()
 
@@ -973,21 +1015,25 @@ def update_host(host_name: str, data: HostUpdate, db: Session = Depends(get_db),
     
     if not host:
         raise HTTPException(status_code=404, detail="Host não encontrado")
-    
-    if is_ip(data.address):
-        resolved = reverse_dns(data.address)
+
+    normalized_address = (data.address or "").strip()
+    if not normalized_address:
+        raise HTTPException(status_code=400, detail="Endereço do host é obrigatório")
+
+    if is_ip(normalized_address):
+        resolved = reverse_dns(normalized_address)
     else:
-        dns_result = resolve_dns_cached_sync(data.address, db)
+        dns_result = resolve_dns_cached_sync(normalized_address, db)
         ips = extract_ips_from_dns_result(dns_result)
 
         if not ips:
-            raise HTTPException(status_code=400, detail="Endereço inválido. ")
-    
+            raise HTTPException(status_code=400, detail="Endereço inválido")
+
     if data.ports is None and data.port is None:
         ports = _host_ports(host)
     else:
         ports = _normalize_ports(data.ports, data.port)
-    host.address = data.address
+    host.address = normalized_address
     _store_host_ports(host, ports)
     host.hostname_resolved = resolved
 
@@ -1011,10 +1057,18 @@ def list_alerts(db: Session = Depends(get_db), user: str = Depends(get_current_u
         .all()
     )
 
+    avail_cache = {}
+    cause_cache = {}
     result = []
     for alert, host in rows:
-        availability_10m = availability_last_10_min(db, host.name)
-        probable_cause = infer_probable_cause(db, host)
+        if host.name not in avail_cache:
+            avail_cache[host.name] = availability_last_10_min(db, host.name)
+        availability_10m = avail_cache[host.name]
+
+        if host.id not in cause_cache:
+            cause_cache[host.id] = infer_probable_cause(db, host)
+        probable_cause = cause_cache[host.id]
+
         icmp_blocked_but_service_up = bool(getattr(host, "icmp_blocked_but_service_up", False))
 
         result.append({
@@ -1250,7 +1304,7 @@ def get_latest_incidents(db: Session = Depends(get_db), user: str = Depends(get_
             "reason": i.reason,
             "incident_type": parse_incident_type(i.reason),
             "reason_text": strip_incident_prefix(i.reason),
-            "started_time": i.started_time.isoformat(),
+            "started_time": i.started_time.isoformat() if i.started_time else None,
             "ended_time": i.ended_time.isoformat() if i.ended_time else None,
             "duration": i.duration_seconds
         }
@@ -1291,12 +1345,12 @@ def get_snmp_history(host_name: str, db: Session = Depends(get_db), user: str = 
 
 @router.get("/dashboard/summary")
 def dashboard_summary(db: Session = Depends(get_db), user: str = Depends(get_current_user)):
-    hosts = db.query(Host).filter(Host.active == True).all()
+    statuses = [r[0] for r in db.query(Host.status).filter(Host.active.is_(True)).all()]
 
-    total_hosts = len(hosts)
-    up = sum(1 for h in hosts if h.status == "UP")
-    degraded = sum(1 for h in hosts if h.status == "DEGRADED")
-    down = sum(1 for h in hosts if h.status == "DOWN")
+    total_hosts = len(statuses)
+    up = statuses.count("UP")
+    degraded = statuses.count("DEGRADED")
+    down = statuses.count("DOWN")
 
     open_incidents = (
         db.query(Incident)

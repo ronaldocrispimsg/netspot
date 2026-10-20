@@ -52,3 +52,16 @@ jobs:
           PYTHONPATH: .
         run: |
           python Backend/tests/alert_logic_checklist.py
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Validate Frontend JavaScript Syntax & Chart Theme
+        run: |
+          node --check Frontend/js/app.js
+          node --check Frontend/js/incidents.js
+          node --check Frontend/js/chart-theme.js
+          node scripts/test_chart_theme.js
+

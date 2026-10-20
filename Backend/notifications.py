@@ -274,6 +274,11 @@ def is_flapping_suppressed(message, now_ts: float, window_seconds: int = 300, ma
         history.append(now_ts)
         _FLAPPING_STATE[host_key] = history
 
+        if len(_FLAPPING_STATE) > 1000:
+            stale_keys = [k for k, h in _FLAPPING_STATE.items() if not h or now_ts - h[-1] > window_seconds]
+            for k in stale_keys:
+                _FLAPPING_STATE.pop(k, None)
+
         if len(history) > max_changes:
             return True
         return False

@@ -895,7 +895,7 @@ function buildHostCardHTML(h) {
             </div>
 
             <div class="host-meta-grid">
-                <div class="host-meta-item"><small>Saúde</small><strong>${h.health_score ?? "N/A"}% ${severityIndicatorHtml}</strong></div>
+                <div class="host-meta-item"><small>Saúde</small><strong>${healthMeterHtml(h, severityIndicatorHtml)}</strong></div>
                 <div class="host-meta-item"><small>Disponibilidade</small><strong>${availability10m}%</strong></div>
                 <div class="host-meta-item"><small>Último check</small><strong>${formatCheckTime(h.last_check)}</strong></div>
                 <div class="host-meta-item"><small>Último SNMP</small><strong>${formatCheckTime(h.last_snmp_check)}</strong></div>
@@ -1075,7 +1075,7 @@ function updateHostCardInPlace(card, h) {
     if (metaGrid) {
         const items = metaGrid.querySelectorAll(".host-meta-item strong");
         if (items.length >= 4) {
-            items[0].innerHTML = `${h.health_score ?? "N/A"}% ${severityIndicatorHtml}`;
+            items[0].innerHTML = healthMeterHtml(h, severityIndicatorHtml);
             items[1].textContent = `${availability10m}%`;
             items[2].textContent = formatCheckTime(h.last_check);
             items[3].textContent = formatCheckTime(h.last_snmp_check);
@@ -1198,6 +1198,14 @@ async function loadHosts() {
     const div = document.getElementById("hosts");
     if (!div) return;
 
+    if (!div.querySelector(".card") && !div.querySelector(".skeleton-wrap") && !div.querySelector(".ui-state")) {
+        div.innerHTML = `<div class="skeleton-wrap">
+            <div class="skeleton-card"></div>
+            <div class="skeleton-card"></div>
+            <div class="skeleton-card"></div>
+        </div>`;
+    }
+
     try {
         const res = await fetchWithAuth(`${API}/hosts/list`);
         if (!res) {
@@ -1213,17 +1221,18 @@ async function loadHosts() {
             return;
         }
 
-        if (div.querySelector(".ui-state")) {
+        if (div.querySelector(".ui-state") || div.querySelector(".skeleton-wrap")) {
             div.innerHTML = "";
         }
 
         const activeHostNames = new Set(hosts.map((h) => h.name));
 
-        // 1. Remover apenas cards de hosts que foram efetivamente excluídos
+        // 1. Remover apenas cards de hosts que foram efetivamente excluídos e liberar instâncias Chart.js
         const existingCardNodes = Array.from(div.querySelectorAll(".card"));
         for (const cardNode of existingCardNodes) {
             const cardHostName = cardNode.id.replace("card-", "");
             if (!activeHostNames.has(cardHostName)) {
+                destroyChartsForHost(cardHostName);
                 cardNode.remove();
             }
         }
@@ -1268,8 +1277,12 @@ async function loadHosts() {
         if (searchInput?.value || (statusFilter && statusFilter.value !== "all")) {
             filterHosts();
         }
+        updateStatusChipCounts();
     } catch (err) {
         console.error("Erro ao carregar lista de hosts:", err);
+        if (div.querySelector(".skeleton-wrap")) {
+            div.innerHTML = "<div class='ui-state ui-state-warning'>Não foi possível carregar os hosts.</div>";
+        }
     }
 }
 
@@ -1535,6 +1548,28 @@ function formatBps(value) {
     return `${(bps / 1000_000_000).toFixed(2)} Gbps`;
 }
 
+function escapeHtml(str) {
+    if (str === null || str === undefined) return "";
+    return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+// Score de saúde + indicador + barra de progresso colorida pela severidade.
+function healthMeterHtml(h, severityIndicatorHtml = "") {
+    const score = Number(h.health_score);
+    const valid = h.health_score !== null && h.health_score !== undefined && Number.isFinite(score);
+    const pct = valid ? Math.max(0, Math.min(100, score)) : 0;
+    const sevMap = { HEALTHY: "sev-healthy", WARNING: "sev-warning", DEGRADED: "sev-degraded", CRITICAL: "sev-critical" };
+    const sev = sevMap[h.severity] || "sev-unknown";
+    return `${valid ? score : "N/A"}% ${severityIndicatorHtml}`
+        + `<span class="health-meter" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}">`
+        + `<span class="health-meter-fill ${sev}" style="width:${pct}%"></span></span>`;
+}
+
 function calcRelativeBarWidth(value, maxValue) {
     const current = Number(value);
     const max = Number(maxValue);
@@ -1722,6 +1757,23 @@ function updateOrCreateChart(chartKey, canvasEl, config) {
     current.data.datasets = config.data.datasets || [];
     current.options = config.options || {};
     current.update("none");
+}
+
+function destroyChartsForHost(name) {
+    if (!name) return;
+    const suffix = `-${name}`;
+    for (const key of Object.keys(charts)) {
+        if (key.endsWith(suffix) || key === name) {
+            try {
+                if (typeof charts[key]?.destroy === "function") {
+                    charts[key].destroy();
+                }
+            } catch (e) {
+                console.warn("Erro ao destruir gráfico do host:", name, e);
+            }
+            delete charts[key];
+        }
+    }
 }
 
 function parseApiDate(value) {
@@ -2668,15 +2720,15 @@ async function loadTimeline() {
             return `
                 <div class="timeline-item ${itemClass}">
                     <div class="timeline-item-top">
-                        <strong class="timeline-host">${inc.host_name}</strong>
-                        <span class="timeline-badge ${badgeClass}">${statusLabel}</span>
+                        <strong class="timeline-host">${escapeHtml(inc.host_name)}</strong>
+                        <span class="timeline-badge ${badgeClass}">${escapeHtml(statusLabel)}</span>
                     </div>
                     <div class="timeline-item-meta">
                         <small>Início: ${startedAt}</small>
                         <small>Fim: ${endedAt}</small>
                         <small>Duração: ${durationText}</small>
                     </div>
-                    <p class="timeline-reason">${reasonText}</p>
+                    <p class="timeline-reason">${escapeHtml(reasonText)}</p>
                 </div>
             `;
         }).join("");
@@ -2694,42 +2746,112 @@ async function loadDashboardSummary() {
 
     const data = await res.json();
 
-    const cards = box.querySelectorAll(".summary-card strong");
-    if (cards.length >= 6) {
-        cards[0].textContent = data.total_hosts ?? 0;
-        cards[1].textContent = data.up ?? 0;
-        cards[2].textContent = data.degraded ?? 0;
-        cards[3].textContent = data.down ?? 0;
-        cards[4].textContent = data.open_incidents ?? 0;
-        cards[5].textContent = data.closed_incidents ?? 0;
-    } else {
-        box.innerHTML = `
-            <div class="summary-card">
-                <small>Hosts monitorados</small>
-                <strong>${data.total_hosts ?? 0}</strong>
-            </div>
-            <div class="summary-card">
-                <small>Online</small>
-                <strong>${data.up ?? 0}</strong>
-            </div>
-            <div class="summary-card">
-                <small>Degradados</small>
-                <strong>${data.degraded ?? 0}</strong>
-            </div>
-            <div class="summary-card">
-                <small>Offline</small>
-                <strong>${data.down ?? 0}</strong>
-            </div>
-            <div class="summary-card">
-                <small>Incidentes abertos</small>
-                <strong>${data.open_incidents ?? 0}</strong>
-            </div>
-            <div class="summary-card">
-                <small>Incidentes fechados</small>
-                <strong>${data.closed_incidents ?? 0}</strong>
-            </div>
-        `;
+    if (box.querySelectorAll(".summary-card").length !== 6) {
+        const defs = [
+            ["Hosts monitorados", "summary-total"],
+            ["Online", "summary-ok"],
+            ["Degradados", "summary-warn"],
+            ["Offline", "summary-bad"],
+            ["Incidentes abertos", "summary-bad"],
+            ["Incidentes fechados", "summary-muted"],
+        ];
+        box.innerHTML = defs.map(([label, cls]) => `
+            <div class="summary-card ${cls}">
+                <small>${label}</small>
+                <strong>0</strong>
+            </div>`).join("") + `
+            <div class="summary-bar" role="img">
+                <span class="summary-bar-seg seg-ok"></span>
+                <span class="summary-bar-seg seg-warn"></span>
+                <span class="summary-bar-seg seg-bad"></span>
+            </div>`;
     }
+
+    const values = [
+        data.total_hosts, data.up, data.degraded, data.down,
+        data.open_incidents, data.closed_incidents,
+    ];
+    const strongs = box.querySelectorAll(".summary-card strong");
+    values.forEach((v, i) => {
+        if (strongs[i]) strongs[i].textContent = v ?? 0;
+    });
+    updateSummaryBar(box, data);
+}
+
+// Barra proporcional Online / Degradado / Offline (soma = hosts monitorados).
+function updateSummaryBar(box, data) {
+    const bar = box.querySelector(".summary-bar");
+    if (!bar) return;
+    const up = Number(data.up) || 0;
+    const degraded = Number(data.degraded) || 0;
+    const down = Number(data.down) || 0;
+    const total = Math.max(Number(data.total_hosts) || 0, up + degraded + down);
+    const pct = (n) => (total > 0 ? (n / total) * 100 : 0);
+    const segs = { ok: up, warn: degraded, bad: down };
+    for (const [key, n] of Object.entries(segs)) {
+        const seg = bar.querySelector(`.seg-${key}`);
+        if (seg) seg.style.width = `${pct(n)}%`;
+    }
+    bar.setAttribute("aria-label", `Online ${up}, degradado ${degraded}, offline ${down} de ${total} hosts`);
+    bar.title = bar.getAttribute("aria-label");
+}
+
+// ======================
+// Chips de filtro por status (sincronizados com o <select id="statusFilter">)
+// ======================
+const STATUS_CHIPS = [
+    ["all", "Todos"],
+    ["bg-success", "Online"],
+    ["bg-warning", "Degradado"],
+    ["bg-danger", "Offline"],
+];
+
+function syncStatusChips() {
+    const select = document.getElementById("statusFilter");
+    const bar = document.getElementById("statusChips");
+    if (!select || !bar) return;
+    bar.querySelectorAll(".status-chip").forEach((chip) => {
+        const active = chip.dataset.status === select.value;
+        chip.classList.toggle("active", active);
+        chip.setAttribute("aria-pressed", active ? "true" : "false");
+    });
+}
+
+function updateStatusChipCounts() {
+    const bar = document.getElementById("statusChips");
+    if (!bar) return;
+    const counts = { all: 0, "bg-success": 0, "bg-warning": 0, "bg-danger": 0 };
+    document.querySelectorAll("#hosts .card").forEach((card) => {
+        counts.all += 1;
+        const dot = card.querySelector(".status-indicator");
+        if (!dot) return;
+        for (const key of ["bg-success", "bg-warning", "bg-danger"]) {
+            if (dot.classList.contains(key)) counts[key] += 1;
+        }
+    });
+    bar.querySelectorAll(".status-chip").forEach((chip) => {
+        const el = chip.querySelector(".status-chip-count");
+        if (el) el.textContent = counts[chip.dataset.status] ?? 0;
+    });
+}
+
+function initStatusChips() {
+    const select = document.getElementById("statusFilter");
+    const bar = document.getElementById("statusChips");
+    if (!select || !bar) return;
+    bar.innerHTML = STATUS_CHIPS.map(([value, label]) => `
+        <button type="button" class="status-chip" data-status="${value}" aria-pressed="false">
+            ${label}<span class="status-chip-count">0</span>
+        </button>`).join("");
+    bar.addEventListener("click", (event) => {
+        const chip = event.target.closest(".status-chip");
+        if (!chip) return;
+        select.value = chip.dataset.status;
+        syncStatusChips();
+        filterHosts();
+    });
+    select.addEventListener("change", syncStatusChips);
+    syncStatusChips();
 }
 
 function filterHosts() {
@@ -2964,3 +3086,7 @@ if (logoutBtn) {
         });
     }
 })();
+
+if (!isLoginPage) {
+    initStatusChips();
+}

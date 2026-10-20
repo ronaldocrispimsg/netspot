@@ -5,6 +5,7 @@ Fornece diagnostico rapido de saude dos subsistemas (PostgreSQL e RabbitMQ)
 para integracao com Docker Healthcheck, Kubernetes Liveness Probes e SRE.
 """
 
+import asyncio
 import logging
 from fastapi import APIRouter, Response, status
 from sqlalchemy import text
@@ -25,10 +26,10 @@ async def health_check(response: Response):
     db_ok = False
     mq_ok = False
 
-    # 1. Checa PostgreSQL
+    # 1. Checa PostgreSQL com timeout de segurança (evita travamento de probe)
     try:
         async with AsyncSessionLocal() as session:
-            await session.execute(text("SELECT 1"))
+            await asyncio.wait_for(session.execute(text("SELECT 1")), timeout=3.0)
             db_ok = True
     except Exception as e:
         logger.warning(f"[HEALTHCHECK] Falha ao testar PostgreSQL: {e}")

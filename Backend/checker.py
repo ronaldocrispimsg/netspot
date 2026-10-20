@@ -8,7 +8,7 @@ import dns.resolver
 import httpx
 import socket
 from urllib.parse import urlparse
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 from Backend.models import DNSCache
 
@@ -42,7 +42,7 @@ def resolve_dns_cached_sync(address: str, db):
     # ---------- cache ----------
     record = db.query(DNSCache).filter(DNSCache.hostname == address).first()
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     ttl_remaining = 0
 
     if record:
@@ -116,7 +116,7 @@ async def resolve_dns_cached(address: str, db):
     result = await db.execute(stmt)
     record = result.scalars().first()
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     ttl_remaining = 0
 
     if record:
@@ -251,10 +251,16 @@ async def tcp_check(ip: str, port: int, timeout: int = 5):
             "latency": latency
         }
         
+    except asyncio.TimeoutError:
+        return {
+            "success": False,
+            "error": "timeout",
+            "latency": None
+        }
     except Exception as e:
         return {
             "success": False,
-            "error": str(e),
+            "error": str(e) or type(e).__name__,
             "latency": None
         }
 

@@ -57,6 +57,7 @@ from Backend.snmp_engine import (
     snmp_has_usable_data,
     update_host_snmp,
 )
+from Backend.services.circuit_breaker import circuit_breaker
 from Backend.utils import (
     INCIDENT_TYPE_DNS_FAILURE,
     INCIDENT_TYPE_SERVICE_DEGRADED,
@@ -268,6 +269,12 @@ async def _host_check_async(host_id: int) -> None:
         old_status_normalized = str(old_status or "").strip().upper()
         baseline_pending = bool(getattr(host, "baseline_pending", False))
 
+        # Pattern Circuit Breaker: pausa polling se disjuntor estiver OPEN por falhas repetidas
+        if not circuit_breaker.is_allowed(host.id):
+            logger.info("[CIRCUIT BREAKER] Polling pausado para host '%s' (id=%s) - Disjuntor OPEN", host.name, host.id)
+            await db.close()
+            return
+
         dns_result = await resolve_dns_cached(host.address, db)
         ips, ttl, ttl_remaining = _extract_ips_and_ttl(dns_result)
 
@@ -325,6 +332,7 @@ async def _host_check_async(host_id: int) -> None:
 
             host.fail_streak = (host.fail_streak or 0) + 1
             host.success_streak = 0
+            circuit_breaker.record_failure(host.id)
 
             await db.flush()
 
@@ -400,11 +408,16 @@ async def _host_check_async(host_id: int) -> None:
 
         ping_result = await ping_host(ip)
 
-        tcp_results = []
-        for tcp_port in _host_tcp_ports(host):
-            result = await tcp_check(ip, tcp_port)
-            result["port"] = tcp_port
-            tcp_results.append(result)
+        tcp_ports = _host_tcp_ports(host)
+        if tcp_ports:
+            async def _check_single_tcp_port(p: int) -> dict:
+                res = await tcp_check(ip, p)
+                res["port"] = p
+                return res
+
+            tcp_results = list(await asyncio.gather(*[_check_single_tcp_port(p) for p in tcp_ports]))
+        else:
+            tcp_results = []
 
         tcp_result = _aggregate_tcp_results(tcp_results)
 
@@ -426,8 +439,10 @@ async def _host_check_async(host_id: int) -> None:
                 )
                 return existing or await tcp_check(ip, int(target_port))
 
-            http_port_result = await _probe_aux_port(80)
-            https_port_result = await _probe_aux_port(443)
+            http_port_result, https_port_result = await asyncio.gather(
+                _probe_aux_port(80),
+                _probe_aux_port(443),
+            )
 
             host.tcp_http_port_ok = bool(http_port_result.get("success"))
             host.tcp_http_port_latency = (
@@ -498,14 +513,17 @@ async def _host_check_async(host_id: int) -> None:
             host.success_streak = (host.success_streak or 0) + 1
             host.fail_streak = 0
             _set_degraded_streak(host.id, 0)
+            circuit_breaker.record_success(host.id)
         elif new_status == "DEGRADED":
             host.success_streak = 0
             host.fail_streak = (host.fail_streak or 0) + 1
             _increment_degraded_streak(host.id)
+            circuit_breaker.record_success(host.id)
         else:
             host.fail_streak = (host.fail_streak or 0) + 1
             host.success_streak = 0
             _set_degraded_streak(host.id, 0)
+            circuit_breaker.record_failure(host.id)
 
         is_real_recovery = (
             old_status_normalized in {"DOWN", "DEGRADED"}

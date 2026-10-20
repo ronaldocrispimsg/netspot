@@ -1,3 +1,4 @@
+from datetime import datetime
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
@@ -9,7 +10,7 @@ from Backend.security import decode_token
 
 security = HTTPBearer()
 
-def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security),db: Session = Depends(get_db)):
+def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)):
     try:
         payload = decode_token(credentials.credentials)
         username = payload.get("sub")
@@ -18,6 +19,15 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
 
         if not user:
             raise HTTPException(status_code=401, detail="Usuário não encontrado")
+
+        if user.locked:
+            if user.locked_until and user.locked_until <= datetime.now():
+                user.locked = False
+                user.locked_until = None
+                user.attempts = 0
+                db.commit()
+            else:
+                raise HTTPException(status_code=403, detail="Conta de usuário bloqueada")
 
         return user
 
