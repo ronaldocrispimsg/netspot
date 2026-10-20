@@ -153,18 +153,22 @@ O NetSpot possui um núcleo auto-regenerativo projetado para tolerar falhas temp
 
 ---
 
-## 10. Ambiente de Laboratório Kathará (40+ Nós)
+## 10. Ambiente de Laboratório Kathará (40 Nós)
 
-- Documentado em [`kathara.md`](file:///home/Crispim/Desktop/Documents/TCC%20-%20NetSpot/kathara.md).
-- **Simulação em Larga Escala**: Suporte à criação de 40+ dispositivos virtuais Kathará distribuídos em 4 sub-redes roteadas (`10.0.1.0/24`, `10.0.2.0/24`, `10.0.3.0/24`, `192.168.100.0/24`).
+- Documentado em [`kathara.md`](kathara.md).
+- **Simulação em Larga Escala**: Suporte à emulação de 40 dispositivos virtuais Kathará distribuídos em 4 sub-redes roteadas (`10.0.1.0/24`, `10.0.2.0/24`, `10.0.3.0/24`, `192.168.100.0/24`):
+  - 30 Estações de Trabalho (`pc1` a `pc30`).
+  - 10 Servidores de Aplicação (`web_server1-3`, `db_server1-3`, `dns_server1-2`, `app_server1-2`).
+  - 4 Roteadores com roteamento estático e NAT inline via comandos `[exec]` no `lab.conf`.
 - **Injeção de Falhas**: Simulação de queda de link, aumento de latência/perda de pacotes via `tc (Traffic Control)` e sobrecarga de hardware via `stress-ng`.
 
 ---
 
 ## 11. Suíte de Testes Automatizados (Pytest)
 
-- Localizada no diretório [`Backend/tests/`](file:///home/Crispim/Desktop/Documents/TCC%20-%20NetSpot/Backend/tests/).
-- **31 Testes Automatizados (100% PASSED)**:
+- Localizada no diretório [`Backend/tests/`](Backend/tests/).
+- **38 Testes Automatizados (100% PASSED)**:
+  - `test_alert_logic.py`: Máquina de estados de incidentes, supressão de falsos positivos de ICMP bloqueado por firewall, abertura de incidente degradado/indisponível, falhas de DNS, encerramento com despacho de notificação e cooldown anti-spam.
   - `test_checker.py`: Checadores de Ping, TCP, HTTP e DNS.
   - `test_metrics.py`: Algoritmos de Health Score, SLA, Jitter e Tendências.
   - `test_retention.py`: Regras da política de retenção de dados.
@@ -172,9 +176,14 @@ O NetSpot possui um núcleo auto-regenerativo projetado para tolerar falhas temp
   - `test_api_routes.py`: Endpoints RESTful e integração HTTP.
   - `test_models_schemas.py`: Validação de DTOs e entidades SQLAlchemy.
   - `test_self_healing.py`: Validação dos pools de autocura, Circuit Breaker, DLQ e Anti-Flapping.
+  - `alert_logic_checklist.py`: Smoke test standalone para execução rápida em linha de comando.
 
 Comandos para rodar a suíte:
 ```bash
+# Execução local no ambiente Python
+pytest Backend/tests -v
+
+# Ou dentro do container Docker
 docker exec -e PYTHONPATH=. netspot-backend python -m pytest Backend/tests -v
 ```
 

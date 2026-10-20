@@ -5,7 +5,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, declarative_base
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://netspot:netspot_password@localhost:5432/netspot")
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://netspot@localhost:5432/netspot")
 logger = logging.getLogger("netspot.database")
 
 # Engine síncrono (para endpoints FastAPI síncronos)
