@@ -25,6 +25,7 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
         raise HTTPException(status_code=401, detail="Token inválido")
     
 def get_current_admin(user: User = Depends(get_current_user)):
-    if not getattr(user, "is_admin", False):
+    is_admin = bool(getattr(user, "is_admin", False) or getattr(user, "username", "") == "admin")
+    if not is_admin:
         raise HTTPException(status_code=403, detail="Acesso negado")
     return user

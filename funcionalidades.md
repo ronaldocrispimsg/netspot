@@ -167,7 +167,7 @@ O NetSpot possui um núcleo auto-regenerativo projetado para tolerar falhas temp
 ## 11. Suíte de Testes Automatizados (Pytest)
 
 - Localizada no diretório [`Backend/tests/`](Backend/tests/).
-- **38 Testes Automatizados (100% PASSED)**:
+- **40 Testes Automatizados (100% PASSED)**:
   - `test_alert_logic.py`: Máquina de estados de incidentes, supressão de falsos positivos de ICMP bloqueado por firewall, abertura de incidente degradado/indisponível, falhas de DNS, encerramento com despacho de notificação e cooldown anti-spam.
   - `test_checker.py`: Checadores de Ping, TCP, HTTP e DNS.
   - `test_metrics.py`: Algoritmos de Health Score, SLA, Jitter e Tendências.

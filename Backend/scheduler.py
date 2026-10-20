@@ -280,7 +280,7 @@ async def _host_check_async(host_id: int) -> None:
             if (
                 (
                     not host.last_ttl_alert
-                    or (datetime.utcnow() - host.last_ttl_alert).seconds > 3600
+                    or (datetime.utcnow() - host.last_ttl_alert).total_seconds() > 3600
                 )
                 and _alert_cooldown_passed(
                     host.id, "DNS_TTL_LOW", 3600, fingerprint=str(ttl)
