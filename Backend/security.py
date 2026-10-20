@@ -1,6 +1,6 @@
 import bcrypt
 from jose import JWTError, jwt
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import os
 
 SECRET_KEY = os.getenv("NETSPOT_SECRET_KEY")
@@ -24,7 +24,7 @@ def create_access_token(data: dict):
     if not SECRET_KEY:
         raise RuntimeError("NETSPOT_SECRET_KEY não configurada no ambiente")
     to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
