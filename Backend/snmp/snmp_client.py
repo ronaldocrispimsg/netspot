@@ -86,8 +86,12 @@ async def walk_snmp(ip: str, community: Optional[str], root_oid: str) -> List[Tu
     results: List[Tuple[str, str]] = []
     current_oid = root_oid
 
+    MAX_WALK_ITERATIONS = 500
+    iterations = 0
+
     try:
-        while True:
+        while iterations < MAX_WALK_ITERATIONS:
+            iterations += 1
             error_indication, error_status, error_index, var_binds = await next_cmd(
                 snmp_engine,
                 CommunityData(comm_str, mpModel=1),

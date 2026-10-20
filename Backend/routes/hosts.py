@@ -422,6 +422,19 @@ def _is_icmp_blocked_but_service_up(
     return tcp_ok or http_ok
 
 def infer_probable_cause(db: Session, host: Host) -> str:
+    # Otimização de caminho rápido: hosts totalmente saudáveis com ICMP UP não requerem varredura detalhada de histórico
+    if (
+        host.status == "UP"
+        and host.status_ping == "UP"
+        and host.severity in ("HEALTHY", "UNKNOWN", None)
+        and (host.cpu_usage is None or host.cpu_usage < 90)
+        and (host.ram_usage is None or host.ram_usage < 90)
+        and (host.disk_usage is None or host.disk_usage < 90)
+        and (host.jitter_ms_ping is None or host.jitter_ms_ping < 120)
+    ):
+        host.icmp_blocked_but_service_up = False
+        return "Operação normal"
+
     last_dns = get_last_check(db, host.id, "dns")
     last_ping = get_last_check(db, host.id, "ping")
     last_tcp = get_last_check(db, host.id, "tcp")
@@ -1056,24 +1069,28 @@ def availability_type(host_name: str, db: Session = Depends(get_db), user: User 
 @router.get("/hosts/metrics/availability/host/{host_name}")
 def availability_host(host_name: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     now = datetime.utcnow()
-    points = []
+    window_start = now - timedelta(minutes=60)
 
+    # Otimização de performance: 1 única query para carregar os incidentes da janela em vez de 60 queries
+    incidents = (
+        db.query(Incident)
+        .filter(
+            Incident.host_name == host_name,
+            Incident.started_time <= now,
+            (Incident.ended_time.is_(None)) | (Incident.ended_time >= window_start)
+        )
+        .all()
+    )
+
+    points = []
     for i in range(60):
         end = now - timedelta(minutes=i)
         start = end - timedelta(minutes=1)
-
-        incidents = (
-            db.query(Incident)
-            .filter(
-                Incident.host_name == host_name,
-                Incident.started_time <= end
-            )
-            .all()
-        )
-
         downtime = 0
 
         for incident in incidents:
+            if incident.started_time > end:
+                continue
             s = incident.started_time
             e = incident.ended_time or end
 
@@ -1100,8 +1117,9 @@ def downtime_history(host_name: str, db: Session = Depends(get_db), user: User =
         db.query(Incident)
         .filter(
             Incident.host_name == host_name,
-            Incident.started_time >= since
+            (Incident.ended_time.is_(None)) | (Incident.ended_time >= since)
         )
+        .order_by(Incident.started_time.desc())
         .all()
     )
 
@@ -1109,7 +1127,7 @@ def downtime_history(host_name: str, db: Session = Depends(get_db), user: User =
         {
             "start": i.started_time.isoformat(),
             "end": (i.ended_time or now).isoformat(),
-            "duration_seconds": i.duration_seconds
+            "duration_seconds": i.duration_seconds if i.duration_seconds is not None else int((now - i.started_time).total_seconds())
         }
         for i in incidents
     ]

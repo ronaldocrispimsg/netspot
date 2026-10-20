@@ -84,6 +84,7 @@ create_default_admin()
 async def lifespan(app: FastAPI):
     # Startup: Inicialização dos serviços e background tasks
     setup_kathara_routes()
+    create_default_admin()
     reset_snmp_backoff()
     await mq_manager.connect()
     await mq_manager.start_consumers()

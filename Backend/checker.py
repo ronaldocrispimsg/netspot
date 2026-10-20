@@ -22,7 +22,7 @@ def resolve_dns_real_sync(address):
             return [], None
 
     ips = [r.to_text() for r in answers]
-    ttl = answers.rrset.ttl
+    ttl = answers.rrset.ttl if answers.rrset is not None else 60
     return ips, ttl
 
 def resolve_dns_cached_sync(address: str, db):
@@ -49,8 +49,9 @@ def resolve_dns_cached_sync(address: str, db):
         ttl_remaining = (record.expires_time - now).total_seconds()
 
         # cache válido (com margem)
-        if ttl_remaining > record.ttl * 0.1:
-            return json.loads(record.ip_list), record.ttl, int(ttl_remaining)
+        ttl_base = record.ttl or 60
+        if ttl_remaining > ttl_base * 0.1:
+            return json.loads(record.ip_list), ttl_base, int(ttl_remaining)
 
     # resolve DNS real
     ips, ttl = resolve_dns_real_sync(address)
@@ -93,7 +94,7 @@ async def resolve_dns_real(address):
             return [], None
 
     ips = [r.to_text() for r in answers]
-    ttl = answers.rrset.ttl
+    ttl = answers.rrset.ttl if answers.rrset is not None else 60
     return ips, ttl
 
 async def resolve_dns_cached(address: str, db):
@@ -122,8 +123,9 @@ async def resolve_dns_cached(address: str, db):
         ttl_remaining = (record.expires_time - now).total_seconds()
 
         # cache válido (com margem)
-        if ttl_remaining > record.ttl * 0.1:
-            return json.loads(record.ip_list), record.ttl, int(ttl_remaining)
+        ttl_base = record.ttl or 60
+        if ttl_remaining > ttl_base * 0.1:
+            return json.loads(record.ip_list), ttl_base, int(ttl_remaining)
 
     # resolve DNS real
     ips, ttl = await resolve_dns_real(address)
@@ -173,7 +175,19 @@ async def ping_host(ip: str, count: int = 3, timeout: int = 5, max_ms=5000):
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
         )
-        stdout, stderr = await proc.communicate()
+        try:
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout + 3)
+        except asyncio.TimeoutError:
+            try:
+                proc.kill()
+                await proc.wait()
+            except Exception:
+                pass
+            return {
+                "success": False,
+                "error": "Ping timeout excedido",
+                "latency": None
+            }
         stdout_str = stdout.decode('utf-8', errors='ignore')
         stderr_str = stderr.decode('utf-8', errors='ignore')
 

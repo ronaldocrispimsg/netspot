@@ -36,12 +36,22 @@ function formatDateTime(value) {
     return dt.toLocaleString("pt-BR");
 }
 
+function escapeHtml(str) {
+    if (str === null || str === undefined) return "";
+    return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
 let incidentsCache = [];
 
 function setIncidentsState(message, type = "info") {
     const box = document.getElementById("incidentsList");
     if (!box) return;
-    box.innerHTML = `<div class="ui-state ui-state-${type}">${message}</div>`;
+    box.innerHTML = `<div class="ui-state ui-state-${escapeHtml(type)}">${escapeHtml(message)}</div>`;
 }
 
 function renderIncidents(items) {
@@ -56,15 +66,15 @@ function renderIncidents(items) {
     box.innerHTML = items.map((inc) => `
         <div class="incident-row">
             <div class="incident-row-main">
-                <strong>${inc.host_name || "Host"}</strong>
-                <small>${inc.status || "N/A"} • ${inc.incident_type || "GENERIC"}</small>
+                <strong>${escapeHtml(inc.host_name || "Host")}</strong>
+                <small>${escapeHtml(inc.status || "N/A")} • ${escapeHtml(inc.incident_type || "GENERIC")}</small>
             </div>
             <div class="incident-row-meta">
-                <small>Início: ${formatDateTime(inc.started_time)}</small>
-                <small>Fim: ${formatDateTime(inc.ended_time)}</small>
-                <small>Duração: ${inc.duration || "Em andamento"}</small>
+                <small>Início: ${escapeHtml(formatDateTime(inc.started_time))}</small>
+                <small>Fim: ${escapeHtml(formatDateTime(inc.ended_time))}</small>
+                <small>Duração: ${escapeHtml(inc.duration || "Em andamento")}</small>
             </div>
-            <div class="incident-row-reason">${inc.reason_text || inc.reason || "Sem descrição"}</div>
+            <div class="incident-row-reason">${escapeHtml(inc.reason_text || inc.reason || "Sem descrição")}</div>
         </div>
     `).join("");
 }

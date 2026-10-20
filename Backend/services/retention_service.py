@@ -9,7 +9,7 @@ Definir NETSPOT_RETENTION_DAYS=0 desativa completamente a limpeza.
 
 import os
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -49,7 +49,7 @@ async def purge_old_data(db: AsyncSession) -> dict:
             "incidents": 0
         }
 
-    cutoff = datetime.utcnow() - timedelta(days=days)
+    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
 
     purged = {
         "status": "enabled",
