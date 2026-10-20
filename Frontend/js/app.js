@@ -2120,8 +2120,11 @@ function hostVisualState(host) {
     if (status === "DOWN") {
         return { cardClass: "card-state-down", badgeClass: "state-down", label: "DOWN" };
     }
-    if (status === "DEGRADED" || severity === "DEGRADED" || severity === "WARNING") {
+    if (status === "DEGRADED" || severity === "DEGRADED") {
         return { cardClass: "card-state-degraded", badgeClass: "state-degraded", label: "DEGRADED" };
+    }
+    if (severity === "WARNING") {
+        return { cardClass: "card-state-degraded", badgeClass: "state-degraded", label: "WARNING" };
     }
     return { cardClass: "card-state-up", badgeClass: "state-up", label: "UP" };
 }

@@ -8,9 +8,13 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, Asyn
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://netspot@localhost:5432/netspot")
 logger = logging.getLogger("netspot.database")
 
+SYNC_DATABASE_URL = DATABASE_URL
+if SYNC_DATABASE_URL.startswith("postgresql://"):
+    SYNC_DATABASE_URL = SYNC_DATABASE_URL.replace("postgresql://", "postgresql+psycopg2://", 1)
+
 # Engine síncrono (para endpoints FastAPI síncronos)
 engine = create_engine(
-    DATABASE_URL,
+    SYNC_DATABASE_URL,
     pool_pre_ping=True,    # PING PREVENTIVO: Testa conexão antes de reusar do pool
     pool_recycle=1800,     # RECICLAGEM AUTOMÁTICA: Recicla conexões a cada 30 min (1800s)
     pool_size=20,          # Tamanho base do pool de conexões
@@ -26,7 +30,9 @@ SessionLocal = sessionmaker(
 
 # Engine assíncrono (para monitoramento e scheduler assíncronos)
 ASYNC_DATABASE_URL = DATABASE_URL
-if ASYNC_DATABASE_URL.startswith("postgresql://"):
+if ASYNC_DATABASE_URL.startswith("postgresql+psycopg2://"):
+    ASYNC_DATABASE_URL = ASYNC_DATABASE_URL.replace("postgresql+psycopg2://", "postgresql+asyncpg://", 1)
+elif ASYNC_DATABASE_URL.startswith("postgresql://"):
     ASYNC_DATABASE_URL = ASYNC_DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
 
 async_engine = create_async_engine(

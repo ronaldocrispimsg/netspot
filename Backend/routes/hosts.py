@@ -9,7 +9,7 @@ import subprocess
 import xml.etree.ElementTree as ET
 import psutil
 from Backend.database import get_db
-from Backend.metrics import total_downtime, total_incidents, availability_last_10_min
+from Backend.metrics import total_downtime, total_incidents, availability_last_10_min, compute_health
 from Backend.models import CheckResult, Host, Alert, Incident, User, SNMPMetric
 from Backend.checker import ping_host, tcp_check, resolve_dns_cached_sync
 from Backend.notifications import telegram_health_check
@@ -422,19 +422,6 @@ def _is_icmp_blocked_but_service_up(
     return tcp_ok or http_ok
 
 def infer_probable_cause(db: Session, host: Host) -> str:
-    # Otimização de caminho rápido: hosts totalmente saudáveis com ICMP UP não requerem varredura detalhada de histórico
-    if (
-        host.status == "UP"
-        and host.status_ping == "UP"
-        and host.severity in ("HEALTHY", "UNKNOWN", None)
-        and (host.cpu_usage is None or host.cpu_usage < 90)
-        and (host.ram_usage is None or host.ram_usage < 90)
-        and (host.disk_usage is None or host.disk_usage < 90)
-        and (host.jitter_ms_ping is None or host.jitter_ms_ping < 120)
-    ):
-        host.icmp_blocked_but_service_up = False
-        return "Operação normal"
-
     last_dns = get_last_check(db, host.id, "dns")
     last_ping = get_last_check(db, host.id, "ping")
     last_tcp = get_last_check(db, host.id, "tcp")
@@ -449,6 +436,17 @@ def infer_probable_cause(db: Session, host: Host) -> str:
 
     if icmp_blocked_but_service_up:
         return "ICMP bloqueado por firewall\nServiço operando normalmente"
+
+    # Otimização de caminho rápido: hosts UP com boa saúde operacional
+    is_healthy = host.status == "UP" and host.severity in ("HEALTHY", "UNKNOWN", None)
+    has_normal_resources = (
+        (host.cpu_usage is None or host.cpu_usage < 90)
+        and (host.ram_usage is None or host.ram_usage < 90)
+        and (host.disk_usage is None or host.disk_usage < 90)
+        and (host.jitter_ms_ping is None or host.jitter_ms_ping < 120)
+    )
+    if is_healthy and has_normal_resources:
+        return "Operação normal"
 
     if host.status == "DOWN":
         if last_dns and not last_dns.success:
@@ -474,7 +472,7 @@ def infer_probable_cause(db: Session, host: Host) -> str:
     if (
         (host.jitter_ms_ping is not None and host.jitter_ms_ping >= 120) or
         (host.jitter_ms_http is not None and host.jitter_ms_http >= 180) or
-        (host.sla_rolling_ping is not None and host.sla_rolling_ping < 95)
+        (host.sla_rolling_ping is not None and host.sla_rolling_ping < 75 and host.status != "UP")
     ):
         return "Instabilidade de rede (jitter/perda)"
 
@@ -783,15 +781,23 @@ def check_host(host_name: str, db: Session = Depends(get_db), user: User = Depen
 
     if icmp_blocked_but_service_up:
         host.status = "UP"
-
     elif host.status_ping == "DOWN":
         host.status = "DOWN"
-
     elif host.status_tcp == "DOWN":
         host.status = "DEGRADED"
-
     else:
         host.status = "UP"
+
+    score, severity = compute_health(ping_result, tcp_result, None)
+    if host.status == "DOWN":
+        score = 0
+        severity = "CRITICAL"
+    elif host.status == "DEGRADED" and severity not in ("CRITICAL", "DEGRADED"):
+        severity = "DEGRADED"
+        if score > 60:
+            score = 60
+    host.health_score = score
+    host.severity = severity
 
     db.commit()
 

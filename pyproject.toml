@@ -14,11 +14,13 @@ dependencies = [
     "httpx>=0.28.1",
     "psutil>=5.9.8",
     "psycopg2-binary>=2.9.9",
+    "psycopg[binary]>=3.1.0",
     "pysnmp>=7.1.22",
     "python-dotenv>=1.0.1",
     "python-jose[cryptography]>=3.5.0",
     "requests>=2.32.5",
-    "sqlalchemy>=2.0.46",
+    "greenlet>=3.0.0",
+    "sqlalchemy[asyncio]>=2.0.46",
     "uvicorn[standard]>=0.40.0",
 ]
 

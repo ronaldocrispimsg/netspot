@@ -159,7 +159,7 @@ O Docker Compose irá inicializar automaticamente os 5 serviços:
 
 ## 🧪 Suíte de Testes Automatizados (Pytest)
 
-O NetSpot inclui uma suíte de testes assíncronos cobrindo checadores de rede, métricas NOC, retenção de dados, módulo SNMP, modelos ORM, rotas RESTful, módulos de autocura e máquina de estados de incidentes (**40/40 testes aprovados**).
+O NetSpot inclui uma suíte de testes assíncronos cobrindo checadores de rede, métricas NOC, retenção de dados, módulo SNMP, modelos ORM, rotas RESTful, módulos de autocura e máquina de estados de incidentes (**50/50 testes aprovados**).
 
 Para executar os testes dentro do container backend, rode:
 

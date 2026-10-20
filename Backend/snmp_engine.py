@@ -176,29 +176,64 @@ async def walk_snmp(ip, community, oid):
     return results
 
 
-async def get_storage_index(ip, community, mount_points=("/", "C:", "c:", "C:\\")):
-    """Localiza o indice da particao de disco (Linux '/' ou Windows 'C:')"""
+async def get_storage_index(
+    ip,
+    community,
+    mount_points=(
+        "/", "C:", "c:", "C:\\", "c:\\", "D:", "d:", "fixed disk", "disco local",
+        "rootfs", "root", "storage", "flash", "hard disk", "volume", "system", "data"
+    )
+):
+    """Localiza o indice da particao de disco primaria (Linux, Windows, Mikrotik, Cisco, etc.)"""
     try:
         rows = await walk_snmp(ip, community, "1.3.6.1.2.1.25.2.3.1.3")
-        for oid, value in rows:
-            clean_val = value.strip('"').strip()
-            for mp in mount_points:
-                if clean_val == mp or clean_val.startswith(mp):
+        normalized = [(oid, value.strip('"').strip().lower()) for oid, value in rows]
+        mounts_lower = [mp.lower() for mp in mount_points]
+
+        # 1) Correspondência exata (garante que "/" não seja confundido com "/run", "/dev/shm"...)
+        for mp_lower in mounts_lower:
+            for oid, clean_val in normalized:
+                if clean_val == mp_lower:
                     return oid.split(".")[-1]
-        return None
+
+        # 2) Prefixo apenas para palavras-chave com mais de 1 caractere (ex.: "c:\\ label:...", "fixed disk...")
+        for mp_lower in mounts_lower:
+            if len(mp_lower) <= 1:
+                continue
+            for oid, clean_val in normalized:
+                if clean_val.startswith(mp_lower):
+                    return oid.split(".")[-1]
+
+        # Fallback inteligente: buscar storage do tipo hrStorageFixedDisk com maior capacidade
+        types = await walk_snmp(ip, community, "1.3.6.1.2.1.25.2.3.1.2")
+        best_idx = None
+        max_size = -1
+        for oid, val in types:
+            if "1.3.6.1.2.1.25.2.1.4" in str(val):  # hrStorageFixedDisk
+                idx = oid.split(".")[-1]
+                size = _to_float(await get_snmp_value(ip, community, f"1.3.6.1.2.1.25.2.3.1.5.{idx}"))
+                if size and size > max_size:
+                    max_size = size
+                    best_idx = idx
+        return best_idx
     except Exception as e:
         print(f"Erro ao descobrir storage index em {ip}: {e}")
         return None
 
 
 async def get_ram_storage_index(ip, community):
-    """Localiza o indice de Memoria RAM (Physical Memory) em HOST-RESOURCES-MIB (Windows/Linux)"""
+    """Localiza o indice de Memoria RAM (Physical Memory) em HOST-RESOURCES-MIB (Windows/Linux/Mikrotik)"""
+    keywords = (
+        "physical memory", "memória física", "memoria fisica", "ram",
+        "system memory", "main memory", "real memory", "memoria principal"
+    )
     try:
         rows = await walk_snmp(ip, community, "1.3.6.1.2.1.25.2.3.1.3")
         for oid, value in rows:
             clean_val = value.strip('"').strip().lower()
-            if "physical memory" in clean_val or "memória física" in clean_val:
-                return oid.split(".")[-1]
+            for kw in keywords:
+                if kw in clean_val:
+                    return oid.split(".")[-1]
         return None
     except Exception as e:
         print(f"Erro ao descobrir ram storage index em {ip}: {e}")
@@ -395,7 +430,7 @@ async def update_host_snmp(host, db):
     comm = (host.snmp_community or "netspot").strip() or "netspot"
     ip = host.address
 
-    # ---------- 1. CPU (UCD-SNMP Linux ou HOST-RESOURCES Windows) ----------
+    # ---------- 1. CPU (UCD-SNMP Linux, HOST-RESOURCES Windows, Cisco, Mikrotik, Fortinet, Huawei, Juniper, HP) ----------
     cpu_idle = await get_snmp_value(ip, comm, "1.3.6.1.4.1.2021.11.11.0")
     if cpu_idle is not None:
         try:
@@ -419,40 +454,70 @@ async def update_host_snmp(host, db):
                 data["cpu"] = round(sum(vals) / len(vals), 2)
                 host.cpu_usage = data["cpu"]
 
-    # ---------- 2. RAM (UCD-SNMP Linux ou HOST-RESOURCES Windows) ----------
+    if data["cpu"] is None:
+        # OIDs de CPU de Roteadores/Switches/Firewalls (Mikrotik, Cisco, Fortinet, Huawei, Juniper, HP)
+        additional_cpu_oids = [
+            "1.3.6.1.4.1.14988.1.1.1.3.1.0",        # Mikrotik RouterOS v7
+            "1.3.6.1.4.1.14988.1.1.1.3.0",          # Mikrotik RouterOS v6
+            "1.3.6.1.4.1.9.9.109.1.1.1.1.5.1",      # Cisco cpmCPUTotal5secRev
+            "1.3.6.1.4.1.9.9.109.1.1.1.1.8.1",      # Cisco cpmCPUTotal1minRev
+            "1.3.6.1.4.1.9.2.1.58.0",               # Cisco avgBusy5
+            "1.3.6.1.4.1.12356.101.4.1.3.0",        # Fortinet fgSysCpuUsage
+            "1.3.6.1.4.1.2636.3.1.13.1.8.9.1.0.0",  # Juniper JunOS
+            "1.3.6.1.4.1.2011.6.3.4.1.2.0.0.0",    # Huawei VRP
+            "1.3.6.1.4.1.11.2.14.11.5.1.9.6.1.0",  # HP ProCurve
+        ]
+        for oid in additional_cpu_oids:
+            val = _to_float(await get_snmp_value(ip, comm, oid))
+            if val is not None and 0.0 <= val <= 100.0:
+                data["cpu"] = round(val, 2)
+                host.cpu_usage = data["cpu"]
+                break
+
+    # ---------- 2. RAM (UCD-SNMP Linux, HOST-RESOURCES Windows, Cisco, Fortinet, Huawei, Juniper) ----------
     ram_total = _to_float(await get_snmp_value(ip, comm, "1.3.6.1.4.1.2021.4.5.0"))
     ram_free = _to_float(await get_snmp_value(ip, comm, "1.3.6.1.4.1.2021.4.6.0"))
     ram_buffer = _to_float(await get_snmp_value(ip, comm, "1.3.6.1.4.1.2021.4.14.0"))
     ram_cache = _to_float(await get_snmp_value(ip, comm, "1.3.6.1.4.1.2021.4.15.0"))
 
-    if (
-        ram_total is not None and
-        ram_free is not None and
-        ram_buffer is not None and
-        ram_cache is not None
-    ):
-        total = ram_total
-        free = ram_free
-        buffer = ram_buffer
-        cache = ram_cache
-
-        if total > 0:
-            used = max(0, total - free - buffer - cache)
-            data["ram"] = round((used / total) * 100, 2)
-            host.ram_usage = data["ram"]
+    if ram_total is not None and ram_free is not None and ram_total > 0:
+        buffer = ram_buffer or 0.0
+        cache = ram_cache or 0.0
+        used = max(0, ram_total - ram_free - buffer - cache)
+        data["ram"] = round((used / ram_total) * 100, 2)
+        host.ram_usage = data["ram"]
 
     if data["ram"] is None:
-        # Fallback para HOST-RESOURCES Physical Memory (Windows)
+        # Fallback para HOST-RESOURCES Physical Memory (Windows/Linux/Mikrotik)
         ram_index = await get_ram_storage_index(ip, comm)
         if ram_index:
             ram_size = _to_float(await get_snmp_value(ip, comm, f"1.3.6.1.2.1.25.2.3.1.5.{ram_index}"))
             ram_used = _to_float(await get_snmp_value(ip, comm, f"1.3.6.1.2.1.25.2.3.1.6.{ram_index}"))
-            if ram_size is not None and ram_used is not None:
-                tot = ram_size
-                usd = ram_used
-                if tot > 0:
-                    data["ram"] = round((usd / tot) * 100, 2)
-                    host.ram_usage = data["ram"]
+            if ram_size is not None and ram_used is not None and ram_size > 0:
+                data["ram"] = round((ram_used / ram_size) * 100, 2)
+                host.ram_usage = data["ram"]
+
+    if data["ram"] is None:
+        # Fallback Cisco Memory Pool
+        cisco_used = _to_float(await get_snmp_value(ip, comm, "1.3.6.1.4.1.9.9.48.1.1.1.5.1"))
+        cisco_free = _to_float(await get_snmp_value(ip, comm, "1.3.6.1.4.1.9.9.48.1.1.1.6.1"))
+        if cisco_used is not None and cisco_free is not None and (cisco_used + cisco_free) > 0:
+            data["ram"] = round((cisco_used / (cisco_used + cisco_free)) * 100, 2)
+            host.ram_usage = data["ram"]
+
+    if data["ram"] is None:
+        # OIDs de Memoria direta em % (Fortinet, Huawei, Juniper)
+        additional_ram_oids = [
+            "1.3.6.1.4.1.12356.101.4.1.4.0",        # Fortinet fgSysMemUsage
+            "1.3.6.1.4.1.2011.6.3.5.1.1.2.0.0.0",    # Huawei hwMemoryDevDuty
+            "1.3.6.1.4.1.2636.3.1.13.1.11.9.1.0.0",  # Juniper JunOS Buffer
+        ]
+        for oid in additional_ram_oids:
+            val = _to_float(await get_snmp_value(ip, comm, oid))
+            if val is not None and 0.0 <= val <= 100.0:
+                data["ram"] = round(val, 2)
+                host.ram_usage = data["ram"]
+                break
 
     # ---------- 3. DISCO (Linux '/' ou Windows 'C:') ----------
     storage_index = await get_storage_index(ip, comm)

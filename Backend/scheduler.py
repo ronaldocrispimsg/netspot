@@ -305,6 +305,8 @@ async def _host_check_async(host_id: int) -> None:
 
         if not ips:
             host.status = "DOWN"
+            host.health_score = 0
+            host.severity = "CRITICAL"
             host.last_resolved_ip = None
             host.last_check = datetime.now(timezone.utc).replace(tzinfo=None)
             if baseline_pending:
@@ -657,6 +659,17 @@ async def _host_check_async(host_id: int) -> None:
         )
 
         host.severity = max_severity(host.severity, preventive_severity)
+
+        # Harmonização matemática entre Severidade e Health Score
+        if host.status == "DOWN":
+            host.health_score = 0
+            host.severity = "CRITICAL"
+        elif host.severity == "CRITICAL" and host.health_score > 35:
+            host.health_score = 35
+        elif host.severity == "DEGRADED" and host.health_score > 60:
+            host.health_score = 60
+        elif host.severity == "WARNING" and host.health_score > 80:
+            host.health_score = 80
 
         final_status = host.status
         primary_checks = [primary_check.lower()]
