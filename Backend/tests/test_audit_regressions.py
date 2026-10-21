@@ -244,6 +244,37 @@ def test_healthz_handles_db_timeout(monkeypatch):
     assert resp.status_code == 503
 
 
+def test_hard_delete_forbidden_for_non_admin():
+    import pytest
+    from fastapi import HTTPException
+    from unittest.mock import MagicMock
+    from Backend.dependencies import get_current_admin
+
+    regular_user = MagicMock()
+    regular_user.username = "estagiario"
+    regular_user.is_admin = False
+
+    with pytest.raises(HTTPException) as exc_info:
+        get_current_admin(regular_user)
+    assert exc_info.value.status_code == 403
+    assert "Acesso negado" in exc_info.value.detail
+
+
+def test_xss_host_name_escaping():
+    import html
+    malicious_hostname = "<script>alert('xss')</script>"
+    malicious_img = '<img src=x onerror="alert(1)">'
+
+    escaped_host = html.escape(malicious_hostname)
+    escaped_img = html.escape(malicious_img)
+
+    assert "<script>" not in escaped_host
+    assert "&lt;script&gt;" in escaped_host
+    assert "<img" not in escaped_img
+    assert "&lt;img" in escaped_img
+
+
+
 
 
 

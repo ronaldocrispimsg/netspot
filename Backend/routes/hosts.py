@@ -33,7 +33,7 @@ from Backend.utils import (
     parse_incident_type,
     strip_incident_prefix,
 )
-from Backend.dependencies import get_current_user
+from Backend.dependencies import get_current_user, get_current_admin
 from Backend.security import verify_password, create_access_token, hash_password
 
 router = APIRouter()
@@ -582,7 +582,7 @@ def create_host(data: HostCreate, db: Session = Depends(get_db), user: str = Dep
 def network_discover(
     data: NetworkDiscoveryRequest,
     db: Session = Depends(get_db),
-    user: str = Depends(get_current_user),
+    user: User = Depends(get_current_admin),
 ):
     subnet = _validate_private_subnet(data.subnet)
     xml_result = _run_nmap_discovery(subnet)
@@ -606,7 +606,7 @@ def network_default_subnet(user: str = Depends(get_current_user)):
 def network_import(
     data: NetworkImportRequest,
     db: Session = Depends(get_db),
-    user: str = Depends(get_current_user),
+    user: User = Depends(get_current_admin),
 ):
     requested_hosts = list(data.hosts or [])
     results = []
@@ -962,7 +962,7 @@ def hard_delete_host(
     host_id: int,
     host_name: str = Query(...),
     db: Session = Depends(get_db),
-    user: str = Depends(get_current_user),
+    user: User = Depends(get_current_admin),
 ):
     host = db.query(Host).filter(Host.id == host_id).first()
 

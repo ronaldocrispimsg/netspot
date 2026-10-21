@@ -584,16 +584,19 @@ function renderDiscoveredLanHosts() {
     listBox.innerHTML = discoveredLanHosts.map((host) => {
         const disabled = host.already_exists ? "disabled" : "";
         const checked = host.already_exists ? "" : "checked";
-        const hostnameText = host.hostname ? ` • ${host.hostname}` : "";
+        const hostnameText = host.hostname ? ` • ${escapeHtml(host.hostname)}` : "";
+        const safeName = escapeHtml(host.name);
+        const safeAddr = escapeHtml(host.address);
+        const safeId = escapeHtml(host.id);
         return `
             <label class="network-discovery-item">
                 <div class="network-discovery-meta">
-                    <strong>${host.name}</strong>
-                    <small>${host.address}${hostnameText}</small>
+                    <strong>${safeName}</strong>
+                    <small>${safeAddr}${hostnameText}</small>
                 </div>
                 <div>
                     ${host.already_exists ? '<span class="network-exists-badge">já cadastrado</span>' : ""}
-                    <input type="checkbox" class="discover-host-check" data-id="${host.id}" ${disabled} ${checked}>
+                    <input type="checkbox" class="discover-host-check" data-id="${safeId}" ${disabled} ${checked}>
                 </div>
             </label>
         `;
@@ -877,8 +880,8 @@ function buildHostCardHTML(h) {
                 <div class="host-title-wrap">
                     <span class="status-indicator ${statusColor}"></span>
                     <strong class="host-title">
-                        ${h.name}
-                        <small class="host-addr">(${hostAddressLabel})</small>
+                        ${escapeHtml(h.name)}
+                        <small class="host-addr">(${escapeHtml(hostAddressLabel)})</small>
                     </strong>
                 </div>
                 <div class="host-top-actions">
@@ -2503,13 +2506,13 @@ async function loadTrashHosts() {
         box.innerHTML = hosts.map((host) => `
             <div class="trash-item">
                 <div class="trash-meta">
-                    <strong>${host.name}</strong>
-                    <small>${host.address}${host.port ? `:${host.port}` : ""}</small>
+                    <strong>${escapeHtml(host.name)}</strong>
+                    <small>${escapeHtml(host.address)}${host.port ? `:${escapeHtml(host.port)}` : ""}</small>
                     <small>Desativado em: ${formatApiDateTime(host.deleted_at)}</small>
                 </div>
                 <div class="trash-actions">
-                    <button onclick='restoreHost(${host.id}, ${JSON.stringify(host.name)})'>Restaurar</button>
-                    <button class="danger-btn" onclick='hardDeleteHost(${host.id}, ${JSON.stringify(host.name)})'>Excluir permanentemente</button>
+                    <button onclick='restoreHost(${Number(host.id)}, ${JSON.stringify(String(host.name))})'>Restaurar</button>
+                    <button class="danger-btn" onclick='hardDeleteHost(${Number(host.id)}, ${JSON.stringify(String(host.name))})'>Excluir permanentemente</button>
                 </div>
             </div>
         `).join("");
