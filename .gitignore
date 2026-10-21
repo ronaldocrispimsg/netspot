@@ -45,6 +45,9 @@ poetry.lock
 .pytest_cache/
 .mypy_cache/
 
+# ===== Agentes e Arquivos Internos =====
+.agents/
+
 # ===== Docker volumes data =====
 Database/postgres_data/
 RabbitMQ/data/
@@ -56,9 +59,5 @@ Escrita_TCC/
 RELATORIO-UIUX.md
 scripts/script_para_gerar_diagramas.py
 script_para_gerar_diagramas.py
-
-RabbitMQ/data/
-N8N/data/
-Database/postgres_data/
 estrutura.txt
 *Zone.Identifier
