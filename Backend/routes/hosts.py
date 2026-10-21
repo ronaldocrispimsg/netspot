@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import ipaddress
 import json
 import re
@@ -213,7 +213,8 @@ def _parse_nmap_hosts(xml_text: str) -> list[dict]:
         return []
 
     try:
-        root = ET.fromstring(xml_text)
+        # XML gerado exclusivamente pelo subprocess local nmap -oX -
+        root = ET.fromstring(xml_text)  # nosec B314
     except ET.ParseError:
         raise HTTPException(status_code=500, detail="Resposta XML do Nmap inválida")
 

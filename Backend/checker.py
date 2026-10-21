@@ -302,7 +302,8 @@ async def http_check(url: str, timeout=1, retries=3):
     parsed = urlparse(url if "://" in url else f"//{url}")
     has_explicit_scheme = parsed.scheme in ("http", "https")
 
-    async with httpx.AsyncClient(verify=False) as client:
+    # Entrada segura: hosts internos podem ter certificados autoassinados
+    async with httpx.AsyncClient(verify=False) as client:  # nosec B501
         if has_explicit_scheme:
             result = await _http_with_retries(client, url, retries=retries, timeout=timeout)
             result["protocol"] = parsed.scheme

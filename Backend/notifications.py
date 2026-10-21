@@ -243,7 +243,7 @@ def _message_fingerprint(message) -> str:
         normalized = json.dumps(message, sort_keys=True)
     else:
         normalized = " ".join(str(message or "").split())
-    return hashlib.sha1(normalized.encode("utf-8")).hexdigest()
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 
 _FLAPPING_STATE = {}
