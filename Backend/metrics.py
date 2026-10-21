@@ -1,8 +1,14 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from sqlalchemy import select
 from Backend.models import CheckResult, Incident
 
+PING_WORSENING_TRENDS = ("DEGRADING", "FAST_DEGRADING")
+HTTP_WORSENING_TRENDS = ("DEGRADING", "CRITICAL")
+# Amostras mínimas para considerar o SLA móvel confiável (evita falso alerta no início do monitoramento)
+MIN_SLA_SAMPLES = 5
+
+
 def compute_health(ping_result, tcp_result, http_result):
-    score = 0
     icmp_blocked_like = (
         not ping_result["success"] and (
             (tcp_result is not None and tcp_result.get("success")) or
@@ -16,38 +22,45 @@ def compute_health(ping_result, tcp_result, http_result):
         # Não há RTT ICMP real quando firewall bloqueia; usa valor neutro para não penalizar saúde.
         ping_effective_latency = 80
 
-    # ---------- Ping ----------
-    if ping_effective_success:
-        score += 30
+    raw_score = 0.0
+    max_score = 0.0
 
+    # ---------- 1. Ping ----------
+    max_score += 45.0
+    if ping_effective_success:
+        raw_score += 30.0
         lat = ping_effective_latency or 9999
         if lat < 100:
-            score += 15
+            raw_score += 15.0
         elif lat < 300:
-            score += 8
+            raw_score += 8.0
 
-    # ---------- TCP ----------
-    if tcp_result and tcp_result["success"]:
-        score += 30
+    # ---------- 2. TCP (se configurado) ----------
+    if tcp_result is not None:
+        max_score += 30.0
+        if tcp_result.get("success"):
+            raw_score += 30.0
 
-    # ---------- HTTP ----------
-    if http_result:
+    # ---------- 3. HTTP (se configurado) ----------
+    if http_result is not None:
+        max_score += 35.0
         status_code = http_result.get("status_code")
 
-        if http_result["success"]:
-            score += 25
-
+        if http_result.get("success"):
+            raw_score += 25.0
             if http_result.get("latency") and http_result["latency"] < 500:
-                score += 10
-
+                raw_score += 10.0
         elif status_code and 500 <= status_code < 600:
-            score -= 20
-
+            raw_score -= 20.0
         elif status_code and 400 <= status_code < 500:
-            score -= 10
+            raw_score -= 10.0
 
-    # score máximo e mínimo
-    score = max(0, min(100, score))
+    if max_score > 0:
+        normalized = (raw_score / max_score) * 100.0
+    else:
+        normalized = 0.0
+
+    score = int(round(max(0.0, min(100.0, normalized))))
 
     # ---------- Severidade ----------
     if score >= 85:
@@ -71,7 +84,7 @@ def calc_sla_rolling_ping(db, host_id, window=50):
         .all()
     )
 
-    if not rows:
+    if len(rows) < MIN_SLA_SAMPLES:
         return None
 
     ok = sum(1 for r in rows if r.success)
@@ -89,7 +102,7 @@ def calc_sla_rolling_tcp(db, host_id, window=50):
         .all()
     )
 
-    if not rows:
+    if len(rows) < MIN_SLA_SAMPLES:
         return None
 
     ok = sum(1 for r in rows if r.success)
@@ -108,7 +121,7 @@ def calc_sla_rolling_http(db, host_id, window=50):
         .all()
     )
 
-    if not rows:
+    if len(rows) < MIN_SLA_SAMPLES:
         return None
 
     success_count = sum(1 for r in rows if r.success)
@@ -184,7 +197,7 @@ def calc_sla_rolling_tcp_ports(db, host_id, tcp_ports, window=50):
         .all()
     )
 
-    if not rows:
+    if len(rows) < MIN_SLA_SAMPLES:
         return None
 
     ok = sum(1 for r in rows if r.success)
@@ -262,9 +275,11 @@ def refine_severity(
     if slas:
         worst_sla = min(slas)
 
-        if worst_sla < 70:
-            return "CRITICAL"
-        elif worst_sla < 90 and sev != "CRITICAL":
+        if worst_sla < 50:
+            sev = "CRITICAL"
+        elif worst_sla < 75 and sev not in ("CRITICAL",):
+            sev = "DEGRADED"
+        elif worst_sla < 90 and sev not in ("CRITICAL", "DEGRADED"):
             sev = "WARNING"
 
     # ---------- Jitter pior manda ----------
@@ -276,8 +291,10 @@ def refine_severity(
 
         if worst_jitter > 400:
             return "CRITICAL"
-        elif worst_jitter > 200 and sev not in ("CRITICAL"):
+        elif worst_jitter > 200 and sev not in ("CRITICAL",):
             sev = "DEGRADED"
+        elif worst_jitter > 120 and sev not in ("CRITICAL", "DEGRADED"):
+            sev = "WARNING"
 
     return sev
 
@@ -402,22 +419,8 @@ def total_downtime(db, host_name):
 
     return sum(i.duration_seconds for i in incidents)
 
-def availability_last_10_min(db, host_name):
-    now = datetime.utcnow()
-    since = now - timedelta(minutes=10)
-
-    incidents = (
-    db.query(Incident)
-    .filter(
-        Incident.host_name == host_name,
-        Incident.started_time <= now,
-        (Incident.ended_time == None) | (Incident.ended_time >= since)
-    )
-    .all()
-)
-
+def calculate_availability_from_incidents(incidents, now, since, total_period: int = 600) -> float:
     downtime = 0
-
     for incident in incidents:
         start = incident.started_time
         end = incident.ended_time or now
@@ -428,10 +431,24 @@ def availability_last_10_min(db, host_name):
         if overlap_end > overlap_start:
             downtime += (overlap_end - overlap_start).total_seconds()
 
-    total_period = 600
     availability = ((total_period - downtime) / total_period) * 100
+    return round(max(0.0, availability), 4)
 
-    return round(max(0, availability), 4)
+def availability_last_10_min(db, host_name):
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    since = now - timedelta(minutes=10)
+
+    incidents = (
+        db.query(Incident)
+        .filter(
+            Incident.host_name == host_name,
+            Incident.started_time <= now,
+            (Incident.ended_time == None) | (Incident.ended_time >= since)
+        )
+        .all()
+    )
+
+    return calculate_availability_from_incidents(incidents, now, since)
 
 def apply_preventive_logic(host, snmp_data=None, ignore_ping_metrics: bool = False):
     reasons = []
@@ -447,10 +464,12 @@ def apply_preventive_logic(host, snmp_data=None, ignore_ping_metrics: bool = Fal
 
     # ---------- SLA ----------
     sla_ping = None if ignore_ping_metrics else host.sla_rolling_ping
+    http_is_active = bool(getattr(host, "http_enabled", True))
+    sla_http = host.sla_rolling_http if http_is_active else None
     sla_values = [
         sla_ping,
         host.sla_rolling_tcp,
-        host.sla_rolling_http
+        sla_http
     ]
 
     valid_slas = [v for v in sla_values if v is not None]
@@ -465,10 +484,11 @@ def apply_preventive_logic(host, snmp_data=None, ignore_ping_metrics: bool = Fal
 
     # ---------- Jitter ----------
     jitter_ping = None if ignore_ping_metrics else host.jitter_ms_ping
+    jitter_http = host.jitter_ms_http if http_is_active else None
     jitter_values = [
         jitter_ping,
         host.jitter_ms_tcp,
-        host.jitter_ms_http
+        jitter_http
     ]
 
     valid_jitters = [v for v in jitter_values if v is not None]
@@ -482,11 +502,13 @@ def apply_preventive_logic(host, snmp_data=None, ignore_ping_metrics: bool = Fal
         reasons.append("Jitter crítico")
 
     # ---------- Tendência ----------
-    if not ignore_ping_metrics and host.trend in ("SUBINDO", "PIORANDO", "UPWARD"):
+    # Rótulos reais: classify_trend -> DEGRADING/FAST_DEGRADING;
+    # classify_trend_http -> DEGRADING/CRITICAL (RISING é ignorado para evitar ruído).
+    if not ignore_ping_metrics and host.trend in PING_WORSENING_TRENDS:
         preventive_severity = max_severity(preventive_severity, "WARNING")
         reasons.append("Tendência de piora no ping")
 
-    if host.trend_http in ("SUBINDO", "PIORANDO", "UPWARD"):
+    if http_is_active and host.trend_http in HTTP_WORSENING_TRENDS:
         preventive_severity = max_severity(preventive_severity, "WARNING")
         reasons.append("Tendência de piora no HTTP")
 
@@ -530,3 +552,181 @@ def max_severity(current, new):
         "CRITICAL": 3
     }
     return new if order[new] > order[current] else current
+
+
+async def calc_sla_rolling_ping_async(db, host_id, window=50):
+    stmt = (
+        select(CheckResult)
+        .filter(CheckResult.host_id == host_id, CheckResult.check_type == "ping")
+        .order_by(CheckResult.timestamp.desc())
+        .limit(window)
+    )
+    res = await db.execute(stmt)
+    rows = res.scalars().all()
+    if len(rows) < MIN_SLA_SAMPLES:
+        return None
+    ok = sum(1 for r in rows if r.success)
+    return round(ok / len(rows) * 100, 2)
+
+
+async def calc_sla_rolling_tcp_ports_async(db, host_id, tcp_ports, window=50):
+    ports = [int(p) for p in (tcp_ports or []) if p is not None]
+    if not ports:
+        return None
+    stmt = (
+        select(CheckResult)
+        .filter(
+            CheckResult.host_id == host_id,
+            CheckResult.check_type == "tcp",
+            CheckResult.tcp_port.in_(ports),
+        )
+        .order_by(CheckResult.timestamp.desc())
+        .limit(window)
+    )
+    res = await db.execute(stmt)
+    rows = res.scalars().all()
+    if len(rows) < MIN_SLA_SAMPLES:
+        return None
+    ok = sum(1 for r in rows if r.success)
+    return round(ok / len(rows) * 100, 2)
+
+
+async def calc_sla_rolling_http_async(db, host_id, window=50):
+    stmt = (
+        select(CheckResult)
+        .filter(CheckResult.host_id == host_id, CheckResult.check_type == "http")
+        .order_by(CheckResult.timestamp.desc())
+        .limit(window)
+    )
+    res = await db.execute(stmt)
+    rows = res.scalars().all()
+    if len(rows) < MIN_SLA_SAMPLES:
+        return None
+    success_count = sum(1 for r in rows if r.success)
+    return round((success_count / len(rows)) * 100, 2)
+
+
+async def calc_jitter_ping_async(db, host_id, window=10):
+    stmt = (
+        select(CheckResult)
+        .filter(
+            CheckResult.host_id == host_id,
+            CheckResult.check_type == "ping",
+            CheckResult.latency != None,
+        )
+        .order_by(CheckResult.timestamp.desc())
+        .limit(window)
+    )
+    res = await db.execute(stmt)
+    rows = res.scalars().all()
+    if len(rows) < 2:
+        return None
+    values = [r.latency for r in rows]
+    values.reverse()
+    diffs = [abs(values[i] - values[i - 1]) for i in range(1, len(values))]
+    return round(sum(diffs) / len(diffs), 2)
+
+
+async def calc_jitter_tcp_ports_async(db, host_id, tcp_ports, window=10):
+    ports = [int(p) for p in (tcp_ports or []) if p is not None]
+    if not ports:
+        return None
+    stmt = (
+        select(CheckResult)
+        .filter(
+            CheckResult.host_id == host_id,
+            CheckResult.check_type == "tcp",
+            CheckResult.tcp_port.in_(ports),
+            CheckResult.latency != None,
+        )
+        .order_by(CheckResult.timestamp.desc())
+        .limit(window)
+    )
+    res = await db.execute(stmt)
+    rows = res.scalars().all()
+    if len(rows) < 2:
+        return None
+    values = [r.latency for r in rows]
+    values.reverse()
+    diffs = [abs(values[i] - values[i - 1]) for i in range(1, len(values))]
+    return round(sum(diffs) / len(diffs), 2)
+
+
+async def calc_jitter_http_async(db, host_id, window=10):
+    stmt = (
+        select(CheckResult)
+        .filter(
+            CheckResult.host_id == host_id,
+            CheckResult.check_type == "http",
+            CheckResult.success == True,
+            CheckResult.latency != None,
+        )
+        .order_by(CheckResult.timestamp.desc())
+        .limit(window)
+    )
+    res = await db.execute(stmt)
+    rows = res.scalars().all()
+    if len(rows) < 3:
+        return None
+    latencies = [r.latency for r in rows]
+    latencies.reverse()
+    diffs = [abs(latencies[i] - latencies[i - 1]) for i in range(1, len(latencies))]
+    return round(sum(diffs) / len(diffs), 2)
+
+
+async def calc_latency_trend_ping_async(db, host_id, window=10):
+    stmt = (
+        select(CheckResult)
+        .filter(
+            CheckResult.host_id == host_id,
+            CheckResult.check_type == "ping",
+            CheckResult.success == True,
+            CheckResult.latency != None,
+        )
+        .order_by(CheckResult.timestamp.desc())
+        .limit(window)
+    )
+    res = await db.execute(stmt)
+    rows = res.scalars().all()
+    if len(rows) < 5:
+        return None
+    values = [r.latency for r in rows]
+    values.reverse()
+    x = list(range(len(values)))
+    x_mean = sum(x) / len(x)
+    y_mean = sum(values) / len(values)
+    num = sum((xi - x_mean) * (yi - y_mean) for xi, yi in zip(x, values))
+    den = sum((xi - x_mean) ** 2 for xi in x)
+    if den == 0:
+        return 0
+    slope = num / den
+    return round(slope, 2)
+
+
+async def calc_latency_trend_http_async(db, host_id, window=10):
+    stmt = (
+        select(CheckResult)
+        .filter(
+            CheckResult.host_id == host_id,
+            CheckResult.check_type == "http",
+            CheckResult.success == True,
+            CheckResult.latency != None,
+        )
+        .order_by(CheckResult.timestamp.desc())
+        .limit(window)
+    )
+    res = await db.execute(stmt)
+    rows = res.scalars().all()
+    if len(rows) < 5:
+        return None
+    values = [r.latency for r in rows]
+    values.reverse()
+    x = list(range(len(values)))
+    x_mean = sum(x) / len(x)
+    y_mean = sum(values) / len(values)
+    num = sum((xi - x_mean) * (yi - y_mean) for xi, yi in zip(x, values))
+    den = sum((xi - x_mean) ** 2 for xi in x)
+    if den == 0:
+        return 0
+    slope = num / den
+    return round(slope, 2)

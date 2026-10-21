@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import ipaddress
 import json
 import re
@@ -9,10 +9,12 @@ import subprocess
 import xml.etree.ElementTree as ET
 import psutil
 from Backend.database import get_db
-from Backend.metrics import total_downtime, total_incidents, availability_last_10_min
+from Backend.metrics import total_downtime, total_incidents, availability_last_10_min, compute_health, calculate_availability_from_incidents
 from Backend.models import CheckResult, Host, Alert, Incident, User, SNMPMetric
-from Backend.checker import ping_host, tcp_check, resolve_dns_cached
+from Backend.checker import ping_host, tcp_check, resolve_dns_cached_sync
 from Backend.notifications import telegram_health_check
+from Backend.services.circuit_breaker import circuit_breaker
+from Backend.snmp_engine import reset_snmp_backoff
 from Backend.schemas import (
     HostCreate,
     HostUpdate,
@@ -31,7 +33,7 @@ from Backend.utils import (
     parse_incident_type,
     strip_incident_prefix,
 )
-from Backend.dependencies import get_current_user
+from Backend.dependencies import get_current_user, get_current_admin
 from Backend.security import verify_password, create_access_token, hash_password
 
 router = APIRouter()
@@ -53,10 +55,13 @@ _IGNORED_INTERFACE_PREFIXES = (
 _MAX_DISCOVERY_ADDRESSES = 4096
 
 
-def _apply_snmp_policy(host: Host, snmp_enabled: bool) -> None:
-    enabled = bool(snmp_enabled)
-    host.snmp_enabled = enabled
-    host.snmp_community = "noc-lite" if enabled else None
+def _apply_snmp_policy(host: Host, snmp_enabled: bool | None, snmp_community: str | None = None) -> None:
+    if snmp_enabled is not None:
+        host.snmp_enabled = bool(snmp_enabled)
+    comm = (snmp_community or getattr(host, "snmp_community", "netspot") or "netspot").strip()
+    if not comm:
+        comm = "netspot"
+    host.snmp_community = comm
 
 
 def _apply_http_policy(host: Host, http_enabled: bool | None, selected_http: str | None) -> None:
@@ -75,6 +80,10 @@ def _apply_http_policy(host: Host, http_enabled: bool | None, selected_http: str
         host.tcp_http_port_latency = None
         host.tcp_https_port_ok = None
         host.tcp_https_port_latency = None
+        host.sla_rolling_http = None
+        host.jitter_ms_http = None
+        host.slope_http = None
+        host.trend_http = "UNKNOWN"
 
 
 def _normalize_ports(raw_ports, fallback_port: int | None = None) -> list[int]:
@@ -167,11 +176,23 @@ def _interface_ignored(interface_name: str) -> bool:
 
 def _run_nmap_discovery(subnet: str) -> str:
     try:
+        dns_server = None
+        try:
+            net = ipaddress.ip_network(subnet, strict=False)
+            dns_server = str(next(net.hosts()))
+        except Exception:
+            pass
+
+        nmap_args = ["nmap", "-sn", "-PE", "-PS22,80,443", "-T4", "--max-rtt-timeout", "200ms", "--max-retries", "1"]
+        if dns_server:
+            nmap_args += ["--dns-servers", dns_server]
+        nmap_args += [subnet, "-oX", "-"]
+
         result = subprocess.run(
-            ["nmap", "-sn", subnet, "-oX", "-"],
+            nmap_args,
             capture_output=True,
             text=True,
-            timeout=45,
+            timeout=60,
             check=False,
         )
     except FileNotFoundError:
@@ -196,7 +217,8 @@ def _parse_nmap_hosts(xml_text: str) -> list[dict]:
         return []
 
     try:
-        root = ET.fromstring(xml_text)
+        # XML gerado exclusivamente pelo subprocess local nmap -oX -
+        root = ET.fromstring(xml_text)  # nosec B314
     except ET.ParseError:
         raise HTTPException(status_code=500, detail="Resposta XML do Nmap inválida")
 
@@ -391,6 +413,8 @@ def _deactivate_host_entity(host: Host) -> None:
     host.active = False
     host.active_time = datetime.utcnow()
     host.deleted_at = datetime.utcnow()
+    circuit_breaker.clear_host(host.id)
+    reset_snmp_backoff(host.id)
 
 
 def _is_icmp_blocked_but_service_up(
@@ -407,10 +431,37 @@ def _is_icmp_blocked_but_service_up(
     return tcp_ok or http_ok
 
 def infer_probable_cause(db: Session, host: Host) -> str:
+    # 1. Caminho rápido antecipado para hosts comprovadamente saudáveis:
+    is_healthy = host.status == "UP" and host.severity in ("HEALTHY", "UNKNOWN", None)
+    cpu_val = getattr(host, "cpu_usage", None)
+    ram_val = getattr(host, "ram_usage", None)
+    disk_val = getattr(host, "disk_usage", None)
+    jitter_ping = getattr(host, "jitter_ms_ping", None)
+    jitter_tcp = getattr(host, "jitter_ms_tcp", None)
+    jitter_http = getattr(host, "jitter_ms_http", None)
+    sla_ping = getattr(host, "sla_rolling_ping", None)
+    sla_tcp = getattr(host, "sla_rolling_tcp", None)
+    sla_http = getattr(host, "sla_rolling_http", None)
+
+    has_normal_resources = (
+        (cpu_val is None or cpu_val < 85)
+        and (ram_val is None or ram_val < 85)
+        and (disk_val is None or disk_val < 90)
+        and (jitter_ping is None or jitter_ping < 80)
+        and (jitter_tcp is None or jitter_tcp < 80)
+        and (jitter_http is None or jitter_http < 80)
+        and (sla_ping is None or sla_ping >= 95)
+        and (sla_tcp is None or sla_tcp >= 95)
+        and (sla_http is None or sla_http >= 95)
+    )
+    if is_healthy and has_normal_resources and getattr(host, "status_ping", None) == "UP":
+        host.icmp_blocked_but_service_up = False
+        return "Operação normal"
+
     last_dns = get_last_check(db, host.id, "dns")
     last_ping = get_last_check(db, host.id, "ping")
     last_tcp = get_last_check(db, host.id, "tcp")
-    last_http = get_last_check(db, host.id, "http")
+    last_http = get_last_check(db, host.id, "http") if bool(getattr(host, "http_enabled", True)) else None
     icmp_blocked_but_service_up = _is_icmp_blocked_but_service_up(
         host,
         last_ping,
@@ -420,38 +471,98 @@ def infer_probable_cause(db: Session, host: Host) -> str:
     host.icmp_blocked_but_service_up = icmp_blocked_but_service_up
 
     if icmp_blocked_but_service_up:
-        return "ICMP bloqueado por firewall\nServiço operando normalmente"
+        return "ICMP bloqueado por firewall (Serviços TCP/Web operando normalmente)"
 
     if host.status == "DOWN":
         if last_dns and not last_dns.success:
-            return "Falha na resolução DNS"
+            return "Falha na resolução DNS (servidor não respondeu)"
         if last_http and not last_http.success and (last_http.status_code or 0) >= 500:
-            return f"Serviço HTTP instável (HTTP {last_http.status_code})"
+            return f"Serviço HTTP indisponível (HTTP {last_http.status_code})"
         if host.port is not None and last_tcp and not last_tcp.success:
-            return "Porta TCP indisponível"
+            return f"Porta TCP {host.port} indisponível (conexão recusada/timeout)"
         if last_ping and not last_ping.success:
-            return "Host sem resposta ICMP"
+            return "Host sem resposta ICMP (offline ou inalcançável)"
         return "Indisponibilidade geral do host"
 
-    if (
-        (host.cpu_usage is not None and host.cpu_usage >= 95) or
-        (host.ram_usage is not None and host.ram_usage >= 92) or
-        (host.disk_usage is not None and host.disk_usage >= 95)
-    ):
-        return "Sobrecarga de recursos locais (CPU/RAM/Disco)"
+    # Diagnóstico detalhado e pontual de causas de degradação:
+    causes = []
 
-    if last_http and not last_http.success and (last_http.status_code or 0) >= 500:
-        return f"Aplicação web com erro HTTP {last_http.status_code}"
+    # 1. Telemetria de Hardware (SNMP)
+    if host.disk_usage is not None:
+        if host.disk_usage >= 97:
+            causes.append(f"Disco crítico ({host.disk_usage:.1f}%)")
+        elif host.disk_usage >= 90:
+            causes.append(f"Disco elevado ({host.disk_usage:.1f}%)")
 
-    if (
-        (host.jitter_ms_ping is not None and host.jitter_ms_ping >= 120) or
-        (host.jitter_ms_http is not None and host.jitter_ms_http >= 180) or
-        (host.sla_rolling_ping is not None and host.sla_rolling_ping < 95)
-    ):
-        return "Instabilidade de rede (jitter/perda)"
+    if host.ram_usage is not None:
+        if host.ram_usage >= 95:
+            causes.append(f"RAM crítica ({host.ram_usage:.1f}%)")
+        elif host.ram_usage >= 85:
+            causes.append(f"RAM elevada ({host.ram_usage:.1f}%)")
+
+    if host.cpu_usage is not None:
+        if host.cpu_usage >= 95:
+            causes.append(f"CPU crítica ({host.cpu_usage:.1f}%)")
+        elif host.cpu_usage >= 85:
+            causes.append(f"CPU elevada ({host.cpu_usage:.1f}%)")
+
+    # 2. Variação de Latência (Jitter)
+    if host.jitter_ms_ping is not None and host.jitter_ms_ping >= 80:
+        if host.jitter_ms_ping >= 150:
+            causes.append(f"Jitter crítico no Ping ({host.jitter_ms_ping:.1f} ms)")
+        else:
+            causes.append(f"Jitter alto no Ping ({host.jitter_ms_ping:.1f} ms)")
+
+    if host.jitter_ms_tcp is not None and host.jitter_ms_tcp >= 80:
+        if host.jitter_ms_tcp >= 150:
+            causes.append(f"Jitter crítico em portas TCP ({host.jitter_ms_tcp:.1f} ms)")
+        else:
+            causes.append(f"Jitter alto em portas TCP ({host.jitter_ms_tcp:.1f} ms)")
+
+    if bool(getattr(host, "http_enabled", True)) and host.jitter_ms_http is not None and host.jitter_ms_http >= 80:
+        if host.jitter_ms_http >= 150:
+            causes.append(f"Jitter crítico na aplicação Web ({host.jitter_ms_http:.1f} ms)")
+        else:
+            causes.append(f"Jitter alto na aplicação Web ({host.jitter_ms_http:.1f} ms)")
+
+    # 3. Taxa de Sucesso / SLA Móvel
+    if host.sla_rolling_ping is not None and host.sla_rolling_ping < 95:
+        if host.sla_rolling_ping < 85:
+            causes.append(f"SLA instável no Ping ({host.sla_rolling_ping:.1f}%)")
+        else:
+            causes.append(f"Queda de sucesso no Ping ({host.sla_rolling_ping:.1f}%)")
+
+    if host.sla_rolling_tcp is not None and host.sla_rolling_tcp < 95:
+        if host.sla_rolling_tcp < 85:
+            causes.append(f"SLA instável em portas TCP ({host.sla_rolling_tcp:.1f}%)")
+        else:
+            causes.append(f"Falhas pontuais em portas TCP ({host.sla_rolling_tcp:.1f}%)")
+
+    if bool(getattr(host, "http_enabled", True)) and host.sla_rolling_http is not None and host.sla_rolling_http < 95:
+        if host.sla_rolling_http < 85:
+            causes.append(f"SLA instável na aplicação Web ({host.sla_rolling_http:.1f}%)")
+        else:
+            causes.append(f"Falhas pontuais na aplicação Web ({host.sla_rolling_http:.1f}%)")
+
+    # 4. Tendências de Piora Contínua
+    if host.trend in ("DEGRADING", "FAST_DEGRADING"):
+        causes.append("Latência em tendência de piora contínua (Ping)")
+
+    if bool(getattr(host, "http_enabled", True)) and host.trend_http in ("DEGRADING", "CRITICAL"):
+        causes.append("Tempo de resposta web degradando progressivamente")
+
+    # 5. Respostas de Aplicação Web ou Portas
+    if last_http and not last_http.success and (last_http.status_code or 0) >= 400:
+        causes.append(f"Aplicação web respondendo HTTP {last_http.status_code}")
+
+    if host.port is not None and last_tcp and not last_tcp.success:
+        causes.append(f"Porta TCP {host.port} com falha intermitente")
+
+    if causes:
+        return " | ".join(causes[:2])
 
     if host.severity in ("WARNING", "DEGRADED", "CRITICAL"):
-        return "Degradação detectada por métricas preventivas"
+        return f"Métrica preventiva em estado {host.severity}"
 
     return "Operação normal"
 
@@ -461,13 +572,17 @@ def create_host(data: HostCreate, db: Session = Depends(get_db), user: str = Dep
     if not normalized_name:
         raise HTTPException(status_code=400, detail="Nome do host é obrigatório")
 
+    normalized_address = (data.address or "").strip()
+    if not normalized_address:
+        raise HTTPException(status_code=400, detail="Endereço do host é obrigatório")
+
     existing_host = db.query(Host).filter(Host.name == normalized_name).first()
     resolved = None
 
-    if is_ip(data.address):
-        resolved = reverse_dns(data.address)
+    if is_ip(normalized_address):
+        resolved = reverse_dns(normalized_address)
     else:
-        dns_result = resolve_dns_cached(data.address, db)  # Verifica se o endereço é válido
+        dns_result = resolve_dns_cached_sync(normalized_address, db)  # Verifica se o endereço é válido
         ips = extract_ips_from_dns_result(dns_result)
         
         if not ips:
@@ -478,12 +593,14 @@ def create_host(data: HostCreate, db: Session = Depends(get_db), user: str = Dep
             existing_host.active = True
             existing_host.active_time = None
             existing_host.deleted_at = None
+            circuit_breaker.clear_host(existing_host.id)
+            reset_snmp_backoff(existing_host.id)
             existing_ports = _host_ports(existing_host)
             if data.ports is None and data.port is None:
                 ports = existing_ports
             else:
                 ports = _normalize_ports(data.ports, data.port)
-            existing_host.address = data.address
+            existing_host.address = normalized_address
             _store_host_ports(existing_host, ports)
             existing_host.hostname_resolved = resolved
             _reset_host_operational_state(existing_host)
@@ -491,7 +608,7 @@ def create_host(data: HostCreate, db: Session = Depends(get_db), user: str = Dep
 
             selected_http = _resolve_http_input(data)
             _apply_http_policy(existing_host, data.http_enabled, selected_http)
-            _apply_snmp_policy(existing_host, data.snmp_enabled)
+            _apply_snmp_policy(existing_host, data.snmp_enabled, getattr(data, "snmp_community", "netspot"))
 
             db.commit()
             db.refresh(existing_host)
@@ -504,9 +621,10 @@ def create_host(data: HostCreate, db: Session = Depends(get_db), user: str = Dep
     else:
         ports = _normalize_ports(data.ports, data.port)
         selected_http = _resolve_http_input(data)
+        comm = (getattr(data, "snmp_community", "netspot") or "netspot").strip() or "netspot"
         host = Host(
             name=normalized_name,
-            address=data.address,
+            address=normalized_address,
             active=True,
             active_time=None,
             deleted_at=None,
@@ -517,7 +635,7 @@ def create_host(data: HostCreate, db: Session = Depends(get_db), user: str = Dep
             http_enabled=bool(data.http_enabled),
             last_http_protocol=None,
             snmp_enabled=bool(data.snmp_enabled),
-            snmp_community="noc-lite" if data.snmp_enabled else None,
+            snmp_community=comm,
             hostname_resolved=resolved,
         )
         _store_host_ports(host, ports)
@@ -538,7 +656,7 @@ def create_host(data: HostCreate, db: Session = Depends(get_db), user: str = Dep
 def network_discover(
     data: NetworkDiscoveryRequest,
     db: Session = Depends(get_db),
-    user: str = Depends(get_current_user),
+    user: User = Depends(get_current_admin),
 ):
     subnet = _validate_private_subnet(data.subnet)
     xml_result = _run_nmap_discovery(subnet)
@@ -562,7 +680,7 @@ def network_default_subnet(user: str = Depends(get_current_user)):
 def network_import(
     data: NetworkImportRequest,
     db: Session = Depends(get_db),
-    user: str = Depends(get_current_user),
+    user: User = Depends(get_current_admin),
 ):
     requested_hosts = list(data.hosts or [])
     results = []
@@ -610,10 +728,26 @@ def network_import(
             continue
         seen_addresses_in_request.add(address)
 
+        target_snmp_enabled = bool(
+            getattr(item, "snmp_enabled", None) if getattr(item, "snmp_enabled", None) is not None
+            else (data.snmp_enabled if data.snmp_enabled is not None else True)
+        )
+        target_snmp_community = (
+            getattr(item, "snmp_community", None) or getattr(data, "snmp_community", "netspot") or "netspot"
+        ).strip() or "netspot"
+
         if address in existing_ip_set:
+            existing_host = db.query(Host).filter(Host.address == address).first()
+            if existing_host:
+                existing_host.active = True
+                existing_host.deleted_at = None
+                existing_host.snmp_enabled = target_snmp_enabled
+                existing_host.snmp_community = target_snmp_community
+                circuit_breaker.clear_host(existing_host.id)
+                reset_snmp_backoff(existing_host.id)
             skipped_count += 1
             results.append({
-                "name": raw_name or _slug_ip_name(address),
+                "name": existing_host.name if existing_host else (raw_name or _slug_ip_name(address)),
                 "address": address,
                 "created": False,
                 "reason": "already_exists",
@@ -638,8 +772,8 @@ def network_import(
             http_url=None,
             http_enabled=False,
             last_http_protocol=None,
-            snmp_enabled=False,
-            snmp_community=None,
+            snmp_enabled=target_snmp_enabled,
+            snmp_community=target_snmp_community,
         )
 
         db.add(host)
@@ -670,17 +804,36 @@ def list_hosts(db: Session = Depends(get_db), user: str = Depends(get_current_us
         .filter(Incident.status == "OPEN")
         .all()
     }
-    
+
+    # Batch de incidentes recentes (últimos 10 min) para eliminar N+1 queries de availability
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    since = now - timedelta(minutes=10)
+    recent_incidents = (
+        db.query(Incident)
+        .filter(
+            Incident.started_time <= now,
+            (Incident.ended_time == None) | (Incident.ended_time >= since)
+        )
+        .all()
+    )
+    incidents_by_host = {}
+    for inc in recent_incidents:
+        incidents_by_host.setdefault(inc.host_name, []).append(inc)
+
     # Métricas em tempo real no objeto antes de enviar
     for h in hosts:
         h.ports = _host_ports(h)
         h.url = h.http_url
         h.http_protocol = h.last_http_protocol
-        h.availability_10m = availability_last_10_min(db, h.name)
+        host_incidents = incidents_by_host.get(h.name)
+        if host_incidents:
+            h.availability_10m = calculate_availability_from_incidents(host_incidents, now, since)
+        else:
+            h.availability_10m = 100.0
         h.probable_cause = infer_probable_cause(db, h)
         h.icmp_blocked_but_service_up = bool(getattr(h, "icmp_blocked_but_service_up", False))
         h.has_open_incident = h.name in open_incident_hosts
-        
+
     return hosts
 
 
@@ -692,7 +845,7 @@ def check_host(host_name: str, db: Session = Depends(get_db), user: User = Depen
     if not host:
         raise HTTPException(status_code=404, detail="Host não encontrado")
 
-    dns_result = resolve_dns_cached(host.address, db)
+    dns_result = resolve_dns_cached_sync(host.address, db)
     ips = extract_ips_from_dns_result(dns_result)
 
     if not ips:
@@ -740,15 +893,23 @@ def check_host(host_name: str, db: Session = Depends(get_db), user: User = Depen
 
     if icmp_blocked_but_service_up:
         host.status = "UP"
-
     elif host.status_ping == "DOWN":
         host.status = "DOWN"
-
     elif host.status_tcp == "DOWN":
         host.status = "DEGRADED"
-
     else:
         host.status = "UP"
+
+    score, severity = compute_health(ping_result, tcp_result, None)
+    if host.status == "DOWN":
+        score = 0
+        severity = "CRITICAL"
+    elif host.status == "DEGRADED" and severity not in ("CRITICAL", "DEGRADED"):
+        severity = "DEGRADED"
+        if score > 60:
+            score = 60
+    host.health_score = score
+    host.severity = severity
 
     db.commit()
 
@@ -862,6 +1023,8 @@ def restore_host(
     host.active = True
     host.active_time = None
     host.deleted_at = None
+    circuit_breaker.clear_host(host.id)
+    reset_snmp_backoff(host.id)
     _reset_host_operational_state(host)
 
     db.commit()
@@ -873,7 +1036,7 @@ def hard_delete_host(
     host_id: int,
     host_name: str = Query(...),
     db: Session = Depends(get_db),
-    user: str = Depends(get_current_user),
+    user: User = Depends(get_current_admin),
 ):
     host = db.query(Host).filter(Host.id == host_id).first()
 
@@ -896,10 +1059,41 @@ def hard_delete_host(
     db.query(Alert).filter(Alert.host_id == host.id).delete(synchronize_session=False)
     db.query(SNMPMetric).filter(SNMPMetric.host_id == host.id).delete(synchronize_session=False)
     db.query(Incident).filter(Incident.host_name == host.name).delete(synchronize_session=False)
+    circuit_breaker.clear_host(host.id)
+    reset_snmp_backoff(host.id)
     db.delete(host)
     db.commit()
 
     return {"detail": "Host removido permanentemente"}
+
+
+@router.delete("/hosts/trash/empty")
+def empty_trash(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_admin),
+):
+    trash_hosts = db.query(Host).filter(Host.active.is_(False)).all()
+    if not trash_hosts:
+        return {"detail": "Lixeira já está vazia", "deleted_count": 0}
+
+    trash_ids = [h.id for h in trash_hosts]
+    trash_names = [h.name for h in trash_hosts]
+
+    db.query(CheckResult).filter(CheckResult.host_id.in_(trash_ids)).delete(synchronize_session=False)
+    db.query(Alert).filter(Alert.host_id.in_(trash_ids)).delete(synchronize_session=False)
+    db.query(SNMPMetric).filter(SNMPMetric.host_id.in_(trash_ids)).delete(synchronize_session=False)
+    db.query(Incident).filter(Incident.host_name.in_(trash_names)).delete(synchronize_session=False)
+
+    for h in trash_hosts:
+        circuit_breaker.clear_host(h.id)
+        reset_snmp_backoff(h.id)
+        db.delete(h)
+
+    db.commit()
+    return {
+        "detail": f"{len(trash_hosts)} host(s) removido(s) permanentemente da lixeira",
+        "deleted_count": len(trash_hosts),
+    }
 
 
 @router.delete("/host/delete/{host_name}")
@@ -924,29 +1118,33 @@ def update_host(host_name: str, data: HostUpdate, db: Session = Depends(get_db),
     
     if not host:
         raise HTTPException(status_code=404, detail="Host não encontrado")
-    
-    if is_ip(data.address):
-        resolved = reverse_dns(data.address)
+
+    normalized_address = (data.address or "").strip()
+    if not normalized_address:
+        raise HTTPException(status_code=400, detail="Endereço do host é obrigatório")
+
+    if is_ip(normalized_address):
+        resolved = reverse_dns(normalized_address)
     else:
-        dns_result = resolve_dns_cached(data.address, db)
+        dns_result = resolve_dns_cached_sync(normalized_address, db)
         ips = extract_ips_from_dns_result(dns_result)
 
         if not ips:
-            raise HTTPException(status_code=400, detail="Endereço inválido. ")
-    
+            raise HTTPException(status_code=400, detail="Endereço inválido")
+
     if data.ports is None and data.port is None:
         ports = _host_ports(host)
     else:
         ports = _normalize_ports(data.ports, data.port)
-    host.address = data.address
+    host.address = normalized_address
     _store_host_ports(host, ports)
     host.hostname_resolved = resolved
 
     selected_http = _resolve_http_input(data)
     _apply_http_policy(host, data.http_enabled, selected_http)
 
-    if data.snmp_enabled is not None:
-        _apply_snmp_policy(host, data.snmp_enabled)
+    if data.snmp_enabled is not None or getattr(data, "snmp_community", None) is not None:
+        _apply_snmp_policy(host, data.snmp_enabled, getattr(data, "snmp_community", None))
 
     db.commit()
 
@@ -962,10 +1160,18 @@ def list_alerts(db: Session = Depends(get_db), user: str = Depends(get_current_u
         .all()
     )
 
+    avail_cache = {}
+    cause_cache = {}
     result = []
     for alert, host in rows:
-        availability_10m = availability_last_10_min(db, host.name)
-        probable_cause = infer_probable_cause(db, host)
+        if host.name not in avail_cache:
+            avail_cache[host.name] = availability_last_10_min(db, host.name)
+        availability_10m = avail_cache[host.name]
+
+        if host.id not in cause_cache:
+            cause_cache[host.id] = infer_probable_cause(db, host)
+        probable_cause = cause_cache[host.id]
+
         icmp_blocked_but_service_up = bool(getattr(host, "icmp_blocked_but_service_up", False))
 
         result.append({
@@ -1026,24 +1232,28 @@ def availability_type(host_name: str, db: Session = Depends(get_db), user: User 
 @router.get("/hosts/metrics/availability/host/{host_name}")
 def availability_host(host_name: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     now = datetime.utcnow()
-    points = []
+    window_start = now - timedelta(minutes=60)
 
+    # Otimização de performance: 1 única query para carregar os incidentes da janela em vez de 60 queries
+    incidents = (
+        db.query(Incident)
+        .filter(
+            Incident.host_name == host_name,
+            Incident.started_time <= now,
+            (Incident.ended_time.is_(None)) | (Incident.ended_time >= window_start)
+        )
+        .all()
+    )
+
+    points = []
     for i in range(60):
         end = now - timedelta(minutes=i)
         start = end - timedelta(minutes=1)
-
-        incidents = (
-            db.query(Incident)
-            .filter(
-                Incident.host_name == host_name,
-                Incident.started_time <= end
-            )
-            .all()
-        )
-
         downtime = 0
 
         for incident in incidents:
+            if incident.started_time > end:
+                continue
             s = incident.started_time
             e = incident.ended_time or end
 
@@ -1070,8 +1280,9 @@ def downtime_history(host_name: str, db: Session = Depends(get_db), user: User =
         db.query(Incident)
         .filter(
             Incident.host_name == host_name,
-            Incident.started_time >= since
+            (Incident.ended_time.is_(None)) | (Incident.ended_time >= since)
         )
+        .order_by(Incident.started_time.desc())
         .all()
     )
 
@@ -1079,7 +1290,7 @@ def downtime_history(host_name: str, db: Session = Depends(get_db), user: User =
         {
             "start": i.started_time.isoformat(),
             "end": (i.ended_time or now).isoformat(),
-            "duration_seconds": i.duration_seconds
+            "duration_seconds": i.duration_seconds if i.duration_seconds is not None else int((now - i.started_time).total_seconds())
         }
         for i in incidents
     ]
@@ -1196,7 +1407,7 @@ def get_latest_incidents(db: Session = Depends(get_db), user: str = Depends(get_
             "reason": i.reason,
             "incident_type": parse_incident_type(i.reason),
             "reason_text": strip_incident_prefix(i.reason),
-            "started_time": i.started_time.isoformat(),
+            "started_time": i.started_time.isoformat() if i.started_time else None,
             "ended_time": i.ended_time.isoformat() if i.ended_time else None,
             "duration": i.duration_seconds
         }
@@ -1237,12 +1448,12 @@ def get_snmp_history(host_name: str, db: Session = Depends(get_db), user: str = 
 
 @router.get("/dashboard/summary")
 def dashboard_summary(db: Session = Depends(get_db), user: str = Depends(get_current_user)):
-    hosts = db.query(Host).filter(Host.active == True).all()
+    statuses = [r[0] for r in db.query(Host.status).filter(Host.active.is_(True)).all()]
 
-    total_hosts = len(hosts)
-    up = sum(1 for h in hosts if h.status == "UP")
-    degraded = sum(1 for h in hosts if h.status == "DEGRADED")
-    down = sum(1 for h in hosts if h.status == "DOWN")
+    total_hosts = len(statuses)
+    up = statuses.count("UP")
+    degraded = statuses.count("DEGRADED")
+    down = statuses.count("DOWN")
 
     open_incidents = (
         db.query(Incident)

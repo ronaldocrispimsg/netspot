@@ -17,6 +17,7 @@ class HostUpdate(BaseModel):
     http_url: Optional[str] = None
     http_enabled: Optional[bool] = None
     snmp_enabled: Optional[bool] = None
+    snmp_community: Optional[str] = "netspot"
 
 class HostCreate(BaseModel):
     name: str
@@ -26,7 +27,8 @@ class HostCreate(BaseModel):
     url: Optional[str] = None
     http_url: Optional[str] = None
     http_enabled: bool = True
-    snmp_enabled: bool = False
+    snmp_enabled: bool = True
+    snmp_community: Optional[str] = "netspot"
 
 
 class NetworkDiscoveryRequest(BaseModel):
@@ -40,3 +42,6 @@ class NetworkImportHostItem(BaseModel):
 
 class NetworkImportRequest(BaseModel):
     hosts: List[NetworkImportHostItem]
+    snmp_enabled: Optional[bool] = True
+    snmp_community: Optional[str] = "netspot"
+

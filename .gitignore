@@ -44,3 +44,21 @@ poetry.lock
 .cache/
 .pytest_cache/
 .mypy_cache/
+
+# ===== Docker volumes data =====
+Database/postgres_data/
+RabbitMQ/data/
+RabbitMQ/log/
+N8N/data/
+
+# ===== Documentação / TCC & Scripts Auxiliares =====
+Escrita_TCC/
+RELATORIO-UIUX.md
+scripts/script_para_gerar_diagramas.py
+script_para_gerar_diagramas.py
+
+RabbitMQ/data/
+N8N/data/
+Database/postgres_data/
+estrutura.txt
+*Zone.Identifier

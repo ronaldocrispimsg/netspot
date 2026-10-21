@@ -1,4 +1,6 @@
-const API = "http://127.0.0.1:8000";
+const API = (window.location.protocol === "file:" || window.location.port === "5500" || window.location.port === "3000")
+    ? "http://127.0.0.1:8000"
+    : "/api";
 const charts = {};
 const MAX_POINTS_PER_SERIES = 100;
 let authRedirectScheduled = false;
@@ -7,7 +9,7 @@ let lastUserInteractionAt = 0;
 //
 
 const POLLING_INTERVALS = {
-    visible: { lightMs: 5000, heavyMs: 20000 },
+    visible: { lightMs: 10000, heavyMs: 10000 },
     hidden: { lightMs: 30000, heavyMs: 120000 }
 };
 
@@ -19,7 +21,7 @@ const pollingState = {
 
 const recentAlertCache = new Map();
 const ALERT_DEDUP_WINDOW_MS = 45000;
-const SEEN_ALERTS_STORAGE_KEY = "noclite_seen_alerts_v1";
+const SEEN_ALERTS_STORAGE_KEY = "netspot_seen_alerts_v1";
 const MAX_SEEN_ALERTS = 200;
 const INCIDENT_TYPE_LABELS = {
     DNS_FAILURE: "Falha DNS",
@@ -276,7 +278,8 @@ if (loginForm) {
                 // VERIFICA SE PRECISA TROCAR SENHA
                 if (data.must_change_password) {
                     showToast("info", "Troca de senha obrigatória para continuar.");
-                    document.getElementById("pwdModal").classList.remove("hidden");
+                    const pwdModal = document.getElementById("pwdModal");
+                    if (pwdModal) openAppModal(pwdModal);
                 } else {
                     showToast("success", "Login realizado com sucesso.");
                     setTimeout(() => {
@@ -356,42 +359,47 @@ async function changePassword(){
 
     const token = localStorage.getItem("token");
 
-    const res = await fetch(`${API}/auth/change-password`,{
-        method:"POST",
-        headers:{
-            "Content-Type":"application/json",
-            "Authorization":"Bearer "+token
-        },
-        body: JSON.stringify({
-            current_password:currentPwd,
-            new_password:newPwd
-        })
-    });
+    try {
+        const res = await fetch(`${API}/auth/change-password`,{
+            method:"POST",
+            headers:{
+                "Content-Type":"application/json",
+                "Authorization":"Bearer "+token
+            },
+            body: JSON.stringify({
+                current_password:currentPwd,
+                new_password:newPwd
+            })
+        });
 
-    if(res.status === 403){
-        showToast("error", "Conta bloqueada. Contate o administrador.");
-        return;
-    }
+        if(res.status === 403){
+            showToast("error", "Conta bloqueada. Contate o administrador.");
+            return;
+        }
 
-    if(res.ok){
-        showToast("success", "Senha alterada com sucesso.");
-        localStorage.removeItem("token");
-        setTimeout(() => {
-            window.location.href = "login.html";
-        }, 700);
-    }else{
-        showToast("error", "Erro ao alterar senha.");
+        if(res.ok){
+            showToast("success", "Senha alterada com sucesso.");
+            localStorage.removeItem("token");
+            setTimeout(() => {
+                window.location.href = "login.html";
+            }, 700);
+        }else{
+            showToast("error", "Erro ao alterar senha.");
+        }
+    } catch (error) {
+        showToast("error", "Não foi possível conectar ao servidor.");
     }
 
 }
 // ======================
 // Cadastrar Host (POST)
 // ======================
+const currentHostsMap = new Map();
 const hostForm = document.getElementById("hostForm");
 const portsContainer = document.getElementById("portsContainer");
 const addPortBtn = document.getElementById("addPortBtn");
 
-function addPortInput(container, value = "", removable = false, placeholder = "Porta") {
+function addPortInput(container, value = "", removable = true, placeholder = "Porta") {
     if (!container) return;
     const row = document.createElement("div");
     row.className = "port-input-row";
@@ -410,6 +418,7 @@ function addPortInput(container, value = "", removable = false, placeholder = "P
         removeBtn.type = "button";
         removeBtn.className = "remove-port-btn";
         removeBtn.title = "Remover porta";
+        removeBtn.setAttribute("aria-label", "Remover porta");
         removeBtn.textContent = "−";
         removeBtn.addEventListener("click", () => row.remove());
         row.appendChild(removeBtn);
@@ -421,9 +430,7 @@ function addPortInput(container, value = "", removable = false, placeholder = "P
 function resetCreatePorts() {
     if (!portsContainer) return;
     portsContainer.innerHTML = "";
-    addPortInput(portsContainer, "", false, "Porta");
-    addPortInput(portsContainer, "", false, "Porta");
-    addPortInput(portsContainer, "", false, "Porta");
+    addPortInput(portsContainer, "", true, "Porta (opcional)");
 }
 
 function setModalPorts(ports) {
@@ -438,14 +445,11 @@ function setModalPorts(ports) {
         : [];
 
     if (normalized.length === 0) {
-        addPortInput(container, "", false, "Porta");
-        addPortInput(container, "", false, "Porta");
-        addPortInput(container, "", false, "Porta");
+        addPortInput(container, "", true, "Porta (opcional)");
         return;
     }
 
-    while (normalized.length < 3) normalized.push("");
-    normalized.forEach((value, index) => addPortInput(container, value, index >= 3, "Porta"));
+    normalized.forEach((value) => addPortInput(container, value, true, "Porta"));
 }
 
 function collectPorts(container) {
@@ -509,6 +513,7 @@ if (hostForm) {
         const httpUrlInput = document.getElementById("http_url");
         const httpEnabledInput = document.getElementById("http_enabled");
         const snmpEnabledInput = document.getElementById("snmp_enabled");
+        const snmpCommunityInput = document.getElementById("snmp_community");
         let ports = [];
         try {
             ports = collectPorts(portsContainer);
@@ -525,8 +530,15 @@ if (hostForm) {
             url: httpUrlInput.value || null,
             http_url: httpUrlInput.value || null,
             http_enabled: !!httpEnabledInput?.checked,
-            snmp_enabled: !!snmpEnabledInput?.checked
+            snmp_enabled: !!snmpEnabledInput?.checked,
+            snmp_community: (snmpCommunityInput?.value || "").trim() || "netspot"
         };
+
+        const submitBtn = hostForm.querySelector('button[type="submit"]');
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.classList.add("is-loading");
+        }
 
         try {
             const response = await fetchWithAuth(`${API}/host/create`, {
@@ -554,6 +566,11 @@ if (hostForm) {
         } catch (err) {
             console.error("Erro na requisição:", err);
             showToast("error", "Não foi possível conectar ao servidor.");
+        } finally {
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.classList.remove("is-loading");
+            }
         }
     });
 }
@@ -563,29 +580,38 @@ let discoveredLanHosts = [];
 function renderDiscoveredLanHosts() {
     const listBox = document.getElementById("networkDiscoveryList");
     const infoBox = document.getElementById("networkDiscoveryInfo");
+    const selectAllBtn = document.getElementById("selectAllDiscoveryBtn");
     if (!listBox || !infoBox) return;
 
     if (!Array.isArray(discoveredLanHosts) || discoveredLanHosts.length === 0) {
         infoBox.textContent = "";
         listBox.innerHTML = "<small>Nenhum host encontrado.</small>";
+        if (selectAllBtn) selectAllBtn.style.display = "none";
         return;
     }
 
     const selectableCount = discoveredLanHosts.filter((h) => !h.already_exists).length;
     infoBox.textContent = `${discoveredLanHosts.length} host(s) encontrado(s) • ${selectableCount} disponível(is) para importação`;
+    if (selectAllBtn) {
+        selectAllBtn.style.display = selectableCount > 0 ? "inline-flex" : "none";
+        selectAllBtn.textContent = "Desmarcar todos";
+    }
     listBox.innerHTML = discoveredLanHosts.map((host) => {
         const disabled = host.already_exists ? "disabled" : "";
         const checked = host.already_exists ? "" : "checked";
-        const hostnameText = host.hostname ? ` • ${host.hostname}` : "";
+        const hostnameText = host.hostname ? ` • ${escapeHtml(host.hostname)}` : "";
+        const safeName = escapeHtml(host.name);
+        const safeAddr = escapeHtml(host.address);
+        const safeId = escapeHtml(host.id);
         return `
             <label class="network-discovery-item">
                 <div class="network-discovery-meta">
-                    <strong>${host.name}</strong>
-                    <small>${host.address}${hostnameText}</small>
+                    <strong>${safeName}</strong>
+                    <small>${safeAddr}${hostnameText}</small>
                 </div>
                 <div>
                     ${host.already_exists ? '<span class="network-exists-badge">já cadastrado</span>' : ""}
-                    <input type="checkbox" class="discover-host-check" data-id="${host.id}" ${disabled} ${checked}>
+                    <input type="checkbox" class="discover-host-check" data-id="${safeId}" ${disabled} ${checked}>
                 </div>
             </label>
         `;
@@ -675,6 +701,9 @@ async function preloadDiscoverySubnet() {
 }
 
 async function importSelectedLanHosts() {
+    const communityInput = document.getElementById("snmp_community") || document.getElementById("modal-snmp-community");
+    const communityVal = communityInput ? communityInput.value.trim() : "netspot";
+
     const checks = Array.from(document.querySelectorAll(".discover-host-check:checked"));
     const selected = checks
         .map((check) => {
@@ -684,7 +713,9 @@ async function importSelectedLanHosts() {
         .filter(Boolean)
         .map((host) => ({
             name: host.name,
-            address: host.address
+            address: host.address,
+            snmp_enabled: true,
+            snmp_community: communityVal || "netspot"
         }));
 
     if (!selected.length) {
@@ -703,7 +734,11 @@ async function importSelectedLanHosts() {
         const res = await fetchWithAuth(`${API}/network/import`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ hosts: selected })
+            body: JSON.stringify({
+                hosts: selected,
+                snmp_enabled: true,
+                snmp_community: communityVal || "netspot"
+            })
         });
         if (!res) return;
 
@@ -746,14 +781,456 @@ async function importSelectedLanHosts() {
 // ======================
 // Listar e Atualizar Hosts
 // ======================
+function buildHostCardHTML(h) {
+    const hostPorts = parseHostPorts(h);
+    const hostAddressLabel = `${h.address}`;
+    const tcpPortsLabel = hostPorts.length ? hostPorts.join(", ") : "Nenhuma";
+    const httpEnabled = !!h.http_enabled;
+    const webCheckBadge = httpEnabled
+        ? `<span class="web-check-badge web-check-on">Ativo</span>`
+        : `<span class="web-check-badge web-check-off">Inativo</span>`;
+    const httpProtocolLabel = httpEnabled
+        ? (h.http_protocol ? String(h.http_protocol).toUpperCase() : "Aguardando")
+        : "-";
+    const monitorFlag = hostMonitorFlag(h);
+    const causeClass = probableCauseClass(h);
+    const incidentBadgeHtml = h.has_open_incident
+        ? `<span class="incident-badge" title="Existe incidente aberto para este host">INCIDENTE ABERTO</span>`
+        : "";
+
+    let statusColor = "bg-secondary";
+    if (h.status === "UP") statusColor = "bg-success";
+    else if (h.status === "DOWN") statusColor = "bg-danger";
+    else if (h.status === "DEGRADED") statusColor = "bg-warning";
+    
+    let sevClass = "sev-unknown";
+    if (h.severity === "HEALTHY") sevClass = "sev-healthy";
+    else if (h.severity === "WARNING") sevClass = "sev-warning";
+    else if (h.severity === "DEGRADED") sevClass = "sev-degraded";
+    else if (h.severity === "CRITICAL") sevClass = "sev-critical";
+    const severityIndicatorHtml = h.icmp_blocked_but_service_up
+        ? ""
+        : `<span class="severity-indicator ${sevClass}">✚</span>`;
+
+    const availability10m = h.availability_10m != null
+        ? h.availability_10m.toFixed(2)
+        : "N/A";
+    const totalTrafficBps = Number(h.network_traffic) || 0;
+    const downloadTrafficBps = Number(h.network_in_bps) || 0;
+    const uploadTrafficBps = Number(h.network_out_bps) || 0;
+    const maxTrafficBps = Math.max(totalTrafficBps, downloadTrafficBps, uploadTrafficBps, 1);
+    const totalTrafficBar = calcRelativeBarWidth(totalTrafficBps, maxTrafficBps);
+    const downloadTrafficBar = calcRelativeBarWidth(downloadTrafficBps, maxTrafficBps);
+    const uploadTrafficBar = calcRelativeBarWidth(uploadTrafficBps, maxTrafficBps);
+    const snmpConfigured = [
+        h.cpu_usage,
+        h.ram_usage,
+        h.disk_usage,
+        h.network_traffic,
+        h.network_in_bps,
+        h.network_out_bps
+    ].some((value) => value !== null && value !== undefined);
+    const snmpStatusHtml = !snmpConfigured
+        ? `<small class="snmp-tag snmp-tag-off snmp-empty-message">SNMP: não configurado</small>`
+        : "";
+    const snmpSectionHtml = snmpConfigured ? `
+                <div class="metrics-section snmp-section">
+                    <div class="snmp-header">
+                        <div class="snmp-title">SNMP</div>
+                        <div class="snmp-subtitle">Métricas estimadas via OIDs</div>
+                    </div>
+                    <div class="snmp-kpi-grid">
+                        <div class="snmp-kpi-card">
+                            <div class="snmp-kpi-head">
+                                <small class="snmp-kpi-label" title="CPU">CPU</small>
+                                <small class="snmp-kpi-value ${metricClass(h.cpu_usage)}">${metricPercent(h.cpu_usage)}</small>
+                            </div>
+                            <div class="snmp-kpi-bar"><span class="snmp-kpi-fill ${metricClass(h.cpu_usage)}" style="width:${metricBarWidth(h.cpu_usage)}%"></span></div>
+                        </div>
+                        <div class="snmp-kpi-card">
+                            <div class="snmp-kpi-head">
+                                <small class="snmp-kpi-label" title="RAM">RAM</small>
+                                <small class="snmp-kpi-value ${metricClass(h.ram_usage)}">${metricPercent(h.ram_usage)}</small>
+                            </div>
+                            <div class="snmp-kpi-bar"><span class="snmp-kpi-fill ${metricClass(h.ram_usage)}" style="width:${metricBarWidth(h.ram_usage)}%"></span></div>
+                        </div>
+                        <div class="snmp-kpi-card">
+                            <div class="snmp-kpi-head">
+                                <small class="snmp-kpi-label" title="Disco">Disco</small>
+                                <small class="snmp-kpi-value ${metricClass(h.disk_usage)}">${metricPercent(h.disk_usage)}</small>
+                            </div>
+                            <div class="snmp-kpi-bar"><span class="snmp-kpi-fill ${metricClass(h.disk_usage)}" style="width:${metricBarWidth(h.disk_usage)}%"></span></div>
+                        </div>
+                    </div>
+                    <div class="snmp-traffic-panel">
+                        <div class="snmp-traffic-row">
+                            <small class="snmp-traffic-label" title="Tráfego de Rede">Tráfego de Rede</small>
+                            <div class="snmp-mini-bar"><span style="width:${totalTrafficBar}%"></span></div>
+                            <small class="snmp-traffic-value">${formatBps(h.network_traffic)}</small>
+                        </div>
+                        <div class="snmp-traffic-row">
+                            <small class="snmp-traffic-label" title="Download (RX)">Download (RX)</small>
+                            <div class="snmp-mini-bar"><span style="width:${downloadTrafficBar}%"></span></div>
+                            <small class="snmp-traffic-value">${formatBps(h.network_in_bps)}</small>
+                        </div>
+                        <div class="snmp-traffic-row">
+                            <small class="snmp-traffic-label" title="Upload (TX)">Upload (TX)</small>
+                            <div class="snmp-mini-bar"><span style="width:${uploadTrafficBar}%"></span></div>
+                            <small class="snmp-traffic-value">${formatBps(h.network_out_bps)}</small>
+                        </div>
+                    </div>
+                </div>
+    ` : "";
+    const snmpChartBoxHtml = snmpConfigured ? `
+        <div id="snmp-chart-box-${h.name}" class="chart-box hidden" style="margin-top: 10px;">
+            <div class="chart-title">Histórico SNMP</div>
+            <canvas id="snmp-chart-${h.name}" height="120"></canvas>
+        </div>
+    ` : "";
+
+    return `
+        <!-- Header: identificação + indicadores rápidos -->
+        <div class="host-card-header">
+            <div class="host-top-line">
+                <div class="host-title-wrap">
+                    <span class="status-indicator ${statusColor}"></span>
+                    <strong class="host-title">
+                        ${escapeHtml(h.name)}
+                        <small class="host-addr">(${escapeHtml(hostAddressLabel)})</small>
+                    </strong>
+                </div>
+                <div class="host-top-actions">
+                    <span class="host-monitor-flag ${monitorFlag.className}" title="Estado de monitoramento">${monitorFlag.label}</span>
+                    ${incidentBadgeHtml}
+                    <button
+                        class="host-delete-btn"
+                        type="button"
+                        title="Excluir host"
+                        aria-label="Excluir host"
+                        onclick='softDeleteHost(${h.id}, ${JSON.stringify(h.name)})'
+                    >✕</button>
+                </div>
+            </div>
+
+            <div class="host-meta-grid">
+                <div class="host-meta-item"><small>Saúde</small><strong>${healthMeterHtml(h, severityIndicatorHtml)}</strong></div>
+                <div class="host-meta-item"><small>Disponibilidade</small><strong>${availability10m}%</strong></div>
+                <div class="host-meta-item"><small>Último check</small><strong>${formatCheckTime(h.last_check)}</strong></div>
+                <div class="host-meta-item"><small>Último SNMP</small><strong>${formatCheckTime(h.last_snmp_check)}</strong></div>
+            </div>
+        </div>
+
+        <div class="face-nav">
+            <button class="face-nav-btn face-prev-btn hidden" type="button" title="Voltar face" aria-label="Voltar face" onclick="prevHostFace('${h.name}')">${iconSvg("arrow_left")}</button>
+            <span class="face-indicator-label" title="Exibindo Face 1 de 3: Resumo e status">1/3</span>
+            <div class="icon-actions">
+                <button class="icon-btn" type="button" title="Histórico recente" aria-label="Histórico recente" onclick="toggleHistory('${h.name}')">${iconSvg("history")}</button>
+                <button class="icon-btn" type="button" title="Gráfico de latência" aria-label="Gráfico de latência" onclick="toggleLatencyChart('${h.name}')">${iconSvg("latency")}</button>
+                ${snmpConfigured ? `<button class="icon-btn" type="button" title="Gráfico SNMP" aria-label="Gráfico SNMP" onclick="toggleSnmpChart('${h.name}')">${iconSvg("snmp")}</button>` : ""}
+                <button class="icon-btn" type="button" title="Disponibilidade por tipo" aria-label="Disponibilidade por tipo" onclick="toggleAvailabilityChartType('${h.name}')">${iconSvg("availability_type")}</button>
+                <button class="icon-btn" type="button" title="Disponibilidade geral" aria-label="Disponibilidade geral" onclick="toggleAvailabilityChart('${h.name}')">${iconSvg("availability")}</button>
+                <button class="icon-btn" type="button" title="Editar host" aria-label="Editar host" onclick='openEditModal(${JSON.stringify(h.name)})'>${iconSvg("edit")}</button>
+            </div>
+            <button class="face-nav-btn face-next-btn" type="button" title="Avançar para Face 2: Métricas de rede" aria-label="Avançar para Face 2: Métricas de rede" onclick="nextHostFace('${h.name}')">${iconSvg("arrow_right")}</button>
+        </div>
+
+        <!-- Body: três colunas (Resumo | Rede | SNMP) -->
+        <div class="host-card-body compact host-faces-wrap">
+            <div class="host-col host-col-summary host-face active" data-face="1">
+                <div class="host-section-card">
+                    <div class="metrics-title">Resumo</div>
+                    <div class="host-summary-list">
+                        <small><b>Portas TCP monitoradas:</b> ${tcpPortsLabel}</small>
+                        <small><b>Check Web:</b> ${webCheckBadge}</small>
+                        <small><b>Protocolo resolvido:</b> ${httpProtocolLabel}</small>
+                        <small><b>Saúde:</b> ${h.health_score ?? "N/A"}%</small>
+                        <small><b>Disponibilidade:</b> ${availability10m}%</small>
+                        <small><b>Tendência HTTP:</b> ${trendIcon(h.trend_http)} ${h.trend_http ?? "N/A"}</small>
+                        <small><b>Causa provável:</b></small>
+                        <small class="cause-pill ${causeClass}">${h.probable_cause ?? "Operação normal"}</small>
+                    </div>
+                </div>
+            </div>
+
+            <div class="host-col host-col-network host-face" data-face="2">
+                <div class="host-section-card">
+                    <div class="metrics-title">Rede</div>
+                    <div class="network-split">
+                        <div class="network-col">
+                            <small><b>Taxa de sucesso</b></small>
+                            <small>Ping: ${h.sla_rolling_ping ?? "N/A"}%</small>
+                            <small>TCP: ${h.sla_rolling_tcp ?? "N/A"}%</small>
+                            <small>HTTP: ${h.http_enabled === false ? "Inativo" : (h.sla_rolling_http !== null && h.sla_rolling_http !== undefined ? `${h.sla_rolling_http}%` : "N/A")}</small>
+                        </div>
+                        <div class="network-col">
+                            <small><b>Variação na latência</b></small>
+                            <small>Ping: ${h.jitter_ms_ping ?? "N/A"} ms</small>
+                            <small>TCP: ${h.jitter_ms_tcp ?? "N/A"} ms</small>
+                            <small>HTTP: ${h.http_enabled === false ? "Inativo" : (h.jitter_ms_http !== null && h.jitter_ms_http !== undefined ? `${h.jitter_ms_http} ms` : "N/A")}</small>
+                        </div>
+                    </div>
+                    <div class="host-checks-section">
+                        <div class="metrics-title">Últimos checks</div>
+                        <div id="result-${h.name}" class="host-last-checks">
+                            <i>Atualizando...</i>
+                        </div>
+                    </div>
+                    <div class="tcp-ports-section">
+                        <div class="metrics-title">Portas TCP monitoradas</div>
+                        <div id="tcp-ports-status-${h.name}" class="tcp-ports-status">
+                            <small class="tcp-ports-empty">Atualizando...</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="host-col host-col-snmp host-face" data-face="3">
+                ${snmpConfigured ? snmpSectionHtml : `
+                    <div class="host-section-card snmp-section snmp-empty">
+                        <div class="snmp-header">
+                            <div class="snmp-title">SNMP</div>
+                            <div class="snmp-subtitle">Métricas estimadas via OIDs</div>
+                        </div>
+                        <div class="snmp-empty-body">
+                            ${snmpStatusHtml}
+                        </div>
+                    </div>
+                `}
+            </div>
+        </div>
+
+        <div id="chart-container-${h.name}" class="chart-box hidden" style="margin-top: 10px;">
+            <div class="chart-title">Latência dos checks</div>
+            <canvas id="chart-${h.name}" height="120"></canvas>
+        </div>
+        ${snmpChartBoxHtml}
+        <div id="availability-chart-type-box-${h.name}" class="chart-box hidden">
+            <div class="chart-title">Disponibilidade por tipo</div>
+            <canvas id="availability-chart-type-${h.name}" height="120"></canvas>
+        </div>
+        <div id="availability-chart-box-${h.name}" class="chart-box hidden">
+            <div class="chart-title">Disponibilidade geral</div>
+            <canvas id="availability-chart-${h.name}" height="120"></canvas>
+        </div>
+        <div id="history-${h.name}" class="history-box hidden"></div>
+    `;
+}
+
+function updateHostCardInPlace(card, h) {
+    const visualState = hostVisualState(h);
+    const monitorFlag = hostMonitorFlag(h);
+    const causeClass = probableCauseClass(h);
+    const hostPorts = parseHostPorts(h);
+    const tcpPortsLabel = hostPorts.length ? hostPorts.join(", ") : "Nenhuma";
+    const httpEnabled = !!h.http_enabled;
+    const webCheckBadge = httpEnabled
+        ? `<span class="web-check-badge web-check-on">Ativo</span>`
+        : `<span class="web-check-badge web-check-off">Inativo</span>`;
+    const httpProtocolLabel = httpEnabled
+        ? (h.http_protocol ? String(h.http_protocol).toUpperCase() : "Aguardando")
+        : "-";
+
+    const availability10m = h.availability_10m != null
+        ? h.availability_10m.toFixed(2)
+        : "N/A";
+
+    let statusColor = "bg-secondary";
+    if (h.status === "UP") statusColor = "bg-success";
+    else if (h.status === "DOWN") statusColor = "bg-danger";
+    else if (h.status === "DEGRADED") statusColor = "bg-warning";
+
+    let sevClass = "sev-unknown";
+    if (h.severity === "HEALTHY") sevClass = "sev-healthy";
+    else if (h.severity === "WARNING") sevClass = "sev-warning";
+    else if (h.severity === "DEGRADED") sevClass = "sev-degraded";
+    else if (h.severity === "CRITICAL") sevClass = "sev-critical";
+
+    const severityIndicatorHtml = h.icmp_blocked_but_service_up
+        ? ""
+        : `<span class="severity-indicator ${sevClass}">✚</span>`;
+
+    // 1. Preservar o estado da face ativa e atualizar a classe visual do card
+    const currentFace = card.dataset.face || "1";
+    card.className = `card ${visualState.cardClass}`;
+    card.dataset.face = currentFace;
+
+    // 2. Indicador de status (bolinha verde/vermelha/amarela)
+    const statusIndicator = card.querySelector(".status-indicator");
+    if (statusIndicator) {
+        statusIndicator.className = `status-indicator ${statusColor}`;
+    }
+
+    // 3. Flag de monitoramento (MONITORANDO / PAUSADO / OFFLINE)
+    const flagEl = card.querySelector(".host-monitor-flag");
+    if (flagEl) {
+        flagEl.className = `host-monitor-flag ${monitorFlag.className}`;
+        flagEl.textContent = monitorFlag.label;
+    }
+
+    // 4. Badge de Incidente Aberto
+    let incidentBadgeEl = card.querySelector(".incident-badge");
+    if (h.has_open_incident) {
+        if (!incidentBadgeEl) {
+            const actionsWrap = card.querySelector(".host-top-actions");
+            if (actionsWrap) {
+                const badgeSpan = document.createElement("span");
+                badgeSpan.className = "incident-badge";
+                badgeSpan.title = "Existe incidente aberto para este host";
+                badgeSpan.textContent = "INCIDENTE ABERTO";
+                const deleteBtn = actionsWrap.querySelector(".host-delete-btn");
+                if (deleteBtn) {
+                    actionsWrap.insertBefore(badgeSpan, deleteBtn);
+                } else {
+                    actionsWrap.appendChild(badgeSpan);
+                }
+            }
+        }
+    } else if (incidentBadgeEl) {
+        incidentBadgeEl.remove();
+    }
+
+    // 5. Grid de Metadados do Header (Saúde, Disponibilidade, Último Check, Último SNMP)
+    const metaGrid = card.querySelector(".host-meta-grid");
+    if (metaGrid) {
+        const items = metaGrid.querySelectorAll(".host-meta-item strong");
+        if (items.length >= 4) {
+            items[0].innerHTML = healthMeterHtml(h, severityIndicatorHtml);
+            items[1].textContent = `${availability10m}%`;
+            items[2].textContent = formatCheckTime(h.last_check);
+            items[3].textContent = formatCheckTime(h.last_snmp_check);
+        }
+    }
+
+    // 6. Resumo na Face 1
+    const summaryList = card.querySelector(".host-summary-list");
+    if (summaryList) {
+        summaryList.innerHTML = `
+            <small><b>Portas TCP monitoradas:</b> ${tcpPortsLabel}</small>
+            <small><b>Check Web:</b> ${webCheckBadge}</small>
+            <small><b>Protocolo resolvido:</b> ${httpProtocolLabel}</small>
+            <small><b>Saúde:</b> ${h.health_score ?? "N/A"}%</small>
+            <small><b>Disponibilidade:</b> ${availability10m}%</small>
+            <small><b>Tendência HTTP:</b> ${trendIcon(h.trend_http)} ${h.trend_http ?? "N/A"}</small>
+            <small><b>Causa provável:</b></small>
+            <small class="cause-pill ${causeClass}">${h.probable_cause ?? "Operação normal"}</small>
+        `;
+    }
+
+    // 7. Métricas de Rede na Face 2 (SLAs e Jitters)
+    const networkSplit = card.querySelector(".network-split");
+    if (networkSplit) {
+        const netCols = networkSplit.querySelectorAll(".network-col");
+        if (netCols.length >= 2) {
+            netCols[0].innerHTML = `
+                <small><b>Taxa de sucesso</b></small>
+                <small>Ping: ${h.sla_rolling_ping ?? "N/A"}%</small>
+                <small>TCP: ${h.sla_rolling_tcp ?? "N/A"}%</small>
+                <small>HTTP: ${h.http_enabled === false ? "Inativo" : (h.sla_rolling_http !== null && h.sla_rolling_http !== undefined ? `${h.sla_rolling_http}%` : "N/A")}</small>
+            `;
+            netCols[1].innerHTML = `
+                <small><b>Variação na latência</b></small>
+                <small>Ping: ${h.jitter_ms_ping ?? "N/A"} ms</small>
+                <small>TCP: ${h.jitter_ms_tcp ?? "N/A"} ms</small>
+                <small>HTTP: ${h.http_enabled === false ? "Inativo" : (h.jitter_ms_http !== null && h.jitter_ms_http !== undefined ? `${h.jitter_ms_http} ms` : "N/A")}</small>
+            `;
+        }
+    }
+
+    // 8. Métricas SNMP na Face 3 (KPIs de CPU, RAM, Disco e Tráfego)
+    const totalTrafficBps = Number(h.network_traffic) || 0;
+    const downloadTrafficBps = Number(h.network_in_bps) || 0;
+    const uploadTrafficBps = Number(h.network_out_bps) || 0;
+    const maxTrafficBps = Math.max(totalTrafficBps, downloadTrafficBps, uploadTrafficBps, 1);
+    const totalTrafficBar = calcRelativeBarWidth(totalTrafficBps, maxTrafficBps);
+    const downloadTrafficBar = calcRelativeBarWidth(downloadTrafficBps, maxTrafficBps);
+    const uploadTrafficBar = calcRelativeBarWidth(uploadTrafficBps, maxTrafficBps);
+
+    const snmpKpiGrid = card.querySelector(".snmp-kpi-grid");
+    if (snmpKpiGrid) {
+        const kpiCards = snmpKpiGrid.querySelectorAll(".snmp-kpi-card");
+        if (kpiCards.length >= 3) {
+            updateKpiCardInPlace(kpiCards[0], h.cpu_usage);
+            updateKpiCardInPlace(kpiCards[1], h.ram_usage);
+            updateKpiCardInPlace(kpiCards[2], h.disk_usage);
+        }
+    }
+
+    const trafficPanel = card.querySelector(".snmp-traffic-panel");
+    if (trafficPanel) {
+        const rows = trafficPanel.querySelectorAll(".snmp-traffic-row");
+        if (rows.length >= 3) {
+            updateTrafficRowInPlace(rows[0], formatBps(h.network_traffic), totalTrafficBar);
+            updateTrafficRowInPlace(rows[1], formatBps(h.network_in_bps), downloadTrafficBar);
+            updateTrafficRowInPlace(rows[2], formatBps(h.network_out_bps), uploadTrafficBar);
+        }
+    }
+}
+
+function updateKpiCardInPlace(kpiCard, value) {
+    const valEl = kpiCard.querySelector(".snmp-kpi-value");
+    const fillEl = kpiCard.querySelector(".snmp-kpi-fill");
+    if (valEl) {
+        valEl.className = `snmp-kpi-value ${metricClass(value)}`;
+        valEl.textContent = metricPercent(value);
+    }
+    if (fillEl) {
+        fillEl.className = `snmp-kpi-fill ${metricClass(value)}`;
+        fillEl.style.width = `${metricBarWidth(value)}%`;
+    }
+}
+
+function updateTrafficRowInPlace(row, formattedValue, barWidth) {
+    const valEl = row.querySelector(".snmp-traffic-value");
+    const barEl = row.querySelector(".snmp-mini-bar span");
+    if (valEl) valEl.textContent = formattedValue;
+    if (barEl) barEl.style.width = `${barWidth}%`;
+}
+
+function refreshVisibleChartsForHost(hostName) {
+    const historyBox = document.getElementById("history-" + hostName);
+    if (historyBox && !historyBox.classList.contains("hidden")) {
+        loadHistory(hostName, true);
+    }
+
+    const availBox = document.getElementById("availability-chart-box-" + hostName);
+    if (availBox && !availBox.classList.contains("hidden")) {
+        loadAvailability(hostName);
+    }
+
+    const latencyBox = document.getElementById("chart-container-" + hostName);
+    if (latencyBox && !latencyBox.classList.contains("hidden")) {
+        loadLatencyChart(hostName);
+    }
+
+    const snmpBox = document.getElementById("snmp-chart-box-" + hostName);
+    if (snmpBox && !snmpBox.classList.contains("hidden")) {
+        loadSnmpChart(hostName);
+    }
+
+    const availTypeBox = document.getElementById("availability-chart-type-box-" + hostName);
+    if (availTypeBox && !availTypeBox.classList.contains("hidden")) {
+        loadAvailabilityChartType(hostName);
+    }
+}
+
 async function loadHosts() {
     const div = document.getElementById("hosts");
     if (!div) return;
 
+    if (!div.querySelector(".card") && !div.querySelector(".skeleton-wrap") && !div.querySelector(".ui-state")) {
+        div.innerHTML = `<div class="skeleton-wrap">
+            <div class="skeleton-card"></div>
+            <div class="skeleton-card"></div>
+            <div class="skeleton-card"></div>
+        </div>`;
+    }
+
     try {
         const res = await fetchWithAuth(`${API}/hosts/list`);
         if (!res) {
-            div.innerHTML = "<div class='ui-state ui-state-warning'>Não foi possível carregar os hosts.</div>";
+            if (!div.querySelector(".card")) {
+                div.innerHTML = "<div class='ui-state ui-state-warning'>Não foi possível carregar os hosts.</div>";
+            }
             return;
         }
 
@@ -762,255 +1239,49 @@ async function loadHosts() {
             div.innerHTML = "<div class='ui-state ui-state-empty'>Nenhum host cadastrado ainda.</div>";
             return;
         }
-        div.innerHTML = "";
 
+        if (div.querySelector(".ui-state") || div.querySelector(".skeleton-wrap")) {
+            div.innerHTML = "";
+        }
+
+        const activeHostNames = new Set(hosts.map((h) => h.name));
+        currentHostsMap.clear();
         for (const h of hosts) {
-            const card = document.createElement("div");
-            const hostPorts = parseHostPorts(h);
-            const hostAddressLabel = `${h.address}`;
-            const tcpPortsLabel = hostPorts.length ? hostPorts.join(", ") : "Nenhuma";
-            const httpEnabled = !!h.http_enabled;
-            const webCheckBadge = httpEnabled
-                ? `<span class="web-check-badge web-check-on">Ativo</span>`
-                : `<span class="web-check-badge web-check-off">Inativo</span>`;
-            const httpProtocolLabel = httpEnabled
-                ? (h.http_protocol ? String(h.http_protocol).toUpperCase() : "Aguardando")
-                : "-";
-            const visualState = hostVisualState(h);
-            const monitorFlag = hostMonitorFlag(h);
-            const causeClass = probableCauseClass(h);
-            const incidentBadgeHtml = h.has_open_incident
-                ? `<span class="incident-badge" title="Existe incidente aberto para este host">INCIDENTE ABERTO</span>`
-                : "";
-            card.className = `card ${visualState.cardClass}`;
-            card.id = `card-${h.name}`;
-            card.dataset.face = "1";
+            currentHostsMap.set(h.name, h);
+        }
 
-            let statusColor = "bg-secondary";
-            if (h.status === "UP") statusColor = "bg-success";
-            else if (h.status === "DOWN") statusColor = "bg-danger";
-            else if (h.status === "DEGRADED") statusColor = "bg-warning";
-            
-            let sevClass = "sev-unknown";
+        // 1. Remover apenas cards de hosts que foram efetivamente excluídos e liberar instâncias Chart.js
+        const existingCardNodes = Array.from(div.querySelectorAll(".card"));
+        for (const cardNode of existingCardNodes) {
+            const cardHostName = cardNode.id.replace("card-", "");
+            if (!activeHostNames.has(cardHostName)) {
+                destroyChartsForHost(cardHostName);
+                cardNode.remove();
+            }
+        }
 
-            if (h.severity === "HEALTHY") sevClass = "sev-healthy";
-            else if (h.severity === "WARNING") sevClass = "sev-warning";
-            else if (h.severity === "DEGRADED") sevClass = "sev-degraded";
-            else if (h.severity === "CRITICAL") sevClass = "sev-critical";
-            const severityIndicatorHtml = h.icmp_blocked_but_service_up
-                ? ""
-                : `<span class="severity-indicator ${sevClass}">✚</span>`;
+        // 2. Criar ou Atualizar cirurgicamente (in-place) cada card de host
+        for (const h of hosts) {
+            let card = document.getElementById(`card-${h.name}`);
+            const isNewCard = !card;
 
-            const availability10m = h.availability_10m != null
-                ? h.availability_10m.toFixed(2)
-                : "N/A";
-            const totalTrafficBps = Number(h.network_traffic) || 0;
-            const downloadTrafficBps = Number(h.network_in_bps) || 0;
-            const uploadTrafficBps = Number(h.network_out_bps) || 0;
-            const maxTrafficBps = Math.max(totalTrafficBps, downloadTrafficBps, uploadTrafficBps, 1);
-            const totalTrafficBar = calcRelativeBarWidth(totalTrafficBps, maxTrafficBps);
-            const downloadTrafficBar = calcRelativeBarWidth(downloadTrafficBps, maxTrafficBps);
-            const uploadTrafficBar = calcRelativeBarWidth(uploadTrafficBps, maxTrafficBps);
-            const snmpConfigured = [
-                h.cpu_usage,
-                h.ram_usage,
-                h.disk_usage,
-                h.network_traffic,
-                h.network_in_bps,
-                h.network_out_bps
-            ].some((value) => value !== null && value !== undefined);
-            const snmpStatusHtml = !snmpConfigured
-                ? `<small class="snmp-tag snmp-tag-off snmp-empty-message">SNMP: não configurado</small>`
-                : "";
-            const snmpSectionHtml = snmpConfigured ? `
-                        <div class="metrics-section snmp-section">
-                            <div class="snmp-header">
-                                <div class="snmp-title">SNMP</div>
-                                <div class="snmp-subtitle">Métricas estimadas via OIDs</div>
-                            </div>
-                            <div class="snmp-kpi-grid">
-                                <div class="snmp-kpi-card">
-                                    <div class="snmp-kpi-head">
-                                        <small class="snmp-kpi-label" title="CPU">CPU</small>
-                                        <small class="snmp-kpi-value ${metricClass(h.cpu_usage)}">${metricPercent(h.cpu_usage)}</small>
-                                    </div>
-                                    <div class="snmp-kpi-bar"><span class="snmp-kpi-fill ${metricClass(h.cpu_usage)}" style="width:${metricBarWidth(h.cpu_usage)}%"></span></div>
-                                </div>
-                                <div class="snmp-kpi-card">
-                                    <div class="snmp-kpi-head">
-                                        <small class="snmp-kpi-label" title="RAM">RAM</small>
-                                        <small class="snmp-kpi-value ${metricClass(h.ram_usage)}">${metricPercent(h.ram_usage)}</small>
-                                    </div>
-                                    <div class="snmp-kpi-bar"><span class="snmp-kpi-fill ${metricClass(h.ram_usage)}" style="width:${metricBarWidth(h.ram_usage)}%"></span></div>
-                                </div>
-                                <div class="snmp-kpi-card">
-                                    <div class="snmp-kpi-head">
-                                        <small class="snmp-kpi-label" title="Disco">Disco</small>
-                                        <small class="snmp-kpi-value ${metricClass(h.disk_usage)}">${metricPercent(h.disk_usage)}</small>
-                                    </div>
-                                    <div class="snmp-kpi-bar"><span class="snmp-kpi-fill ${metricClass(h.disk_usage)}" style="width:${metricBarWidth(h.disk_usage)}%"></span></div>
-                                </div>
-                            </div>
-                            <div class="snmp-traffic-panel">
-                                <div class="snmp-traffic-row">
-                                    <small class="snmp-traffic-label" title="Tráfego de Rede">Tráfego de Rede</small>
-                                    <div class="snmp-mini-bar"><span style="width:${totalTrafficBar}%"></span></div>
-                                    <small class="snmp-traffic-value">${formatBps(h.network_traffic)}</small>
-                                </div>
-                                <div class="snmp-traffic-row">
-                                    <small class="snmp-traffic-label" title="Download (RX)">Download (RX)</small>
-                                    <div class="snmp-mini-bar"><span style="width:${downloadTrafficBar}%"></span></div>
-                                    <small class="snmp-traffic-value">${formatBps(h.network_in_bps)}</small>
-                                </div>
-                                <div class="snmp-traffic-row">
-                                    <small class="snmp-traffic-label" title="Upload (TX)">Upload (TX)</small>
-                                    <div class="snmp-mini-bar"><span style="width:${uploadTrafficBar}%"></span></div>
-                                    <small class="snmp-traffic-value">${formatBps(h.network_out_bps)}</small>
-                                </div>
-                            </div>
-                        </div>
-            ` : "";
-            const snmpChartBoxHtml = snmpConfigured ? `
-                <div id="snmp-chart-box-${h.name}" class="chart-box hidden" style="margin-top: 10px;">
-                    <div class="chart-title">Histórico SNMP</div>
-                    <canvas id="snmp-chart-${h.name}" height="120"></canvas>
-                </div>
-            ` : "";
+            if (isNewCard) {
+                card = document.createElement("div");
+                card.className = `card ${hostVisualState(h).cardClass}`;
+                card.id = `card-${h.name}`;
+                card.dataset.face = "1";
+                card.innerHTML = buildHostCardHTML(h);
+                div.appendChild(card);
+                updateHostFace(h.name, 1);
+            } else {
+                updateHostCardInPlace(card, h);
+            }
 
-            card.innerHTML = `
-                <!-- Header: identificação + indicadores rápidos -->
-                <div class="host-card-header">
-                    <div class="host-top-line">
-                        <div class="host-title-wrap">
-                            <span class="status-indicator ${statusColor}"></span>
-                            <strong class="host-title">
-                                ${h.name}
-                                <small class="host-addr">(${hostAddressLabel})</small>
-                            </strong>
-                        </div>
-                        <div class="host-top-actions">
-                            <span class="host-monitor-flag ${monitorFlag.className}" title="Estado de monitoramento">${monitorFlag.label}</span>
-                            ${incidentBadgeHtml}
-                            <button
-                                class="host-delete-btn"
-                                type="button"
-                                title="Excluir host"
-                                aria-label="Excluir host"
-                                onclick='softDeleteHost(${h.id}, ${JSON.stringify(h.name)})'
-                            >✕</button>
-                        </div>
-                    </div>
-
-                    <div class="host-meta-grid">
-                        <div class="host-meta-item"><small>Saúde</small><strong>${h.health_score ?? "N/A"}% ${severityIndicatorHtml}</strong></div>
-                        <div class="host-meta-item"><small>Disponibilidade</small><strong>${availability10m}%</strong></div>
-                        <div class="host-meta-item"><small>Último check</small><strong>${formatCheckTime(h.last_check)}</strong></div>
-                        <div class="host-meta-item"><small>Último SNMP</small><strong>${formatCheckTime(h.last_snmp_check)}</strong></div>
-                    </div>
-                </div>
-
-                <div class="face-nav">
-                    <button class="face-nav-btn face-prev-btn hidden" type="button" title="Face anterior" aria-label="Face anterior" onclick="prevHostFace('${h.name}')">${iconSvg("arrow_left")}</button>
-                    <div class="icon-actions">
-                        <button class="icon-btn" type="button" title="Histórico" aria-label="Histórico" onclick="toggleHistory('${h.name}')">${iconSvg("history")}</button>
-                        <button class="icon-btn" type="button" title="Gráfico de latência" aria-label="Gráfico de latência" onclick="toggleLatencyChart('${h.name}')">${iconSvg("latency")}</button>
-                        ${snmpConfigured ? `<button class="icon-btn" type="button" title="Gráfico SNMP" aria-label="Gráfico SNMP" onclick="toggleSnmpChart('${h.name}')">${iconSvg("snmp")}</button>` : ""}
-                        <button class="icon-btn" type="button" title="Disponibilidade por tipo" aria-label="Disponibilidade por tipo" onclick="toggleAvailabilityChartType('${h.name}')">${iconSvg("availability_type")}</button>
-                        <button class="icon-btn" type="button" title="Disponibilidade geral" aria-label="Disponibilidade geral" onclick="toggleAvailabilityChart('${h.name}')">${iconSvg("availability")}</button>
-                        <button class="icon-btn" type="button" title="Editar host" aria-label="Editar host" onclick='openEditModal(${JSON.stringify(h.name)}, ${JSON.stringify(h.address)}, ${JSON.stringify(hostPorts)}, ${JSON.stringify(h.http_url || "")}, ${h.http_enabled ? "true" : "false"}, ${h.snmp_enabled ? "true" : "false"})'>${iconSvg("edit")}</button>
-                    </div>
-                    <button class="face-nav-btn face-next-btn" type="button" title="Próxima face" aria-label="Próxima face" onclick="nextHostFace('${h.name}')">${iconSvg("arrow_right")}</button>
-                </div>
-
-                <!-- Body: três colunas (Resumo | Rede | SNMP) -->
-                <div class="host-card-body compact host-faces-wrap">
-                    <div class="host-col host-col-summary host-face active" data-face="1">
-                        <div class="host-section-card">
-                            <div class="metrics-title">Resumo</div>
-                            <div class="host-summary-list">
-                                <small><b>Portas TCP monitoradas:</b> ${tcpPortsLabel}</small>
-                                <small><b>Check Web:</b> ${webCheckBadge}</small>
-                                <small><b>Protocolo resolvido:</b> ${httpProtocolLabel}</small>
-                                <small><b>Saúde:</b> ${h.health_score ?? "N/A"}%</small>
-                                <small><b>Disponibilidade:</b> ${availability10m}%</small>
-                                <small><b>Tendência HTTP:</b> ${trendIcon(h.trend_http)} ${h.trend_http ?? "N/A"}</small>
-                                <small><b>Causa provável:</b></small>
-                                <small class="cause-pill ${causeClass}">${h.probable_cause ?? "Operação normal"}</small>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="host-col host-col-network host-face" data-face="2">
-                        <div class="host-section-card">
-                            <div class="metrics-title">Rede</div>
-                            <div class="network-split">
-                                <div class="network-col">
-                                    <small><b>Taxa de sucesso</b></small>
-                                    <small>Ping: ${h.sla_rolling_ping ?? "N/A"}%</small>
-                                    <small>TCP: ${h.sla_rolling_tcp ?? "N/A"}%</small>
-                                    <small>HTTP: ${h.sla_rolling_http ?? "N/A"}%</small>
-                                </div>
-                                <div class="network-col">
-                                    <small><b>Variação na latência</b></small>
-                                    <small>Ping: ${h.jitter_ms_ping ?? "N/A"} ms</small>
-                                    <small>TCP: ${h.jitter_ms_tcp ?? "N/A"} ms</small>
-                                    <small>HTTP: ${h.jitter_ms_http ?? "N/A"} ms</small>
-                                </div>
-                            </div>
-                            <div class="host-checks-section">
-                                <div class="metrics-title">Últimos checks</div>
-                                <div id="result-${h.name}" class="host-last-checks">
-                                    <i>Atualizando...</i>
-                                </div>
-                            </div>
-                            <div class="tcp-ports-section">
-                                <div class="metrics-title">Portas TCP monitoradas</div>
-                                <div id="tcp-ports-status-${h.name}" class="tcp-ports-status">
-                                    <small class="tcp-ports-empty">Atualizando...</small>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="host-col host-col-snmp host-face" data-face="3">
-                        ${snmpConfigured ? snmpSectionHtml : `
-                            <div class="host-section-card snmp-section snmp-empty">
-                                <div class="snmp-header">
-                                    <div class="snmp-title">SNMP</div>
-                                    <div class="snmp-subtitle">Métricas estimadas via OIDs</div>
-                                </div>
-                                <div class="snmp-empty-body">
-                                    ${snmpStatusHtml}
-                                </div>
-                            </div>
-                        `}
-                    </div>
-                </div>
-
-                <div id="chart-container-${h.name}" class="chart-box hidden" style="margin-top: 10px;">
-                    <div class="chart-title">Latência dos checks</div>
-                    <canvas id="chart-${h.name}" height="120"></canvas>
-                </div>
-                ${snmpChartBoxHtml}
-                <div id="availability-chart-type-box-${h.name}" class="chart-box hidden">
-                    <div class="chart-title">Disponibilidade por tipo</div>
-                    <canvas id="availability-chart-type-${h.name}" height="120"></canvas>
-                </div>
-                <div id="availability-chart-box-${h.name}" class="chart-box hidden">
-                    <div class="chart-title">Disponibilidade geral</div>
-                    <canvas id="availability-chart-${h.name}" height="120"></canvas>
-                </div>
-                <div id="history-${h.name}" class="history-box hidden"></div>
-                
-            `;
-
-            div.appendChild(card);
-
-            // ATUALIZA OS DADOS DE PING/TCP
+            // Atualiza checks de Ping / TCP em tempo real
             loadLastResult(
                 h.name,
-                hostPorts,
-                httpEnabled,
+                parseHostPorts(h),
+                !!h.http_enabled,
                 h.http_protocol,
                 h.http_latency,
                 h.tcp_http_port_latency,
@@ -1018,69 +1289,28 @@ async function loadHosts() {
                 h.tcp_http_port_ok,
                 h.tcp_https_port_ok
             );
-            updateHostFace(h.name, 1);
 
+            // Atualiza gráficos ativos sem piscar
+            refreshVisibleChartsForHost(h.name);
         }
 
-        // Reaplica filtro após rerender para manter UX estável.
+        // Reaplica o filtro de busca de forma transparente
         const searchInput = document.getElementById("searchInput");
         const statusFilter = document.getElementById("statusFilter");
         if (searchInput?.value || (statusFilter && statusFilter.value !== "all")) {
             filterHosts();
         }
+        updateStatusChipCounts();
     } catch (err) {
         console.error("Erro ao carregar lista de hosts:", err);
+        if (div.querySelector(".skeleton-wrap")) {
+            div.innerHTML = "<div class='ui-state ui-state-warning'>Não foi possível carregar os hosts.</div>";
+        }
     }
 }
 
 async function loadHostsQuick() {
-    try {
-        const div = document.getElementById("hosts");
-        if (!div) return;
-        const hasCards = div.querySelectorAll(".card").length > 0;
-        if (!hasCards) {
-            await loadHosts();
-            return;
-        }
-
-        const res = await fetchWithAuth(`${API}/hosts/list`);
-        if (!res || !res.ok) return;
-        const hosts = await res.json();
-
-        for (const h of hosts) {
-            const resultBox = document.getElementById(`result-${h.name}`);
-            if (resultBox) {
-                loadLastResult(
-                    h.name,
-                    parseHostPorts(h),
-                    !!h.http_enabled,
-                    h.http_protocol,
-                    h.http_latency,
-                    h.tcp_http_port_latency,
-                    h.tcp_https_port_latency,
-                    h.tcp_http_port_ok,
-                    h.tcp_https_port_ok
-                );
-            }
-
-            const availBox = document.getElementById("availability-chart-box-" + h.name);
-            if (availBox && !availBox.classList.contains("hidden")) {
-                loadAvailability(h.name);
-            }
-
-            const latencyBox = document.getElementById("chart-container-" + h.name);
-            if (latencyBox && !latencyBox.classList.contains("hidden")) {
-                loadLatencyChart(h.name);
-            }
-
-            const snmpBox = document.getElementById("snmp-chart-box-" + h.name);
-            if (snmpBox && !snmpBox.classList.contains("hidden")) {
-                loadSnmpChart(h.name);
-            }
-        }
-    } catch (err) {
-        console.error("Erro ao atualizar dados dos hosts:", err);
-    }
+    await loadHosts();
 }
 
 function tcpFailureLabel(error) {
@@ -1178,17 +1408,6 @@ async function loadLastResult(
             ? `${httpLatency} ms`
             : "Aguardando");
 
-    const formatAuxTcp = (enabled, latency, okFlag) => {
-        if (!enabled) return "-";
-        if (latency !== null && latency !== undefined) return `${latency} ms`;
-        if (okFlag === false) return "falha";
-        if (okFlag === true) return "sem dados";
-        return "Aguardando";
-    };
-
-    const portaHttpText = formatAuxTcp(httpEnabled, tcpHttpPortLatency, tcpHttpPortOk);
-    const portaHttpsText = formatAuxTcp(httpEnabled, tcpHttpsPortLatency, tcpHttpsPortOk);
-
     box.innerHTML = `
         <div>
             <span class="status-indicator ${pingDot}"></span>
@@ -1198,21 +1417,15 @@ async function loadLastResult(
             <span class="status-indicator ${webDot}"></span>
             ${httpEnabled ? protocolLabel : "Web"}: ${httpEnabled ? protocolValue : "Inativo"}
         </div>
-        <div>
-            <span class="status-indicator ${webDot}"></span>
-            HTTP (TCP 80): ${portaHttpText}
-        </div>
-        <div>
-            <span class="status-indicator ${webDot}"></span>
-            HTTPS (TCP 443): ${portaHttpsText}
-        </div>
     `;
 }
 
-async function loadHistory(name) {
+async function loadHistory(name, isRefresh = false) {
     const box = document.getElementById("history-" + name);
     if (!box) return;
-    box.innerHTML = "<div class='ui-state ui-state-info'>Carregando histórico...</div>";
+    if (!isRefresh && !box.querySelector(".history-line")) {
+        box.innerHTML = "<div class='ui-state ui-state-info'>Carregando histórico...</div>";
+    }
 
     try {
         const res = await fetchWithAuth(`${API}/host/history/${name}`);
@@ -1256,7 +1469,9 @@ async function loadHistory(name) {
         box.innerHTML = `<div class="host-history-scroll">${linesHtml}</div>`;
 
     } catch {
-        box.innerHTML = "<div class='ui-state ui-state-error'>Erro ao carregar histórico</div>";
+        if (!isRefresh) {
+            box.innerHTML = "<div class='ui-state ui-state-error'>Erro ao carregar histórico</div>";
+        }
     }
 }
 
@@ -1317,28 +1532,67 @@ async function toggleAvailabilityChartType(name) {
 
 let currentEditHost = null;
 
-function openEditModal(name, ip, ports = [], httpUrl, httpEnabled = true, snmpEnabled = false) {
+let lastFocusedElementBeforeModal = null;
+
+function openAppModal(modalEl) {
+    if (!modalEl) return;
+    lastFocusedElementBeforeModal = document.activeElement;
+    modalEl.classList.remove("hidden");
+    modalEl.setAttribute("aria-hidden", "false");
+
+    const focusable = modalEl.querySelector("input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), [tabindex]:not([tabindex='-1'])");
+    if (focusable) {
+        setTimeout(() => {
+            try { focusable.focus(); } catch (e) {}
+        }, 50);
+    }
+}
+
+function closeAppModal(modalEl) {
+    if (!modalEl) return;
+    modalEl.classList.add("hidden");
+    modalEl.setAttribute("aria-hidden", "true");
+    if (lastFocusedElementBeforeModal && typeof lastFocusedElementBeforeModal.focus === "function") {
+        try { lastFocusedElementBeforeModal.focus(); } catch (e) {}
+    }
+}
+
+function openEditModal(name, ip, ports = [], httpUrl, httpEnabled = true, snmpEnabled = false, snmpCommunity = "netspot") {
     currentEditHost = name;
 
-    document.getElementById("modal-name").value = name;
-    document.getElementById("modal-ip").value = ip || "";
-    document.getElementById("modal-http-url").value = httpUrl || "";
+    const cached = currentHostsMap.get(name);
+    if (cached) {
+        ip = cached.address || ip;
+        ports = parseHostPorts(cached);
+        httpUrl = cached.http_url !== undefined ? (cached.http_url || "") : (httpUrl || "");
+        httpEnabled = cached.http_enabled !== false;
+        snmpEnabled = !!cached.snmp_enabled;
+        snmpCommunity = cached.snmp_community || "netspot";
+    }
+
+    const nameInput = document.getElementById("modal-name");
+    if (nameInput) nameInput.value = name;
+    const ipInput = document.getElementById("modal-ip");
+    if (ipInput) ipInput.value = ip || "";
+    const httpInput = document.getElementById("modal-http-url");
+    if (httpInput) httpInput.value = httpUrl || "";
     const modalHttpEnabled = document.getElementById("modal-http-enabled");
-    if (modalHttpEnabled) {
-        modalHttpEnabled.checked = !!httpEnabled;
-    }
+    if (modalHttpEnabled) modalHttpEnabled.checked = !!httpEnabled;
     const modalSnmpEnabled = document.getElementById("modal-snmp-enabled");
-    if (modalSnmpEnabled) {
-        modalSnmpEnabled.checked = !!snmpEnabled;
-    }
+    if (modalSnmpEnabled) modalSnmpEnabled.checked = !!snmpEnabled;
+    const modalSnmpCommunity = document.getElementById("modal-snmp-community");
+    if (modalSnmpCommunity) modalSnmpCommunity.value = snmpCommunity || "netspot";
+
     setModalPorts(ports);
 
-    document.getElementById("editModal").classList.remove("hidden");
+    const modal = document.getElementById("editModal");
+    if (modal) openAppModal(modal);
 }
 
 function closeModal() {
-    document.getElementById("editModal").classList.add("hidden");
+    closeAppModal(document.getElementById("editModal"));
 }
+
 
 function formatBps(value) {
     if (value === null || value === undefined) return "N/A";
@@ -1350,6 +1604,28 @@ function formatBps(value) {
     if (bps < 1000_000_000) return `${(bps / 1000_000).toFixed(2)} Mbps`;
 
     return `${(bps / 1000_000_000).toFixed(2)} Gbps`;
+}
+
+function escapeHtml(str) {
+    if (str === null || str === undefined) return "";
+    return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+// Score de saúde + indicador + barra de progresso colorida pela severidade.
+function healthMeterHtml(h, severityIndicatorHtml = "") {
+    const score = Number(h.health_score);
+    const valid = h.health_score !== null && h.health_score !== undefined && Number.isFinite(score);
+    const pct = valid ? Math.max(0, Math.min(100, score)) : 0;
+    const sevMap = { HEALTHY: "sev-healthy", WARNING: "sev-warning", DEGRADED: "sev-degraded", CRITICAL: "sev-critical" };
+    const sev = sevMap[h.severity] || "sev-unknown";
+    return `${valid ? score : "N/A"}% ${severityIndicatorHtml}`
+        + `<span class="health-meter" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}">`
+        + `<span class="health-meter-fill ${sev}" style="width:${pct}%"></span></span>`;
 }
 
 function calcRelativeBarWidth(value, maxValue) {
@@ -1389,10 +1665,33 @@ function takeLast(items, limit = MAX_POINTS_PER_SERIES) {
 }
 
 function chartCommonOptions(yMin = null, yMax = null, yLabel = "") {
+    const isDark = document.body.classList.contains("dark-theme") || document.documentElement.classList.contains("dark-theme");
+    const textColor = isDark ? "#cbd5e1" : "#64748b";
+    const gridColor = isDark ? "rgba(255, 255, 255, 0.08)" : "rgba(15, 23, 42, 0.06)";
+    const titleColor = isDark ? "#f8fafc" : "#0f172a";
+    
     const yScale = {
         title: {
             display: !!yLabel,
-            text: yLabel
+            text: yLabel,
+            color: titleColor,
+            font: {
+                family: "'Open Sans', 'Roboto', sans-serif",
+                size: 11,
+                weight: '600'
+            }
+        },
+        grid: {
+            color: gridColor,
+            drawBorder: false,
+            borderColor: gridColor
+        },
+        ticks: {
+            color: textColor,
+            font: {
+                family: "'Open Sans', 'Roboto', sans-serif",
+                size: 10
+            }
         }
     };
     if (yMin !== null && yMin !== undefined) yScale.min = yMin;
@@ -1401,9 +1700,56 @@ function chartCommonOptions(yMin = null, yMax = null, yLabel = "") {
     return {
         responsive: true,
         maintainAspectRatio: false,
+        interaction: { mode: "index", intersect: false },
+        plugins: {
+            legend: {
+                labels: {
+                    color: textColor,
+                    font: {
+                        family: "'Open Sans', 'Roboto', sans-serif",
+                        size: 11,
+                        weight: '500'
+                    },
+                    boxWidth: 8,
+                    usePointStyle: true,
+                    padding: 15
+                }
+            },
+            tooltip: {
+                backgroundColor: isDark ? "#2d2e30" : "#ffffff",
+                titleColor: isDark ? "#e8eaed" : "#202124",
+                bodyColor: isDark ? "#9aa0a6" : "#5f6368",
+                borderColor: isDark ? "#3c4043" : "#dadce0",
+                borderWidth: 1,
+                padding: 10,
+                titleFont: {
+                    family: "'Open Sans', 'Roboto', sans-serif",
+                    size: 12,
+                    weight: '600'
+                },
+                bodyFont: {
+                    family: "'Open Sans', 'Roboto', sans-serif",
+                    size: 11
+                },
+                cornerRadius: 6
+            }
+        },
         scales: {
             y: yScale,
-            x: {}
+            x: {
+                grid: {
+                    color: gridColor,
+                    drawBorder: false,
+                    borderColor: gridColor
+                },
+                ticks: {
+                    color: textColor,
+                    font: {
+                        family: "'Open Sans', 'Roboto', sans-serif",
+                        size: 10
+                    }
+                }
+            }
         }
     };
 }
@@ -1471,6 +1817,23 @@ function updateOrCreateChart(chartKey, canvasEl, config) {
     current.update("none");
 }
 
+function destroyChartsForHost(name) {
+    if (!name) return;
+    const suffix = `-${name}`;
+    for (const key of Object.keys(charts)) {
+        if (key.endsWith(suffix) || key === name) {
+            try {
+                if (typeof charts[key]?.destroy === "function") {
+                    charts[key].destroy();
+                }
+            } catch (e) {
+                console.warn("Erro ao destruir gráfico do host:", name, e);
+            }
+            delete charts[key];
+        }
+    }
+}
+
 function parseApiDate(value) {
     if (!value) return null;
 
@@ -1516,12 +1879,25 @@ function formatMetric(value, suffix = "", digits = 2) {
 }
 
 async function submitModalEdit() {
-    const newName = document.getElementById("modal-name").value;
-    const newIp = document.getElementById("modal-ip").value;
-    const newHttp = document.getElementById("modal-http-url").value;
-    const newHttpEnabled = !!document.getElementById("modal-http-enabled")?.checked;
-    const newSnmpEnabled = !!document.getElementById("modal-snmp-enabled")?.checked;
+    if (!currentEditHost) return;
+    const ipInput = document.getElementById("modal-ip");
+    const httpInput = document.getElementById("modal-http-url");
+    const httpEnabledInput = document.getElementById("modal-http-enabled");
+    const snmpEnabledInput = document.getElementById("modal-snmp-enabled");
+    const modalSnmpCommInput = document.getElementById("modal-snmp-community");
     const modalPortsContainer = document.getElementById("modalPortsContainer");
+
+    const newIp = (ipInput?.value || "").trim();
+    if (!newIp) {
+        showToast("warning", "O endereço/IP é obrigatório.");
+        return;
+    }
+
+    const newHttp = (httpInput?.value || "").trim();
+    const newHttpEnabled = !!httpEnabledInput?.checked;
+    const newSnmpEnabled = !!snmpEnabledInput?.checked;
+    const newSnmpComm = (modalSnmpCommInput?.value || "").trim() || "netspot";
+
     let ports = [];
     try {
         ports = collectPorts(modalPortsContainer);
@@ -1530,26 +1906,45 @@ async function submitModalEdit() {
         return;
     }
 
-    const res = await fetchWithAuth(`${API}/host/update/${currentEditHost}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-            address: newIp,
-            ports,
-            port: ports.length ? ports[0] : null,
-            url: newHttp || null,
-            http_url: newHttp || null,
-            http_enabled: newHttpEnabled,
-            snmp_enabled: newSnmpEnabled
-        })
-    });
+    const saveBtn = document.querySelector("#editModal .modal-actions button.modal-btn-primary")
+        || document.querySelector("#editModal .modal-actions button:first-child");
+    const originalText = saveBtn ? saveBtn.textContent : "Salvar";
+    if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.textContent = "Salvando...";
+    }
 
-    if (res.ok) {
-        closeModal();
-        await loadHosts();
-        showToast("success", "Host atualizado com sucesso.");
-    } else {
-        showToast("error", "Erro ao salvar alterações do host.");
+    try {
+        const res = await fetchWithAuth(`${API}/host/update/${currentEditHost}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                address: newIp,
+                ports,
+                port: ports.length ? ports[0] : null,
+                url: newHttp || null,
+                http_url: newHttp || null,
+                http_enabled: newHttpEnabled,
+                snmp_enabled: newSnmpEnabled,
+                snmp_community: newSnmpComm
+            })
+        });
+
+        if (res && res.ok) {
+            closeModal();
+            await loadHosts();
+            showToast("success", "Host atualizado com sucesso.");
+        } else {
+            const errData = res ? await res.json().catch(() => ({})) : {};
+            showToast("error", errData.detail || "Erro ao salvar alterações do host.");
+        }
+    } catch (err) {
+        showToast("error", "Não foi possível conectar ao servidor.");
+    } finally {
+        if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.textContent = originalText;
+        }
     }
 }
 
@@ -1630,12 +2025,16 @@ async function loadLatencyChart(name) {
         return {
             label: series.label,
             data: values,
-            borderColor: colors.line,
-            backgroundColor: colors.fill,
-            tension: 0.3,
-            spanGaps: true,
+            ...window.NetSpotChartTheme.lineStyle(colors.line, { fill: orderedSeries.length === 1 }),
         };
     });
+
+    window.NetSpotChartTheme.renderSummary(ctx, datasets.map((ds) => ({
+        label: ds.label,
+        color: ds.borderColor,
+        values: ds.data,
+        fmt: (v) => `${v.toFixed(1)} ms`,
+    })));
 
     updateOrCreateChart(chartKey, ctx, {
         type: "line",
@@ -1664,6 +2063,13 @@ async function loadSnmpChart(name) {
     }
     clearChartEmpty(boxId, canvasId);
 
+    const isDark = document.body.classList.contains("dark-theme") || document.documentElement.classList.contains("dark-theme");
+    const cpuColor = isDark ? "#f28b82" : "#ea4335";
+    const ramColor = isDark ? "#fde293" : "#fbbc05";
+    const diskColor = isDark ? "#ffad70" : "#fa7b17";
+    const rxColor = isDark ? "#8ab4f8" : "#1a73e8";
+    const txColor = isDark ? "#81c995" : "#34a853";
+
     const labels = points.map(p => formatApiTime(p.timestamp));
     const cpu = points.map(p => p.cpu);
     const ram = points.map(p => p.ram);
@@ -1674,90 +2080,62 @@ async function loadSnmpChart(name) {
     const ctx = document.getElementById("snmp-chart-" + name);
     if (!ctx) return;
 
+    const T = window.NetSpotChartTheme;
+    T.renderSummary(ctx, [
+        { label: "CPU", color: cpuColor, values: cpu, fmt: metricPercent },
+        { label: "RAM", color: ramColor, values: ram, fmt: metricPercent },
+        { label: "Disco", color: diskColor, values: disk, fmt: metricPercent },
+        { label: "Download", color: rxColor, values: rx, fmt: formatBps },
+        { label: "Upload", color: txColor, values: tx, fmt: formatBps },
+    ]);
+
+    // Eixos: % (esquerda, com faixas de limiar) e bps (direita, agora visível e legível).
+    const opts = chartCommonOptions();
+    const axisTitle = opts.scales.y.title;
+    const axisTicks = opts.scales.y.ticks;
+    opts.scales = {
+        x: opts.scales.x,
+        y_percent: {
+            ...opts.scales.y,
+            type: "linear",
+            position: "left",
+            min: 0,
+            max: 100,
+            title: { ...axisTitle, display: true, text: "Uso (%)" },
+        },
+        y_bps: {
+            type: "linear",
+            position: "right",
+            min: 0,
+            grid: { drawOnChartArea: false },
+            title: { ...axisTitle, display: true, text: "Rede" },
+            ticks: { ...axisTicks, callback: (v) => formatBps(v) },
+        },
+    };
+    opts.plugins.thresholdBands = T.thresholdBands("y_percent", T.percentBands(80, 95));
+    opts.plugins.tooltip.callbacks = {
+        label: (c) => {
+            if (c.dataset.yAxisID === "y_percent") {
+                const value = Number(c.parsed.y);
+                return `${c.dataset.label}: ${Number.isFinite(value) ? value.toFixed(2) : "N/A"}%`;
+            }
+            return `${c.dataset.label}: ${formatBps(c.parsed.y)}`;
+        }
+    };
+
     updateOrCreateChart(chartKey, ctx, {
         type: "line",
         data: {
             labels,
             datasets: [
-                {
-                    label: "CPU (%)",
-                    data: cpu,
-                    borderColor: "#ef4444",
-                    backgroundColor: "#ef444433",
-                    yAxisID: "y_percent",
-                    tension: 0.3
-                },
-                {
-                    label: "RAM (%)",
-                    data: ram,
-                    borderColor: "#f59e0b",
-                    backgroundColor: "#f59e0b33",
-                    yAxisID: "y_percent",
-                    tension: 0.3
-                },
-                {
-                    label: "Disco (%)",
-                    data: disk,
-                    borderColor: "#8b5cf6",
-                    backgroundColor: "#8b5cf633",
-                    yAxisID: "y_percent",
-                    tension: 0.3
-                },
-                {
-                    label: "Download (RX)",
-                    data: rx,
-                    borderColor: "#2563eb",
-                    backgroundColor: "#2563eb33",
-                    yAxisID: "y_bps",
-                    tension: 0.3
-                },
-                {
-                    label: "Upload (TX)",
-                    data: tx,
-                    borderColor: "#14b8a6",
-                    backgroundColor: "#14b8a633",
-                    yAxisID: "y_bps",
-                    tension: 0.3
-                }
+                { label: "CPU (%)", data: cpu, ...T.lineStyle(cpuColor, { yAxisID: "y_percent" }) },
+                { label: "RAM (%)", data: ram, ...T.lineStyle(ramColor, { fill: false, yAxisID: "y_percent" }) },
+                { label: "Disco (%)", data: disk, ...T.lineStyle(diskColor, { fill: false, yAxisID: "y_percent" }) },
+                { label: "Download (RX)", data: rx, ...T.lineStyle(rxColor, { fill: false, yAxisID: "y_bps" }) },
+                { label: "Upload (TX)", data: tx, ...T.lineStyle(txColor, { fill: false, yAxisID: "y_bps" }) }
             ]
         },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                tooltip: {
-                    callbacks: {
-                        label: (ctx) => {
-                            if (ctx.dataset.yAxisID === "y_percent") {
-                                const value = Number(ctx.parsed.y);
-                                return `${ctx.dataset.label}: ${Number.isFinite(value) ? value.toFixed(2) : "N/A"}%`;
-                            }
-                            return `${ctx.dataset.label}: ${formatBps(ctx.parsed.y)}`;
-                        }
-                    }
-                }
-            },
-            scales: {
-                y_percent: {
-                    type: "linear",
-                    position: "left",
-                    min: 0,
-                    max: 100,
-                    title: {
-                        display: true,
-                        text: "Uso (%)"
-                    }
-                },
-                y_bps: {
-                    type: "linear",
-                    position: "right",
-                    display: false,
-                    grid: {
-                        drawOnChartArea: false
-                    }
-                }
-            }
-        }
+        options: opts
     });
 }
 
@@ -1795,38 +2173,35 @@ async function loadAvailabilityChartType(name) {
     }
     clearChartEmpty("availability-chart-type-box-" + name, "availability-chart-type-" + name);
 
+    const isDark = document.body.classList.contains("dark-theme") || document.documentElement.classList.contains("dark-theme");
+    const pingColor = isDark ? "#81c995" : "#1e8e3e";
+    const tcpColor = isDark ? "#8ab4f8" : "#1a73e8";
+    const httpColor = isDark ? "#fde293" : "#f9ab00";
+
+    const T = window.NetSpotChartTheme;
+    T.renderSummary(ctx, [
+        { label: "Ping", color: pingColor, values: pingValues, fmt: (v) => `${v.toFixed(1)}%` },
+        { label: "TCP", color: tcpColor, values: tcpValues, fmt: (v) => `${v.toFixed(1)}%` },
+        { label: "HTTP", color: httpColor, values: httpValues, fmt: (v) => `${v.toFixed(1)}%` },
+    ]);
+
+    const availOpts = chartCommonOptions(0, 100, "Disponibilidade (%)");
+    availOpts.plugins.thresholdBands = T.thresholdBands("y", [
+        { from: 0, to: 85, color: "rgba(217,48,37,0.08)" },
+        { from: 85, to: 95, color: "rgba(249,171,0,0.09)" },
+    ]);
+
     updateOrCreateChart(chartKey, ctx, {
         type: "line",
         data: {
             labels: labels,
             datasets: [
-                {
-                    label: "Disponibilidade Ping (%)",
-                    data: pingValues,
-                    borderColor: '#2ecc71',
-                    backgroundColor: '#2ecc7133',
-                    tension: 0.3,
-                    fill: true
-                },
-                {
-                    label: "Disponibilidade TCP (%)",
-                    data: tcpValues,
-                    borderColor: "#3498db",
-                    backgroundColor: '#3498db33',
-                    tension: 0.3,
-                    fill: true
-                },
-                {
-                    label: "Disponibilidade HTTP (%)",
-                    data: httpValues,
-                    borderColor: "#f39c12",
-                    backgroundColor: '#f39c1233',
-                    tension: 0.3,
-                    fill: true
-                }
+                { label: "Disponibilidade Ping (%)", data: pingValues, ...T.lineStyle(pingColor, { fill: false }) },
+                { label: "Disponibilidade TCP (%)", data: tcpValues, ...T.lineStyle(tcpColor, { fill: false }) },
+                { label: "Disponibilidade HTTP (%)", data: httpValues, ...T.lineStyle(httpColor, { fill: false }) }
             ]
         },
-        options: chartCommonOptions(null, null, "Disponibilidade (%)")
+        options: availOpts
     });
 }
 
@@ -1854,8 +2229,11 @@ function hostVisualState(host) {
     if (status === "DOWN") {
         return { cardClass: "card-state-down", badgeClass: "state-down", label: "DOWN" };
     }
-    if (status === "DEGRADED" || severity === "DEGRADED" || severity === "WARNING") {
+    if (status === "DEGRADED" || severity === "DEGRADED") {
         return { cardClass: "card-state-degraded", badgeClass: "state-degraded", label: "DEGRADED" };
+    }
+    if (severity === "WARNING") {
+        return { cardClass: "card-state-degraded", badgeClass: "state-degraded", label: "WARNING" };
     }
     return { cardClass: "card-state-up", badgeClass: "state-up", label: "UP" };
 }
@@ -1920,15 +2298,43 @@ function updateHostFace(hostName, faceNumber) {
     const safeFace = Math.max(1, Math.min(3, Number(faceNumber) || 1));
     card.dataset.face = String(safeFace);
 
+    const FACE_NAMES = {
+        1: "Resumo e status",
+        2: "Métricas de rede e latência",
+        3: "Hardware e tráfego SNMP"
+    };
+
     faces.forEach((face) => {
         const n = Number(face.getAttribute("data-face"));
         face.classList.toggle("active", n === safeFace);
     });
 
+    const indicator = card.querySelector(".face-indicator-label");
+    if (indicator) {
+        indicator.textContent = `${safeFace}/3`;
+        indicator.title = `Exibindo Face ${safeFace} de 3: ${FACE_NAMES[safeFace] || ""}`;
+    }
+
     const prevBtn = card.querySelector(".face-prev-btn");
     const nextBtn = card.querySelector(".face-next-btn");
-    if (prevBtn) prevBtn.classList.toggle("hidden", safeFace <= 1);
-    if (nextBtn) nextBtn.classList.toggle("hidden", safeFace >= 3);
+    if (prevBtn) {
+        prevBtn.classList.toggle("hidden", safeFace <= 1);
+        const prevFace = safeFace - 1;
+        if (prevFace >= 1) {
+            const desc = `Voltar para Face ${prevFace}: ${FACE_NAMES[prevFace] || ""}`;
+            prevBtn.title = desc;
+            prevBtn.setAttribute("aria-label", desc);
+        }
+    }
+    if (nextBtn) {
+        nextBtn.classList.toggle("hidden", safeFace >= 3);
+        const nextFace = safeFace + 1;
+        if (nextFace <= 3) {
+            const desc = `Avançar para Face ${nextFace}: ${FACE_NAMES[nextFace] || ""}`;
+            nextBtn.title = desc;
+            nextBtn.setAttribute("aria-label", desc);
+        }
+    }
 }
 
 function nextHostFace(hostName) {
@@ -2148,75 +2554,148 @@ async function checkAlerts() {
 }
 
 async function softDeleteHost(hostId, hostName) {
-
     if (!confirm(`Mover host "${hostName}" para a lixeira?`)) return;
+
+    // Remoção visual imediata/otimista do card com animação suave
+    const cardNode = document.getElementById(`card-${hostName}`);
+    if (cardNode) {
+        cardNode.style.transition = "opacity 0.2s ease, transform 0.2s ease";
+        cardNode.style.opacity = "0";
+        cardNode.style.transform = "scale(0.95)";
+        setTimeout(() => {
+            if (cardNode.parentNode) {
+                cardNode.remove();
+                const hostsDiv = document.getElementById("hosts");
+                if (hostsDiv && !hostsDiv.querySelector(".card")) {
+                    hostsDiv.innerHTML = "<div class='ui-state ui-state-empty'>Nenhum host cadastrado ainda.</div>";
+                }
+            }
+        }, 200);
+    }
 
     try {
         const res = await fetchWithAuth(`${API}/hosts/${hostId}/deactivate?host_name=${encodeURIComponent(hostName)}`, {
             method: "POST"
         });
 
-        if (!res.ok) {
-            const err = await res.json();
+        if (!res || !res.ok) {
+            const err = res ? await res.json() : {};
             showToast("error", "Erro ao mover para lixeira: " + (err.detail || "erro"));
+            await loadHosts();
             return;
         }
 
-        await loadHosts();
-        await loadTrashHosts();
         showToast("success", "Host movido para a lixeira.");
+        await Promise.all([
+            loadHosts(),
+            loadTrashHosts(),
+            loadDashboardSummary()
+        ]);
 
     } catch (e) {
         showToast("error", "Falha de conexão com a API.");
+        await loadHosts();
     }
 }
 
 async function loadTrashHosts() {
     const box = document.getElementById("trashHostsList");
+    const emptyBtn = document.getElementById("emptyTrashBtn");
     if (!box) return;
 
     try {
         const res = await fetchWithAuth(`${API}/hosts/trash`);
         if (!res || !res.ok) {
             box.innerHTML = "<small>Não foi possível carregar a lixeira.</small>";
+            if (emptyBtn) emptyBtn.disabled = true;
             return;
         }
 
         const hosts = await res.json();
         if (!Array.isArray(hosts) || hosts.length === 0) {
-            box.innerHTML = "<small>Nenhum host na lixeira.</small>";
+            box.innerHTML = "<div class='ui-state ui-state-empty' style='text-align: center; padding: 20px; margin: 8px 0;'>A lixeira está vazia.</div>";
+            if (emptyBtn) emptyBtn.disabled = true;
             return;
         }
+
+        if (emptyBtn) emptyBtn.disabled = false;
 
         box.innerHTML = hosts.map((host) => `
             <div class="trash-item">
                 <div class="trash-meta">
-                    <strong>${host.name}</strong>
-                    <small>${host.address}${host.port ? `:${host.port}` : ""}</small>
+                    <strong>${escapeHtml(host.name)}</strong>
+                    <small>${escapeHtml(host.address)}${host.port ? `:${escapeHtml(host.port)}` : ""}</small>
                     <small>Desativado em: ${formatApiDateTime(host.deleted_at)}</small>
                 </div>
                 <div class="trash-actions">
-                    <button onclick='restoreHost(${host.id}, ${JSON.stringify(host.name)})'>Restaurar</button>
-                    <button class="danger-btn" onclick='hardDeleteHost(${host.id}, ${JSON.stringify(host.name)})'>Excluir permanentemente</button>
+                    <button onclick='restoreHost(${Number(host.id)}, ${JSON.stringify(String(host.name))})'>Restaurar</button>
+                    <button class="danger-btn" onclick='hardDeleteHost(${Number(host.id)}, ${JSON.stringify(String(host.name))})'>Excluir permanentemente</button>
                 </div>
             </div>
         `).join("");
     } catch (err) {
         box.innerHTML = "<small>Erro ao carregar lixeira.</small>";
+        if (emptyBtn) emptyBtn.disabled = true;
     }
 }
 
 function openTrashModal() {
     const modal = document.getElementById("trashModal");
     if (!modal) return;
-    modal.classList.remove("hidden");
+    openAppModal(modal);
     runTaskOnce("trash", loadTrashHosts);
 }
 
 function closeTrashModal() {
     const modal = document.getElementById("trashModal");
     if (!modal) return;
-    modal.classList.add("hidden");
+    closeAppModal(modal);
+}
+
+function openConfirmEmptyTrashModal() {
+    const modal = document.getElementById("confirmEmptyTrashModal");
+    if (modal) openAppModal(modal);
+}
+
+function closeConfirmEmptyTrashModal() {
+    const modal = document.getElementById("confirmEmptyTrashModal");
+    if (modal) closeAppModal(modal);
+}
+
+
+async function confirmEmptyTrash() {
+    const confirmBtn = document.getElementById("confirmEmptyTrashBtn");
+    const originalText = confirmBtn ? confirmBtn.textContent : "Sim, Excluir Todos";
+    if (confirmBtn) {
+        confirmBtn.disabled = true;
+        confirmBtn.textContent = "Excluindo...";
+    }
+
+    try {
+        const res = await fetchWithAuth(`${API}/hosts/trash/empty`, {
+            method: "DELETE"
+        });
+
+        if (res && res.ok) {
+            const data = await res.json().catch(() => ({}));
+            closeConfirmEmptyTrashModal();
+            showToast("success", data.detail || "Lixeira esvaziada com sucesso.");
+            await Promise.all([
+                loadTrashHosts(),
+                loadDashboardSummary()
+            ]);
+        } else {
+            const err = res ? await res.json().catch(() => ({})) : {};
+            showToast("error", err.detail || "Erro ao esvaziar lixeira.");
+        }
+    } catch (err) {
+        showToast("error", "Não foi possível conectar ao servidor.");
+    } finally {
+        if (confirmBtn) {
+            confirmBtn.disabled = false;
+            confirmBtn.textContent = originalText;
+        }
+    }
 }
 
 function openSidebarMenu() {
@@ -2238,7 +2717,7 @@ function closeSidebarMenu() {
 }
 
 async function restoreHost(hostId, hostName) {
-    if (!confirm(`Restaurar o host \"${hostName}\" da lixeira?`)) return;
+    if (!confirm(`Restaurar o host "${hostName}" da lixeira?`)) return;
 
     try {
         const res = await fetchWithAuth(`${API}/hosts/${hostId}/restore?host_name=${encodeURIComponent(hostName)}`, {
@@ -2250,16 +2729,28 @@ async function restoreHost(hostId, hostName) {
             return;
         }
 
-        await loadHosts();
-        await loadTrashHosts();
         showToast("success", "Host restaurado com sucesso.");
+        await Promise.all([
+            loadHosts(),
+            loadTrashHosts(),
+            loadDashboardSummary()
+        ]);
     } catch (err) {
         showToast("error", "Falha de conexão com a API.");
     }
 }
 
 async function hardDeleteHost(hostId, hostName) {
-    if (!confirm(`Excluir permanentemente o host \"${hostName}\"?\nEssa ação não pode ser desfeita.`)) return;
+    if (!confirm(`Excluir permanentemente o host "${hostName}"?\nEssa ação não pode ser desfeita.`)) return;
+
+    const cardNode = document.getElementById(`card-${hostName}`);
+    if (cardNode) {
+        cardNode.remove();
+        const hostsDiv = document.getElementById("hosts");
+        if (hostsDiv && !hostsDiv.querySelector(".card")) {
+            hostsDiv.innerHTML = "<div class='ui-state ui-state-empty'>Nenhum host cadastrado ainda.</div>";
+        }
+    }
 
     try {
         const res = await fetchWithAuth(`${API}/hosts/${hostId}/hard-delete?host_name=${encodeURIComponent(hostName)}`, {
@@ -2268,14 +2759,20 @@ async function hardDeleteHost(hostId, hostName) {
         if (!res || !res.ok) {
             const err = res ? await res.json() : {};
             showToast("error", "Erro na exclusão permanente: " + (err.detail || "erro"));
+            await loadHosts();
+            await loadTrashHosts();
             return;
         }
 
-        await loadHosts();
-        await loadTrashHosts();
         showToast("success", "Host excluído permanentemente.");
+        await Promise.all([
+            loadHosts(),
+            loadTrashHosts(),
+            loadDashboardSummary()
+        ]);
     } catch (err) {
         showToast("error", "Falha de conexão com a API.");
+        await loadHosts();
     }
 }
 
@@ -2320,6 +2817,20 @@ async function loadAvailability(name) {
         }
         clearChartEmpty("availability-chart-box-" + name, "availability-chart-" + name);
 
+        const isDark = document.body.classList.contains("dark-theme") || document.documentElement.classList.contains("dark-theme");
+        const availColor = isDark ? "#81c995" : "#1e8e3e";
+
+        const T = window.NetSpotChartTheme;
+        T.renderSummary(ctx, [
+            { label: "Disponibilidade", color: availColor, values, fmt: (v) => `${v.toFixed(2)}%` },
+        ]);
+
+        const availOpts = chartCommonOptions(0, 100, "Disponibilidade (%)");
+        availOpts.plugins.thresholdBands = T.thresholdBands("y", [
+            { from: 0, to: 85, color: "rgba(217,48,37,0.08)" },
+            { from: 85, to: 95, color: "rgba(249,171,0,0.09)" },
+        ]);
+
         updateOrCreateChart(chartKey, ctx, {
             type: 'line',
             data: {
@@ -2327,15 +2838,10 @@ async function loadAvailability(name) {
                 datasets: [{
                     label: 'Disponibilidade Host (%)',
                     data: values,
-                    borderColor: '#2ecc71',
-                    backgroundColor: '#2ecc7133',
-                    tension: 0.3,
-                    fill: true
+                    ...T.lineStyle(availColor)
                 }]
             },
-            options: {
-                ...chartCommonOptions(null, null, "Disponibilidade (%)")
-            }
+            options: availOpts
         });
     } catch (err) {
         console.error("Erro ao carregar disponibilidade:", err);
@@ -2381,15 +2887,15 @@ async function loadTimeline() {
             return `
                 <div class="timeline-item ${itemClass}">
                     <div class="timeline-item-top">
-                        <strong class="timeline-host">${inc.host_name}</strong>
-                        <span class="timeline-badge ${badgeClass}">${statusLabel}</span>
+                        <strong class="timeline-host">${escapeHtml(inc.host_name)}</strong>
+                        <span class="timeline-badge ${badgeClass}">${escapeHtml(statusLabel)}</span>
                     </div>
                     <div class="timeline-item-meta">
                         <small>Início: ${startedAt}</small>
                         <small>Fim: ${endedAt}</small>
                         <small>Duração: ${durationText}</small>
                     </div>
-                    <p class="timeline-reason">${reasonText}</p>
+                    <p class="timeline-reason">${escapeHtml(reasonText)}</p>
                 </div>
             `;
         }).join("");
@@ -2407,32 +2913,112 @@ async function loadDashboardSummary() {
 
     const data = await res.json();
 
-    box.innerHTML = `
-        <div class="summary-card">
-            <small>Hosts monitorados</small>
-            <strong>${data.total_hosts ?? 0}</strong>
-        </div>
-        <div class="summary-card">
-            <small>Online</small>
-            <strong>${data.up ?? 0}</strong>
-        </div>
-        <div class="summary-card">
-            <small>Degradados</small>
-            <strong>${data.degraded ?? 0}</strong>
-        </div>
-        <div class="summary-card">
-            <small>Offline</small>
-            <strong>${data.down ?? 0}</strong>
-        </div>
-        <div class="summary-card">
-            <small>Incidentes abertos</small>
-            <strong>${data.open_incidents ?? 0}</strong>
-        </div>
-        <div class="summary-card">
-            <small>Incidentes fechados</small>
-            <strong>${data.closed_incidents ?? 0}</strong>
-        </div>
-    `;
+    if (box.querySelectorAll(".summary-card").length !== 6) {
+        const defs = [
+            ["Hosts monitorados", "summary-total"],
+            ["Online", "summary-ok"],
+            ["Degradados", "summary-warn"],
+            ["Offline", "summary-bad"],
+            ["Incidentes abertos", "summary-bad"],
+            ["Incidentes fechados", "summary-muted"],
+        ];
+        box.innerHTML = defs.map(([label, cls]) => `
+            <div class="summary-card ${cls}">
+                <small>${label}</small>
+                <strong>0</strong>
+            </div>`).join("") + `
+            <div class="summary-bar" role="img">
+                <span class="summary-bar-seg seg-ok"></span>
+                <span class="summary-bar-seg seg-warn"></span>
+                <span class="summary-bar-seg seg-bad"></span>
+            </div>`;
+    }
+
+    const values = [
+        data.total_hosts, data.up, data.degraded, data.down,
+        data.open_incidents, data.closed_incidents,
+    ];
+    const strongs = box.querySelectorAll(".summary-card strong");
+    values.forEach((v, i) => {
+        if (strongs[i]) strongs[i].textContent = v ?? 0;
+    });
+    updateSummaryBar(box, data);
+}
+
+// Barra proporcional Online / Degradado / Offline (soma = hosts monitorados).
+function updateSummaryBar(box, data) {
+    const bar = box.querySelector(".summary-bar");
+    if (!bar) return;
+    const up = Number(data.up) || 0;
+    const degraded = Number(data.degraded) || 0;
+    const down = Number(data.down) || 0;
+    const total = Math.max(Number(data.total_hosts) || 0, up + degraded + down);
+    const pct = (n) => (total > 0 ? (n / total) * 100 : 0);
+    const segs = { ok: up, warn: degraded, bad: down };
+    for (const [key, n] of Object.entries(segs)) {
+        const seg = bar.querySelector(`.seg-${key}`);
+        if (seg) seg.style.width = `${pct(n)}%`;
+    }
+    bar.setAttribute("aria-label", `Online ${up}, degradado ${degraded}, offline ${down} de ${total} hosts`);
+    bar.title = bar.getAttribute("aria-label");
+}
+
+// ======================
+// Chips de filtro por status (sincronizados com o <select id="statusFilter">)
+// ======================
+const STATUS_CHIPS = [
+    ["all", "Todos"],
+    ["bg-success", "Online"],
+    ["bg-warning", "Degradado"],
+    ["bg-danger", "Offline"],
+];
+
+function syncStatusChips() {
+    const select = document.getElementById("statusFilter");
+    const bar = document.getElementById("statusChips");
+    if (!select || !bar) return;
+    bar.querySelectorAll(".status-chip").forEach((chip) => {
+        const active = chip.dataset.status === select.value;
+        chip.classList.toggle("active", active);
+        chip.setAttribute("aria-pressed", active ? "true" : "false");
+    });
+}
+
+function updateStatusChipCounts() {
+    const bar = document.getElementById("statusChips");
+    if (!bar) return;
+    const counts = { all: 0, "bg-success": 0, "bg-warning": 0, "bg-danger": 0 };
+    document.querySelectorAll("#hosts .card").forEach((card) => {
+        counts.all += 1;
+        const dot = card.querySelector(".status-indicator");
+        if (!dot) return;
+        for (const key of ["bg-success", "bg-warning", "bg-danger"]) {
+            if (dot.classList.contains(key)) counts[key] += 1;
+        }
+    });
+    bar.querySelectorAll(".status-chip").forEach((chip) => {
+        const el = chip.querySelector(".status-chip-count");
+        if (el) el.textContent = counts[chip.dataset.status] ?? 0;
+    });
+}
+
+function initStatusChips() {
+    const select = document.getElementById("statusFilter");
+    const bar = document.getElementById("statusChips");
+    if (!select || !bar) return;
+    bar.innerHTML = STATUS_CHIPS.map(([value, label]) => `
+        <button type="button" class="status-chip" data-status="${value}" aria-pressed="false">
+            ${label}<span class="status-chip-count">0</span>
+        </button>`).join("");
+    bar.addEventListener("click", (event) => {
+        const chip = event.target.closest(".status-chip");
+        if (!chip) return;
+        select.value = chip.dataset.status;
+        syncStatusChips();
+        filterHosts();
+    });
+    select.addEventListener("change", syncStatusChips);
+    syncStatusChips();
 }
 
 function filterHosts() {
@@ -2496,6 +3082,28 @@ if (!isLoginPage) {
     if (importSelectedBtn) {
         importSelectedBtn.addEventListener("click", importSelectedLanHosts);
     }
+    const selectAllDiscoveryBtn = document.getElementById("selectAllDiscoveryBtn");
+    if (selectAllDiscoveryBtn) {
+        selectAllDiscoveryBtn.addEventListener("click", () => {
+            const checkboxes = Array.from(document.querySelectorAll("#networkDiscoveryList .discover-host-check:not(:disabled)"));
+            if (checkboxes.length === 0) return;
+            const anyUnchecked = checkboxes.some(cb => !cb.checked);
+            checkboxes.forEach(cb => { cb.checked = anyUnchecked; });
+            selectAllDiscoveryBtn.textContent = anyUnchecked ? "Desmarcar todos" : "Selecionar todos";
+        });
+    }
+    const discoveryList = document.getElementById("networkDiscoveryList");
+    if (discoveryList) {
+        discoveryList.addEventListener("change", (e) => {
+            if (e.target.classList.contains("discover-host-check")) {
+                const checkboxes = Array.from(document.querySelectorAll("#networkDiscoveryList .discover-host-check:not(:disabled)"));
+                const allChecked = checkboxes.length > 0 && checkboxes.every(cb => cb.checked);
+                if (selectAllDiscoveryBtn) {
+                    selectAllDiscoveryBtn.textContent = allChecked ? "Desmarcar todos" : "Selecionar todos";
+                }
+            }
+        });
+    }
     const openMenuBtn = document.getElementById("openMenuBtn");
     if (openMenuBtn) {
         openMenuBtn.addEventListener("click", openSidebarMenu);
@@ -2541,33 +3149,87 @@ window.addEventListener("click", (event) => {
     const trashModal = document.getElementById("trashModal");
     const sidebarOverlay = document.getElementById("sidebarOverlay");
     const changePwdModal = document.getElementById("changePwdModal");
+    const confirmEmptyTrashModal = document.getElementById("confirmEmptyTrashModal");
+    const pwdModal = document.getElementById("pwdModal");
 
     if (event.target === editModal) closeModal();
     if (event.target === trashModal) closeTrashModal();
     if (event.target === sidebarOverlay) closeSidebarMenu();
     if (event.target === changePwdModal) closeChangePwdModal();
+    if (event.target === confirmEmptyTrashModal) closeConfirmEmptyTrashModal();
+    if (event.target === pwdModal) closeAppModal(pwdModal);
 });
 
 window.addEventListener("keydown", (event) => {
-    if (event.key !== "Escape") return;
-    closeModal();
-    closeTrashModal();
-    closeSidebarMenu();
-    closeChangePwdModal();
+    const activeModal = document.querySelector(".modal:not(.hidden)");
+
+    if (event.key === "Escape") {
+        if (activeModal) {
+            event.preventDefault();
+            closeModal();
+            closeTrashModal();
+            closeChangePwdModal();
+            closeConfirmEmptyTrashModal();
+            const pwdModal = document.getElementById("pwdModal");
+            if (pwdModal) closeAppModal(pwdModal);
+        }
+        closeSidebarMenu();
+        return;
+    }
+
+    // Gerenciamento de foco acessível (Focus Trap)
+    if (event.key === "Tab" && activeModal) {
+        const focusableSelectors = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+        const focusables = Array.from(activeModal.querySelectorAll(focusableSelectors)).filter(el => el.offsetParent !== null);
+        if (focusables.length === 0) return;
+
+        const firstElement = focusables[0];
+        const lastElement = focusables[focusables.length - 1];
+
+        if (event.shiftKey && document.activeElement === firstElement) {
+            event.preventDefault();
+            lastElement.focus();
+        } else if (!event.shiftKey && document.activeElement === lastElement) {
+            event.preventDefault();
+            firstElement.focus();
+        }
+    }
 });
+
+const editModalEl = document.getElementById("editModal");
+if (editModalEl) {
+    editModalEl.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && e.target.tagName === "INPUT") {
+            e.preventDefault();
+            submitModalEdit();
+        }
+    });
+}
+
+const changePwdModalEl = document.getElementById("changePwdModal");
+if (changePwdModalEl) {
+    changePwdModalEl.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && e.target.tagName === "INPUT") {
+            e.preventDefault();
+            changePassword();
+        }
+    });
+}
 
 const changePwdBtn = document.getElementById("changePasswordBtn");
 
-if(changePwdBtn){
-    changePwdBtn.onclick = () =>{
-        document.getElementById("changePwdModal").classList.remove("hidden");
-    }
+if (changePwdBtn) {
+    changePwdBtn.onclick = () => {
+        const modal = document.getElementById("changePwdModal");
+        if (modal) openAppModal(modal);
+    };
 }
 
-function closeChangePwdModal(){
+function closeChangePwdModal() {
     const modal = document.getElementById("changePwdModal");
-    if (modal) modal.classList.add("hidden");
+    if (modal) closeAppModal(modal);
 }
+
 
 const logoutBtn = document.getElementById("logoutBtn");
 
@@ -2580,3 +3242,94 @@ if (logoutBtn) {
         }, 250);
     };
 };
+
+/* ==========================================================================
+   THEME TOGGLER MANAGER (LIGHT / DARK THEME)
+   ========================================================================== */
+(function initThemeManager() {
+    const themeToggleBtn = document.getElementById("themeToggleBtn");
+    
+    // Ler o estado atual do tema
+    const savedTheme = localStorage.getItem("theme");
+    const isDark = savedTheme === "dark";
+    
+    // Atualizar o ícone de carregamento inicial
+    updateThemeIcon(isDark);
+    
+    if (themeToggleBtn) {
+        themeToggleBtn.addEventListener("click", () => {
+            const currentIsDark = document.documentElement.classList.toggle("dark-theme");
+            document.body.classList.toggle("dark-theme", currentIsDark);
+            localStorage.setItem("theme", currentIsDark ? "dark" : "light");
+            updateThemeIcon(currentIsDark);
+            updateAllChartsTheme();
+        });
+    }
+    
+    function updateThemeIcon(isDarkState) {
+        const icon = document.getElementById("themeToggleIcon");
+        if (!icon) return;
+        if (isDarkState) {
+            icon.innerHTML = `<path d="M12 3a9 9 0 109 9 9.75 9.75 0 00-.67-3.4 6.78 6.78 0 01-7.93-7.93A9.75 9.75 0 0012 3z" fill="currentColor"/>`;
+            icon.removeAttribute("stroke");
+        } else {
+            icon.innerHTML = `<circle cx="12" cy="12" r="4" fill="#f9ab00"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" stroke="#f9ab00" stroke-width="2" stroke-linecap="round"/>`;
+        }
+    }
+
+    function updateAllChartsTheme() {
+        if (typeof charts === "undefined" || !charts) return;
+        const currentIsDark = document.body.classList.contains("dark-theme") || document.documentElement.classList.contains("dark-theme");
+        const textColor = currentIsDark ? "#94a3b8" : "#64748b";
+        const gridColor = currentIsDark ? "rgba(255, 255, 255, 0.08)" : "rgba(15, 23, 42, 0.06)";
+        const titleColor = currentIsDark ? "#f9fafb" : "#0f172a";
+        
+        Object.values(charts).forEach(chart => {
+            if (!chart) return;
+            
+            // Scales Y
+            if (chart.options.scales?.y) {
+                if (chart.options.scales.y.title) {
+                    chart.options.scales.y.title.color = titleColor;
+                }
+                if (chart.options.scales.y.grid) {
+                    chart.options.scales.y.grid.color = gridColor;
+                    chart.options.scales.y.grid.borderColor = gridColor;
+                }
+                if (chart.options.scales.y.ticks) {
+                    chart.options.scales.y.ticks.color = textColor;
+                }
+            }
+            
+            // Scales X
+            if (chart.options.scales?.x) {
+                if (chart.options.scales.x.grid) {
+                    chart.options.scales.x.grid.color = gridColor;
+                    chart.options.scales.x.grid.borderColor = gridColor;
+                }
+                if (chart.options.scales.x.ticks) {
+                    chart.options.scales.x.ticks.color = textColor;
+                }
+            }
+            
+            // Legend
+            if (chart.options.plugins?.legend?.labels) {
+                chart.options.plugins.legend.labels.color = textColor;
+            }
+            
+            // Tooltip
+            if (chart.options.plugins?.tooltip) {
+                chart.options.plugins.tooltip.backgroundColor = currentIsDark ? "#1e293b" : "#ffffff";
+                chart.options.plugins.tooltip.titleColor = currentIsDark ? "#f8fafc" : "#0f172a";
+                chart.options.plugins.tooltip.bodyColor = currentIsDark ? "#94a3b8" : "#475569";
+                chart.options.plugins.tooltip.borderColor = currentIsDark ? "#334155" : "#e2e8f0";
+            }
+            
+            chart.update();
+        });
+    }
+})();
+
+if (!isLoginPage) {
+    initStatusChips();
+}

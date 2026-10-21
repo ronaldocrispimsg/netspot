@@ -1,12 +1,28 @@
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  if (!localStorage.getItem("token")) {
+      window.location.replace("login.html");
+  }
+</script>
+<script src="js/vendor/chart.umd.min.js"></script>
+<script src="js/chart-theme.js"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NOC Lite - Dashboard</title>
-
-<link rel="stylesheet" href="style.css">
+<title>NetSpot - Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Open+Sans:ital,wght@0,300..800;1,300..800&family=Roboto:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+<script>
+  (function() {
+      const savedTheme = localStorage.getItem("theme");
+      if (savedTheme === "dark") {
+          document.documentElement.classList.add("dark-theme");
+      }
+  })();
+</script>
 </head>
 
 <body>
@@ -16,29 +32,46 @@
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
         </button>
         <div class="hero-copy app-topbar-title">
-            <h1>Dashboard</h1>
+            <a href="dashboard.html" class="app-logo-link" title="Ir para o início">
+                <img src="images/logo/Prancheta 1.png" alt="NetSpot" class="app-logo logo-light">
+                <img src="images/logo/Prancheta 2.png" alt="NetSpot" class="app-logo logo-dark">
+            </a>
         </div>
+        <button id="themeToggleBtn" class="theme-switch-pill" type="button" title="Alternar tema claro/escuro" aria-label="Alternar tema claro/escuro">
+            <svg class="theme-switch-icon-sun" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <svg class="theme-switch-icon-moon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3a9 9 0 109 9 9.75 9.75 0 00-.67-3.4 6.78 6.78 0 01-7.93-7.93A9.75 9.75 0 0012 3z"/></svg>
+            <span class="theme-switch-thumb">
+                <svg id="themeToggleIcon" viewBox="0 0 24 24" width="14" height="14"></svg>
+            </span>
+        </button>
         <a class="toolbar-link-btn icon-btn nav" href="incidents.html" title="Abrir histórico completo de incidentes" aria-label="Abrir histórico completo de incidentes">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16M4 12h16M4 19h10"/></svg>
         </a>
     </div>
 </header>
-<div class="container app-content">
+<main class="container app-content" id="main-content" role="main">
+<h1 class="visually-hidden">NetSpot - Painel de Monitoramento de Rede</h1>
 
 <section class="panel-section">
     <article class="overview-card">
-        <h2>Resumo da Rede</h2>
+        <h2>Resumo da rede</h2>
         <div id="dashboardSummary" class="summary-grid"></div>
     </article>
 </section>
 
 <section class="panel-section">
     <article class="overview-card">
-        <h2>Cadastrar Host</h2>
+        <h2>Cadastrar host</h2>
         <form id="hostForm">
+            <label for="name" class="visually-hidden">Nome do host</label>
             <input id="name" placeholder="Nome" required>
+
+            <label for="address" class="visually-hidden">Endereço ou IP</label>
             <input id="address" placeholder="Endereço/IP" required>
+
+            <label for="http_url" class="visually-hidden">URL HTTP opcional</label>
             <input id="http_url" placeholder="URL HTTP (opcional)">
+
             <label class="snmp-enable-field snmp-enable-switch">
                 <input id="http_enabled" type="checkbox" checked>
                 <span class="snmp-switch" aria-hidden="true"></span>
@@ -60,26 +93,31 @@
                 <span class="snmp-switch" aria-hidden="true"></span>
                 <span class="snmp-enable-text">
                     <strong>Ativar SNMP</strong>
-                    <small>Usar community noc-lite</small>
+                    <small>Usar community netspot</small>
                 </span>
             </label>
-            <button type="submit">Cadastrar</button>
+            <label for="snmp_community" class="visually-hidden">Community SNMP</label>
+            <input id="snmp_community" value="netspot" placeholder="netspot">
+            <button type="submit">Cadastrar host</button>
         </form>
     </article>
 </section>
 
 <section class="panel-section">
     <article class="overview-card">
-        <h2>Descoberta de Rede (LAN)</h2>
+        <h2>Descoberta de rede (LAN)</h2>
         <div class="network-discovery-form">
-            <input id="discoverSubnet" placeholder="Subnet CIDR (ex.: 192.168.0.0/24)">
+            <label for="discoverSubnet" class="visually-hidden">Subnet CIDR para varredura</label>
+            <input id="discoverSubnet" value="192.168.1.0/24" placeholder="Subnet CIDR (ex.: 192.168.0.0/24)">
             <button id="discoverBtn" type="button">Descobrir rede</button>
         </div>
+        <small class="discovery-helper-text">Limite máximo permitido: máscara <strong>/20</strong> (máx. 4096 endereços).</small>
         <div id="networkDiscoveryInfo" class="network-discovery-info" aria-live="polite"></div>
         <div id="networkDiscoveryList" class="network-discovery-list">
             <small>Nenhuma descoberta executada.</small>
         </div>
         <div class="network-discovery-actions">
+            <button id="selectAllDiscoveryBtn" type="button" class="btn-secondary-action" style="display: none;">Selecionar todos</button>
             <button id="importSelectedBtn" type="button">Adicionar selecionados</button>
         </div>
         <div id="networkImportResult" class="network-import-result" aria-live="polite"></div>
@@ -88,25 +126,29 @@
 
 <section class="panel-section">
       <div class="filter-bar">
+        <label for="searchInput" class="visually-hidden">Filtrar hosts por nome ou IP</label>
         <input type="text" id="searchInput" placeholder="Filtrar por nome ou IP..." onkeyup="filterHosts()">
+
+        <label for="statusFilter" class="visually-hidden">Filtrar por status</label>
         <select id="statusFilter" onchange="filterHosts()">
             <option value="all">Todos os Status</option>
             <option value="bg-success">Online</option>
             <option value="bg-danger">Offline</option>
             <option value="bg-warning">Degradado</option>
         </select>
+        <div id="statusChips" class="status-chips"></div>
     </div>
     <div class="hosts-toolbar">
       <div class="hosts-toolbar-main">
         <h2>Hosts</h2>
-        <button id="openTrashBtn" class="trash-open-btn" title="Abrir lixeira" aria-label="Abrir lixeira">
+        <button id="openTrashBtn" class="trash-open-btn" type="button" title="Abrir lixeira" aria-label="Abrir lixeira">
             <span class="btn-icon-wrap">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4h6l1 2h4v2H4V6h4l1-2zm-2 6h2v8H7v-8zm4 0h2v8h-2v-8zm4 0h2v8h-2v-8z"/></svg>
             </span>
             Lixeira
         </button>
       </div>
-      <button id="refreshBtn">Atualizar Lista</button>
+      <button id="refreshBtn" type="button">Atualizar lista</button>
     </div>
     <div id="hosts"></div>
 </section>
@@ -115,13 +157,22 @@
 
     <div id="alert-container"></div>
 
-<div id="editModal" class="modal hidden">
+<div id="editModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="editModalTitle">
   <div class="modal-content">
-    <h3>Editar Host</h3>
+    <div class="modal-header">
+      <h3 id="editModalTitle">Editar host</h3>
+      <button type="button" class="modal-close-btn" onclick="closeModal()" title="Fechar" aria-label="Fechar">&times;</button>
+    </div>
 
-    <input id="modal-name" disabled>
-    <input id="modal-ip" placeholder="Endereco/IP">
+    <label class="modal-label" for="modal-name">Nome do Host</label>
+    <input id="modal-name" disabled title="Nome do host (não editável)">
+
+    <label class="modal-label" for="modal-ip">Endereço / IP</label>
+    <input id="modal-ip" placeholder="Endereço/IP">
+
+    <label class="modal-label" for="modal-http-url">URL HTTP (opcional)</label>
     <input id="modal-http-url" placeholder="URL HTTP (opcional)">
+
     <label class="snmp-enable-field snmp-enable-switch">
       <input id="modal-http-enabled" type="checkbox">
       <span class="snmp-switch" aria-hidden="true"></span>
@@ -130,6 +181,7 @@
         <small>Ativa monitoramento web</small>
       </span>
     </label>
+
     <div id="modalPortsField" class="ports-field">
       <div class="ports-field-head">
         <span>Portas TCP</span>
@@ -137,54 +189,80 @@
       </div>
       <div id="modalPortsContainer" class="ports-container"></div>
     </div>
+
     <label class="snmp-enable-field snmp-enable-switch">
       <input id="modal-snmp-enabled" type="checkbox">
       <span class="snmp-switch" aria-hidden="true"></span>
       <span class="snmp-enable-text">
         <strong>Ativar SNMP</strong>
-        <small>Usar community noc-lite</small>
+        <small>Usar community netspot</small>
       </span>
     </label>
 
+    <label class="modal-label" for="modal-snmp-community">Community SNMP</label>
+    <input id="modal-snmp-community" value="netspot" placeholder="netspot">
+
     <div class="modal-actions">
-      <button type="button" onclick="submitModalEdit()">Salvar</button>
-      <button type="button" onclick="closeModal()">Cancelar</button>
+      <button type="button" class="modal-btn-primary" onclick="submitModalEdit()">Salvar</button>
+      <button type="button" class="modal-btn-secondary" onclick="closeModal()">Cancelar</button>
     </div>
 
   </div>
 </div>
 
-<div id="changePwdModal" class="modal hidden">
+<div id="changePwdModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="changePwdModalTitle">
   <div class="modal-content">
+    <div class="modal-header">
+      <h3 id="changePwdModalTitle">Alterar senha</h3>
+      <button type="button" class="modal-close-btn" onclick="closeChangePwdModal()" title="Fechar" aria-label="Fechar">&times;</button>
+    </div>
 
-    <h3>Alterar Senha</h3>
+    <label class="modal-label" for="current-pwd">Senha Atual</label>
+    <input id="current-pwd" type="password" placeholder="Senha atual" autocomplete="current-password">
 
-    <input id="current-pwd" type="password" placeholder="Senha atual">
-    <input id="new-pwd" type="password" placeholder="Nova senha">
-    <input id="confirm-pwd" type="password" placeholder="Confirmar nova senha">
+    <label class="modal-label" for="new-pwd">Nova Senha</label>
+    <input id="new-pwd" type="password" placeholder="Nova senha" autocomplete="new-password">
+
+    <label class="modal-label" for="confirm-pwd">Confirmar Nova Senha</label>
+    <input id="confirm-pwd" type="password" placeholder="Confirmar nova senha" autocomplete="new-password">
 
     <div class="modal-actions">
-      <button type="button" onclick="changePassword()">Alterar</button>
-      <button type="button" onclick="closeChangePwdModal()">Cancelar</button>
+      <button type="button" class="modal-btn-primary" onclick="changePassword()">Alterar</button>
+      <button type="button" class="modal-btn-secondary" onclick="closeChangePwdModal()">Cancelar</button>
     </div>
 
   </div>
 </div>
 
-<div id="trashModal" class="modal hidden">
+<div id="trashModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="trashModalTitle">
   <div class="modal-content trash-modal-content">
     <div class="trash-modal-header">
-      <h3>Lixeira</h3>
-      <button class="modal-close-btn" onclick="closeTrashModal()" aria-label="Fechar lixeira">×</button>
+      <h3 id="trashModalTitle">Lixeira</h3>
+      <button type="button" class="modal-close-btn" onclick="closeTrashModal()" aria-label="Fechar lixeira">&times;</button>
     </div>
     <div class="trash-modal-toolbar">
-      <button id="refreshTrashBtn">Atualizar lista</button>
+      <button id="emptyTrashBtn" class="trash-empty-btn danger-btn" type="button" onclick="openConfirmEmptyTrashModal()" title="Excluir permanentemente todos os hosts da lixeira">Excluir todos</button>
+      <button id="refreshTrashBtn" type="button">Atualizar lista</button>
     </div>
     <div id="trashHostsList" class="trash-list"></div>
   </div>
 </div>
 
+<div id="confirmEmptyTrashModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="confirmEmptyTrashTitle">
+  <div class="modal-content confirm-modal-content">
+    <div class="modal-header">
+      <h3 id="confirmEmptyTrashTitle">Excluir todos da lixeira</h3>
+      <button type="button" class="modal-close-btn" onclick="closeConfirmEmptyTrashModal()" title="Fechar" aria-label="Fechar">&times;</button>
+    </div>
+    <p class="confirm-modal-text">Tem certeza de que deseja excluir permanentemente <strong>todos os hosts</strong> que estão na lixeira?<br><small style="color: var(--text-muted, #59616e);">Essa ação não poderá ser desfeita.</small></p>
+    <div class="modal-actions">
+      <button type="button" class="modal-btn-danger" id="confirmEmptyTrashBtn" onclick="confirmEmptyTrash()">Sim, excluir todos</button>
+      <button type="button" class="modal-btn-secondary" onclick="closeConfirmEmptyTrashModal()">Cancelar</button>
+    </div>
+  </div>
 </div>
+
+</main>
 
 <div id="sidebarOverlay" class="sidebar-overlay hidden"></div>
 <aside id="sidebarMenu" class="sidebar-menu hidden" aria-hidden="true">
@@ -210,5 +288,5 @@
     </div>
 </aside>
 </body>
-<script src="app.js"></script>
+<script src="js/app.js"></script>
 </html>
