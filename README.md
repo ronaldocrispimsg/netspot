@@ -1,119 +1,133 @@
 # NetSpot - Sistema Inteligente de Monitoramento de Rede (NOC Lite)
 
 ![NetSpot Architecture](https://img.shields.io/badge/Architecture-Clean%20Architecture-blue)
-![Python](https://img.shields.io/badge/Backend-FastAPI%20%7C%20Python%203.11-green)
+![Python](https://img.shields.io/badge/Backend-FastAPI%20%7C%20Python%203.11%2F3.12-green)
 ![Docker](https://img.shields.io/badge/Container-Docker%20%26%20Docker%20Compose-blueviolet)
-![Tests](https://img.shields.io/badge/Tests-38%2F38%20Passed%20(100%25)-brightgreen)
-![License](https://img.shields.io/badge/License-MIT-orange)
+![Tests](https://img.shields.io/badge/Tests-61%2F61%20Passed%20(100%25)-brightgreen)
+![Accessibility](https://img.shields.io/badge/Accessibility-WCAG%202.1%20AA%20Compliant-success)
+![License](https://img.shields.io/badge/License-GPL--3.0-orange)
 
-**NetSpot** é um sistema completo e moderno de **Network Operations Center (NOC Lite)** desenvolvido para monitoramento em tempo real de infraestruturas de TI, servidores, ativos de rede e conectividade.
+**NetSpot** é um sistema completo e moderno de **Network Operations Center (NOC Lite)** desenvolvido para monitoramento em tempo real de infraestruturas de TI, servidores, ativos de rede e conectividade em ambientes corporativos e educacionais.
 
-O sistema combina monitoramento passivo e ativo (**ICMP Ping, Portas TCP, HTTP/HTTPS, DNS e SNMP Multivendor**), inteligência de autocura (Self-Healing), cálculo estatístico de métricas de saúde, SLA e latência, além de gestão automatizada de alertas via **RabbitMQ, N8N e Telegram**.
+O sistema combina monitoramento ativo e passivo (**ICMP Ping, Portas TCP, HTTP/HTTPS, DNS e SNMP Multivendor**), heurística especialista de inferência de **Causa Provável**, inteligência de autocura (**Self-Healing & Circuit Breaker**), cálculo estatístico contínuo de **Health Score**, **SLA** e **Jitter** (RFC 3550), além de gestão e despacho assíncrono de notificações via **RabbitMQ, n8n e Telegram**.
 
-> 📄 **Documentação detalhada**: Consulte o arquivo [`funcionalidades.md`](funcionalidades.md) para a especificação técnica completa de todos os módulos.
+> 📄 **Documentação Completa**:
+> - [`funcionalidades.md`](funcionalidades.md): Especificação técnica exaustiva de cada módulo e regra de negócio.
+> - [`kathara.md`](kathara.md): Topologia e guia de execução no laboratório experimental emulado Kathará (40+ nós).
 
 ---
 
 ## 🏛️ Arquitetura do Sistema
 
-O projeto foi construído seguindo os princípios de **Clean Architecture**, **SOLID**, **DRY**, **KISS** e **Isolamento de Serviços por Containers**.
+O projeto foi concebido seguindo os princípios da **Clean Architecture**, **SOLID**, **Twelve-Factor App** e isolamento completo de serviços por microsserviços conteinerizados:
 
 ```text
-                                 +-------------------+
-                                 |   Navegador Web   |
-                                 | (Dashboard HTML5) |
-                                 +---------+---------+
-                                           | :8080
-                                           v
-+------------------+             +-------------------+             +------------------+
-|   Base de Dados  |  SQLAlchemy  |  Backend FastAPI  |   PySNMP    | Agentes Nativos  |
-|  PostgreSQL 15   |<----------->|   (Python 3.11)   |<----------->| (Windows / Linux)|
-+------------------+  AsyncPG    +---------+---------+  UDP :161   +------------------+
-                                           | AMQP
-                                           v
-                                 +-------------------+
-                                 |     RabbitMQ      |
-                                 +---------+---------+
-                                           | HTTP Webhook
-                                           v
-                                 +-------------------+             +------------------+
-                                 |  N8N Automation   |------------>| Alertas Telegram |
-                                 +-------------------+             +------------------+
+                                 +-------------------------+
+                                 |   Navegador Web / NOC   |
+                                 |  (SPA HTML5 / Vanilla)  |
+                                 +------------+------------+
+                                              | :8080 (Nginx Alpine)
+                                              v
++------------------+             +-------------------------+             +------------------+
+|  Base de Dados   |  SQLAlchemy  |     Backend FastAPI     |   PySNMP    | Agentes Nativos  |
+|  PostgreSQL 15   |<----------->|   (Python 3.11 / 3.12)  |<----------->| (Windows/Linux/  |
++------------------+  AsyncPG    +------------+------------+  UDP :161   | Cisco/Mikrotik)  |
+                                              | AMQP                     +------------------+
+                                              v
+                                 +-------------------------+
+                                 |   RabbitMQ Message Bus  |
+                                 |   (Filas, DLX & DLQ)    |
+                                 +------------+------------+
+                                              | Webhook
+                                              v
+                                 +-------------------------+             +------------------+
+                                 |     n8n Automation      |------------>| Alertas Telegram |
+                                 +-------------------------+             +------------------+
 ```
 
 ---
 
 ## ✨ Funcionalidades Principais
 
-* **🛡️ Autocura e Resiliência (Self-Healing)**:
-  * **PostgreSQL**: Pool auto-regenerativo no SQLAlchemy (`pool_pre_ping=True`, `pool_recycle=1800s`, `wait_for_database()`).
-  * **RabbitMQ**: Conexão robusta (`connect_robust`) com monitor contínuo de autocura (`_monitor_connection_loop()`) para re-inscrição automática de consumidores.
-* **⚡ 5 Funcionalidades Avançadas de Resiliência**:
-  1. **`/healthz` + Docker Healthcheck**: Endpoint nativo de diagnóstico e reinício automático de container.
-  2. **Circuit Breaker Pattern**: Pausa automática de polling em hosts desativados/indisponíveis para evitar tempestades de rede.
-  3. **Dead Letter Queue (DLQ)**: Redirecionamento de mensagens com erro para `netspot.dlq` sem perda de eventos.
-  4. **Anti-Flapping & Deduplicação**: Detecção de oscilações repetitivas de estado e supressão contra a fadiga de alertas (*Alert Fatigue*).
-  5. **Graceful Shutdown**: Encerramento seguro de conexões de banco e brokers com sinais `SIGTERM`/`SIGINT`.
+* **🛡️ Autocura e Resiliência Operacional (Self-Healing)**:
+  * **Circuit Breaker Pattern**: Pausa progressiva e backoff exponencial em nós inoperantes para impedir sobrecarga de rede e *storm effects*.
+  * **RabbitMQ Resiliente**: Conexão auto-regenerativa com reconexão em loop contínuo e encaminhamento para Dead Letter Queue (`netspot.dlq`) em caso de falha.
+  * **Database Pool com Auto-Recovery**: Reconexão transparente do SQLAlchemy com `pool_pre_ping=True` e `wait_for_database()`.
+  * **Limpeza e Retenção Contínua**: Expurgo automático de métricas e históricos legados com política parametrizável via `.env` (`NETSPOT_RETENTION_DAYS`).
+  * **Proteção contra Subprocessos Zumbis**: Encerramento seguro de chamadas `ping` com timeout forçado `asyncio.wait_for` e `SIGKILL`.
+
 * **🖥️ Monitoramento Multi-Protocolo**:
-  * **ICMP Ping**: Latência em ms e taxa de perda de pacotes.
-  * **TCP**: Checagem de portas abertas/fechadas.
-  * **HTTP / HTTPS**: Verificação de código de status HTTP (200 OK) e tempo de resposta.
-  * **DNS**: Validação de resolução de nomes de domínio.
-* **📊 Agente SNMP Nativo Multivendor**:
-  * Leitura em tempo real de **Uso de CPU (%)**, **Memória RAM (%)**, **Uso de Disco (`C:\` e `/`)** e **Tráfego de Rede (Bps / Download e Upload)**.
-  * Mapeamento dinâmico automático para MIBs **Linux (UCD-SNMP)** e **Windows (HOST-RESOURCES-MIB)**, além de roteadores Cisco e Mikrotik.
-* **🔎 Descoberta Automática de Rede**:
-  * Varredura e importação inteligente de faixas IP com ativação automática do monitoramento SNMP (`snmp_enabled=True`).
-* **🎨 Frontend Responsivo & UX Moderna**:
-  * **Grid de 3 Cards por Linha**: Organização visual fixada em 3 colunas no Desktop com quebra responsiva para 2 em tablet e 1 em mobile.
-  * **Remoção Otimista Instantânea**: Animação de desvanecimento em 200ms na exclusão de hosts com atualização paralela das métricas do topo.
-* **🧹 Política de Retenção de Dados Configurável**:
-  * Limpeza automática via `NETSPOT_RETENTION_DAYS` no `.env` (ex: `30` dias). Definir `NETSPOT_RETENTION_DAYS=0` **desativa** a purga mantendo o histórico indefinidamente.
+  * **ICMP Ping**: Latência precisa em milissegundos e cálculo de taxa de perda de pacotes.
+  * **Portas TCP**: Varredura de integridade de portas de transporte (SSH, HTTP, HTTPS, Banco de Dados, etc.).
+  * **HTTP / HTTPS**: Validação de código de status (200 OK), tempo de resposta e análise de tendências de degradação.
+  * **DNS Resolver**: Checagem de resolução local e externa de nomes de domínio.
+
+* **📊 Motor SNMP Multivendor (Linux, Windows, Cisco, Mikrotik, Huawei)**:
+  * Leitura e normalização em tempo real de **Uso de CPU (%)**, **Memória RAM (%)**, **Uso de Disco (`/` e volumes `C:\`)** e **Tráfego de Rede (Download / Upload)**.
+  * Resolução automática de tabelas MIB com salvaguarda estrita contra loops infinitos (teto de 500 iterações).
+  * Community SNMP padrão parametrizável (`netspot`) com rejeição de credenciais padrão inseguras (`public`).
+
+* **🧠 Heurística de Causa Provável (Probable Cause Engine)**:
+  * Diagnóstico especialista imediato cruzando as camadas do modelo OSI:
+    * Detecção de regras de firewall corporativo (ICMP bloqueado mas portas de aplicação ativas);
+    * Sobrecarga de processador local (CPU > 90%);
+    * Degradação por Jitter excessivo (> 80 ms);
+    * Falha na resolução de nomes (DNS indisponível).
+
+* **🎨 Frontend SPA de Alto Desempenho (Ergonomia & WCAG 2.1 AA)**:
+  * **Flip Cards 3D (3 Faces por Host)**:
+    * *Face 1*: Resumo de conectividade, Health Score, tendência de latência e Causa Provável;
+    * *Face 2*: SLA individual por protocolo (Ping, TCP, HTTP), Jitter e portas ativas;
+    * *Face 3*: Telemetria SNMP de hardware e gráficos em tempo real;
+    * Indicador visual de face (`1/3`, `2/3`, `3/3`) e tooltips descritivos em cada botão de navegação.
+  * **Acessibilidade Digital Inclusiva**:
+    * Cores com taxa de contraste de **5.6:1** sobre fundos claros (excede o mínimo WCAG AA de 4.5:1);
+    * Suporte integral à navegação por teclado com anel visual inteligente `:focus-visible`;
+    * **Focus Trap** nos modais (aprisionamento e restauração de foco via <kbd>Tab</kbd> / <kbd>Esc</kbd>);
+    * Rótulos acessíveis e atributos ARIA em todos os elementos interativos.
+  * **Operação Offline-First**: Zero dependência de CDNs externos (fontes locais `.woff2` e Chart.js embutido), ideal para redes corporativas isoladas.
+  * **Gestão Ergonômica de Hosts**:
+    * Descoberta de rede automática com seleção/desmarcação em lote;
+    * Lixeira de hosts com esvaziamento total protegido por modal de confirmação.
 
 ---
 
-## 📁 Estrutura de Diretórios
+## 📁 Estrutura do Repositório
 
 ```text
 NetSpot/
-├── Backend/                    # Container FastAPI (Python 3.11)
-│   ├── core/                   # Banco de Dados, Segurança e Auth JWT
-│   ├── models/                 # Modelos ORM SQLAlchemy
-│   ├── schemas/                # Schemas Pydantic / DTOs
-│   ├── services/               # Circuit Breaker, Retenção, Métricas, Checadores e Notificações
-│   ├── snmp/                   # Módulo SNMP Multivendor (Discovery, Cache, Resolvers)
-│   ├── routes/                 # Endpoints RESTful e Rota /healthz
-│   ├── tests/                  # Suíte de Testes Automatizados (40 Testes Pytest)
-│   │   ├── conftest.py         # Fixtures de teste e cliente HTTP
-│   │   ├── test_alert_logic.py # Testes do Ciclo de Vida de Incidentes e Anti-Flapping
-│   │   ├── test_checker.py     # Testes de Ping, TCP, HTTP e DNS
-│   │   ├── test_metrics.py     # Testes de Saúde, SLA, Jitter e Tendências
-│   │   ├── test_retention.py   # Testes da Política de Retenção de Dados
-│   │   ├── test_snmp.py        # Testes do Módulo SNMP e Conversores
-│   │   ├── test_api_routes.py  # Testes de Integração das Rotas RESTful
-│   │   ├── test_self_healing.py # Testes dos Módulos de Autocura e Resiliência
-│   │   ├── test_models_schemas.py # Testes de Modelos e DTOs
-│   │   └── alert_logic_checklist.py # Smoke Test Standalone para CLI
-│   ├── main.py                 # Ponto de Entrada da Aplicação (Graceful Shutdown)
-│   ├── scheduler.py            # Orquestrador de Polling e Coleta Assíncrona
-│   └── snmp_engine.py          # Motor de Coleta SNMP de Alta Performance
-├── Frontend/                   # Container Nginx SPA
-│   ├── css/                    # Estilos CSS (Layout Grid 3 colunas, Dark Glassmorphism UI)
-│   ├── js/                     # Lógica JavaScript (Remoção Otimista, Dashboard e Incidentes)
-│   ├── dashboard.html          # Painel Principal com Cartões 3D Flip
-│   ├── incidents.html          # Histórico de Incidentes
-│   └── nginx.conf              # Configuração Nginx
-├── Database/                   # Volume Persistente PostgreSQL
-├── N8N/                        # Workflows de Automação de Alertas
-├── RabbitMQ/                   # Mensageria e Filas de Eventos (DLQ & DLX)
-├── scripts/
-│   └── snmp/                   # Scripts de Configuração dos Agentes SNMP
-│       ├── setup_snmp_windows.ps1 # Automação para Windows 10/11
-│       ├── setup_snmp_linux.sh    # Automação para Linux (Debian, Ubuntu, Mint, RHEL)
-│       └── README.md              # Instruções de Instalação dos Agentes
-├── funcionalidades.md          # Especificação Técnica Completa de Funcionalidades
-├── kathara.md                  # Especificação do Laboratório Experimental Kathará
-└── docker-compose.yml          # Orquestração de Containers
+├── Backend/                    # Microsserviço FastAPI (Python 3.11/3.12)
+│   ├── routes/                 # Endpoints RESTful (/api/hosts, /healthz, etc.)
+│   ├── services/               # Circuit Breaker, Retenção, Notificações e Métricas
+│   ├── snmp/                   # Motor SNMP Multivendor (Discovery, Cache, OID Resolvers)
+│   ├── tests/                  # Suíte de Testes Automatizados (61 testes Pytest)
+│   ├── checker.py              # Sondagens assíncronas concorrentes (Ping, TCP, HTTP, DNS)
+│   ├── database.py             # Configuração e pool resiliente do SQLAlchemy
+│   ├── metrics.py              # Modelagem matemática de Health Score, SLA e Jitter
+│   ├── models.py               # Modelos relacionais do banco de dados
+│   ├── mq_manager.py           # Gestor assíncrono de mensageria AMQP (RabbitMQ)
+│   ├── scheduler.py            # Orquestrador periódico de coleta e telemetria
+│   └── security.py             # Criptografia, hashing bcrypt e autenticação JWT
+├── Frontend/                   # Interface SPA servida por Nginx Alpine
+│   ├── css/style.css           # Design System Vanilla CSS (Light & Dark Theme)
+│   ├── js/app.js               # Gerenciador de estado, animações 3D e renderização SPA
+│   ├── js/incidents.js         # Lógica da tela de incidentes e exportação
+│   ├── fonts/                  # Fontes Open Sans locais (Offline-First)
+│   ├── dashboard.html          # Dashboard principal com Cards 3D
+│   ├── incidents.html          # Painel histórico de alertas e incidentes
+│   ├── login.html              # Tela de autenticação com suporte a troca de tema
+│   └── nginx.conf              # Configuração Nginx com headers de segurança HTTP
+├── Database/                   # Volume persistente do PostgreSQL
+├── Escrita_TCC/                # Documentação Acadêmica e Monografia
+│   └── Escrita_latex/          # Fonte LaTeX oficial do TCC (TCC - NetSpot.tex)
+├── N8N/workflows/              # Workflows de orquestração de notificações (Telegram)
+├── RabbitMQ/                   # Mensageria e filas de eventos
+├── Teste - Kathará/            # Laboratório de simulação de rede (40+ nós)
+├── scripts/snmp/               # Automação de setup de agentes SNMP (Linux e Windows)
+├── docker-compose.yml          # Orquestração dos 5 containers do sistema
+├── .env.example                # Template sanitizado de variáveis de ambiente
+├── pyproject.toml              # Metadados e dependências do projeto Python
+└── LICENSE                     # Licença GNU General Public License v3.0 (GPL-3.0)
 ```
 
 ---
@@ -125,102 +139,84 @@ NetSpot/
 * **Docker** (versão 20.10 ou superior)
 * **Docker Compose** (versão 2.0 ou superior)
 
-### 1. Configurar Variáveis de Ambiente (.env)
+### 1. Configurar o Arquivo de Ambiente (.env)
 
-Antes de iniciar os containers, crie o arquivo `.env` a partir do modelo `.env.example` e configure senhas fortes:
+Crie o arquivo `.env` a partir do modelo seguro `.env.example`:
 
 ```bash
 cp .env.example .env
 ```
 
-Edite as principais variáveis no `.env`:
-* **PostgreSQL**: `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` e `DATABASE_URL`.
-* **Segurança da API**: `NETSPOT_SECRET_KEY` (chave de assinatura JWT) e `NETSPOT_DEFAULT_ADMIN_PASSWORD` (senha do primeiro acesso admin).
-* **RabbitMQ**: `RABBITMQ_USER` e `RABBITMQ_PASSWORD`.
-* **N8N Automation**: `N8N_BASIC_AUTH_USER` e `N8N_BASIC_AUTH_PASSWORD`.
+Edite o `.env` definindo as credenciais desejadas:
+* **Banco de Dados**: `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` e `DATABASE_URL`.
+* **Segurança**: `NETSPOT_SECRET_KEY` (chave de assinatura JWT) e `NETSPOT_DEFAULT_ADMIN_PASSWORD`.
+* **Mensageria**: `RABBITMQ_USER` e `RABBITMQ_PASSWORD`.
+* **Automação N8N**: `N8N_BASIC_AUTH_USER` e `N8N_BASIC_AUTH_PASSWORD`.
 * **Telegram**: `NETSPOT_TELEGRAM_BOT_TOKEN` e `NETSPOT_TELEGRAM_CHAT_ID`.
 
-### 2. Iniciar todos os Containers
+### 2. Inicializar o Ambiente em Containers
 
-Na raiz do projeto, execute:
+Execute o comando na raiz do projeto:
 
 ```bash
-docker-compose up -d --build
+docker compose up -d --build
 ```
 
-O Docker Compose irá inicializar automaticamente os 5 serviços:
-1. `netspot-db` (PostgreSQL 15 em `localhost:5432`)
-2. `netspot-backend` (FastAPI em `localhost:8000`)
-3. `netspot-frontend` (Nginx em `localhost:8080`)
-4. `netspot-rabbitmq` (RabbitMQ Management em `localhost:15672`)
-5. `netspot-n8n` (N8N Automation em `localhost:5678`)
+O Docker Compose iniciará automaticamente os 5 serviços interligados:
+1. `netspot-postgres`: Banco relacional (PostgreSQL 15 em `localhost:5432`)
+2. `netspot-backend`: API assíncrona (FastAPI em `localhost:8000`)
+3. `netspot-frontend`: Interface web SPA (Nginx em `localhost:8080`)
+4. `netspot-rabbitmq`: Painel de mensageria (RabbitMQ em `localhost:15672`)
+5. `netspot-n8n`: Orquestrador de notificações (N8N em `localhost:5678`)
+
+---
+
+## 🌐 Endereços e Credenciais de Acesso
+
+| Serviço | URL de Acesso | Credenciais |
+| :--- | :--- | :--- |
+| 🖥️ **Frontend Dashboard** | [http://localhost:8080](http://localhost:8080) | `admin` / (definida em `NETSPOT_DEFAULT_ADMIN_PASSWORD`) |
+| 🔌 **Documentação da API (Swagger)** | [http://localhost:8000/docs](http://localhost:8000/docs) | — |
+| 🏥 **Healthcheck Nativo** | [http://localhost:8000/healthz](http://localhost:8000/healthz) | — |
+| 🐇 **RabbitMQ Management** | [http://localhost:15672](http://localhost:15672) | Conforme configurado no `.env` (`RABBITMQ_USER` / `RABBITMQ_PASSWORD`) |
+| ⚡ **n8n Automation** | [http://localhost:5678](http://localhost:5678) | Conforme configurado no `.env` (`N8N_BASIC_AUTH_USER` / `N8N_BASIC_AUTH_PASSWORD`) |
 
 ---
 
 ## 🧪 Suíte de Testes Automatizados (Pytest)
 
-O NetSpot inclui uma suíte de testes assíncronos cobrindo checadores de rede, métricas NOC, retenção de dados, módulo SNMP, modelos ORM, rotas RESTful, módulos de autocura e máquina de estados de incidentes (**59/59 testes aprovados**).
+A suíte de testes cobre integralmente checagens de rede, métricas de SLA, inferência de causa provável, expurgo de retenção, módulo SNMP multivendor, tolerância a falhas e rotas autenticadas da API (**61/61 testes aprovados**).
 
-Para executar os testes dentro do container backend, rode:
-
-```bash
-docker exec -e PYTHONPATH=. netspot-backend python -m pytest Backend/tests -v
-```
-
----
-
-## 🧪 Laboratório Experimental com Kathará (40+ Nós)
-
-Para simulações em ambiente corporativo/acadêmico em larga escala, o NetSpot suporta integração nativa com o **Kathará**.
-Consulte o guia [`kathara.md`](kathara.md) para detalhes de topologia de 4 sub-redes roteadas e injeção de falhas via `tc` e `stress-ng`.
-
----
-
-## 🌐 Endereços de Acesso
-
-| Serviço | URL de Acesso | Credenciais Padrão |
-| :--- | :--- | :--- |
-| 🖥️ **Frontend Dashboard** | [http://localhost:8080](http://localhost:8080) | — |
-| 🔌 **Backend API Docs (Swagger)** | [http://localhost:8080/docs](http://localhost:8000/docs) | — |
-| 🏥 **Healthcheck Nativo** | [http://localhost:8000/healthz](http://localhost:8000/healthz) | — |
-| 🐇 **RabbitMQ Management** | [http://localhost:15672](http://localhost:15672) | `guest` / `guest` |
-| ⚡ **N8N Automation** | [http://localhost:5678](http://localhost:5678) | `admin` / `admin` |
-
----
-
-## 🔌 Configuração dos Agentes SNMP nos Hosts
-
-Para habilitar o monitoramento de **CPU, Memória RAM, Disco e Tráfego de Rede** nas suas máquinas clientes, utilize os scripts prontos localizados no diretório [`scripts/snmp/`](scripts/snmp/):
-
-### 🪟 No Windows (10 ou 11)
-
-Abra o **PowerShell como Administrador** e execute:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\snmp\setup_snmp_windows.ps1
-```
-
-### 🐧 No Linux (Debian, Ubuntu, Linux Mint, RHEL/Fedora, Arch)
-
-Abra o **Terminal como Root** e execute:
+Para executar os testes no container backend:
 
 ```bash
-chmod +x ./scripts/snmp/setup_snmp_linux.sh
-sudo ./scripts/snmp/setup_snmp_linux.sh
+docker exec -it netspot-backend pytest Backend/tests -v
+```
+
+Ou localmente com o gerenciador `uv`:
+
+```bash
+uv run pytest Backend/tests
 ```
 
 ---
 
-## 🛠️ Tecnologias Utilizadas
+## 🔌 Configuração de Agentes SNMP nos Clientes
 
-* **Backend**: Python 3.11, FastAPI, SQLAlchemy, AsyncPG, PySNMP, Pydantic, Uvicorn.
-* **Frontend**: HTML5, Vanilla CSS3 (Layout Grid 3 Colunas, Dark Glassmorphism UI), JavaScript ES6+, Chart.js, Nginx Alpine.
-* **Banco de Dados**: PostgreSQL 15.
-* **Mensageria & Automação**: RabbitMQ, N8N Workflows.
-* **Infraestrutura & Testes**: Docker, Docker Compose, Pytest.
+Para coletar **CPU, Memória RAM, Disco e Tráfego de Rede** em clientes da rede, utilize os scripts automatizados disponíveis em [`scripts/snmp/`](scripts/snmp/):
+
+* **No Windows (PowerShell como Administrador)**:
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File .\scripts\snmp\setup_snmp_windows.ps1
+  ```
+* **No Linux (Debian, Ubuntu, Mint, Fedora, Arch)**:
+  ```bash
+  chmod +x ./scripts/snmp/setup_snmp_linux.sh
+  sudo ./scripts/snmp/setup_snmp_linux.sh
+  ```
 
 ---
 
 ## 📄 Licença
 
-Este projeto é disponibilizado sob a licença **MIT**. Sinta-se livre para utilizar, modificar e contribuir!
+Este projeto é software livre licenciado sob a **GNU General Public License v3.0 (GPL-3.0)**. Consulte o arquivo [`LICENSE`](LICENSE) para mais detalhes sobre direitos de cópia, distribuição e modificação.

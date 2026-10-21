@@ -86,16 +86,61 @@ function renderIncidents(items) {
     `}).join("");
 }
 
-function applySearch() {
+let currentFilter = "all";
+
+function updateChipCounts() {
+    const total = incidentsCache.length;
+    const openCount = incidentsCache.filter((inc) => String(inc.status || "").toUpperCase() === "OPEN").length;
+    const closedCount = incidentsCache.filter((inc) => String(inc.status || "").toUpperCase() === "CLOSED").length;
+
+    const countAllEl = document.getElementById("countAll");
+    if (countAllEl) countAllEl.textContent = total;
+    const countOpenEl = document.getElementById("countOpen");
+    if (countOpenEl) countOpenEl.textContent = openCount;
+    const countClosedEl = document.getElementById("countClosed");
+    if (countClosedEl) countClosedEl.textContent = closedCount;
+}
+
+function applyFilters() {
     const term = String(document.getElementById("incidentsSearch")?.value || "").toLowerCase().trim();
-    if (!term) {
-        renderIncidents(incidentsCache);
-        return;
+
+    let filtered = incidentsCache;
+
+    if (currentFilter === "open") {
+        filtered = filtered.filter((inc) => String(inc.status || "").toUpperCase() === "OPEN");
+    } else if (currentFilter === "closed") {
+        filtered = filtered.filter((inc) => String(inc.status || "").toUpperCase() === "CLOSED");
     }
-    const filtered = incidentsCache.filter((inc) =>
-        String(inc.host_name || "").toLowerCase().includes(term)
-    );
+
+    if (term) {
+        filtered = filtered.filter((inc) =>
+            String(inc.host_name || "").toLowerCase().includes(term) ||
+            String(inc.reason_text || inc.reason || "").toLowerCase().includes(term) ||
+            String(inc.incident_type || "").toLowerCase().includes(term)
+        );
+    }
+
     renderIncidents(filtered);
+}
+
+function initStatusChips() {
+    const chipsContainer = document.getElementById("incidentStatusChips");
+    if (!chipsContainer) return;
+
+    chipsContainer.addEventListener("click", (e) => {
+        const btn = e.target.closest(".status-chip");
+        if (!btn) return;
+        const status = btn.getAttribute("data-status");
+        if (!status) return;
+
+        currentFilter = status;
+
+        chipsContainer.querySelectorAll(".status-chip").forEach((chip) => {
+            chip.classList.toggle("active", chip === btn);
+        });
+
+        applyFilters();
+    });
 }
 
 async function loadIncidents(silent = false) {
@@ -117,7 +162,8 @@ async function loadIncidents(silent = false) {
         }
         const data = await res.json();
         incidentsCache = Array.isArray(data) ? data : [];
-        applySearch();
+        updateChipCounts();
+        applyFilters();
     } finally {
         if (refreshIcon) {
             setTimeout(() => refreshIcon.classList.remove("spin"), 400);
@@ -126,8 +172,10 @@ async function loadIncidents(silent = false) {
 }
 
 window.addEventListener("DOMContentLoaded", async () => {
+    initStatusChips();
+
     const searchInput = document.getElementById("incidentsSearch");
-    if (searchInput) searchInput.addEventListener("input", applySearch);
+    if (searchInput) searchInput.addEventListener("input", applyFilters);
 
     const refreshBtn = document.getElementById("refreshIncidentsBtn");
     if (refreshBtn) {
@@ -154,12 +202,18 @@ window.addEventListener("DOMContentLoaded", async () => {
     const savedTheme = localStorage.getItem("theme");
     const isDark = savedTheme === "dark";
     
+    if (isDark) {
+        document.documentElement.classList.add("dark-theme");
+        document.body.classList.add("dark-theme");
+    }
+
     // Atualizar o ícone de carregamento inicial
     updateThemeIcon(isDark);
     
     if (themeToggleBtn) {
         themeToggleBtn.addEventListener("click", () => {
             const currentIsDark = document.documentElement.classList.toggle("dark-theme");
+            document.body.classList.toggle("dark-theme", currentIsDark);
             localStorage.setItem("theme", currentIsDark ? "dark" : "light");
             updateThemeIcon(currentIsDark);
         });

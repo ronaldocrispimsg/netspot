@@ -274,9 +274,58 @@ def test_xss_host_name_escaping():
     assert "&lt;img" in escaped_img
 
 
+def test_inactive_http_does_not_penalize_host_severity():
+    h = _host(
+        status="UP",
+        sla_rolling_ping=100.0,
+        sla_rolling_tcp=100.0,
+        sla_rolling_http=0.0,
+        http_enabled=False,
+    )
+    sev, reasons = apply_preventive_logic(h)
+    assert sev == "HEALTHY"
+    assert "SLA instável" not in reasons
+    assert "Queda de taxa de sucesso" not in reasons
 
 
+def test_empty_trash_endpoint():
+    from Backend.routes.hosts import empty_trash
+    from Backend.models import Host
 
+    class FakeQuery:
+        def __init__(self, items):
+            self.items = items
 
+        def filter(self, *args, **kwargs):
+            return self
 
+        def all(self):
+            return self.items
 
+        def delete(self, synchronize_session=False):
+            return len(self.items)
+
+    class FakeSession:
+        def __init__(self, trash_hosts):
+            self.trash_hosts = trash_hosts
+            self.deleted = []
+
+        def query(self, model):
+            if model == Host:
+                return FakeQuery(self.trash_hosts)
+            return FakeQuery([])
+
+        def delete(self, item):
+            self.deleted.append(item)
+
+        def commit(self):
+            pass
+
+    fake_h1 = Host(id=1, name="host1", active=False)
+    fake_h2 = Host(id=2, name="host2", active=False)
+    session = FakeSession([fake_h1, fake_h2])
+
+    result = empty_trash(db=session, user="admin")
+    assert result["deleted_count"] == 2
+    assert "2 host(s) removido(s)" in result["detail"]
+    assert len(session.deleted) == 2

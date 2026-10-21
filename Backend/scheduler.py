@@ -631,14 +631,16 @@ async def _host_check_async(host_id: int) -> None:
         host.sla_rolling_tcp = await calc_sla_rolling_tcp_ports_async(db, host.id, active_tcp_ports, 50)
         host.jitter_ms_tcp = await calc_jitter_tcp_ports_async(db, host.id, active_tcp_ports, 10)
 
-        host.sla_rolling_http = await calc_sla_rolling_http_async(db, host.id, 50)
-        host.jitter_ms_http = await calc_jitter_http_async(db, host.id, 10)
-
-        host.slope = await calc_latency_trend_ping_async(db, host.id, 10)
-        host.trend = classify_trend(host.slope)
-
-        host.slope_http = await calc_latency_trend_http_async(db, host.id, 10)
-        host.trend_http = classify_trend_http(host.slope_http)
+        if bool(getattr(host, "http_enabled", True)):
+            host.sla_rolling_http = await calc_sla_rolling_http_async(db, host.id, 50)
+            host.jitter_ms_http = await calc_jitter_http_async(db, host.id, 10)
+            host.slope_http = await calc_latency_trend_http_async(db, host.id, 10)
+            host.trend_http = classify_trend_http(host.slope_http)
+        else:
+            host.sla_rolling_http = None
+            host.jitter_ms_http = None
+            host.slope_http = None
+            host.trend_http = "UNKNOWN"
 
         if service_up_without_icmp:
             host.sla_rolling_ping = None

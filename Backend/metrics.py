@@ -464,10 +464,12 @@ def apply_preventive_logic(host, snmp_data=None, ignore_ping_metrics: bool = Fal
 
     # ---------- SLA ----------
     sla_ping = None if ignore_ping_metrics else host.sla_rolling_ping
+    http_is_active = bool(getattr(host, "http_enabled", True))
+    sla_http = host.sla_rolling_http if http_is_active else None
     sla_values = [
         sla_ping,
         host.sla_rolling_tcp,
-        host.sla_rolling_http
+        sla_http
     ]
 
     valid_slas = [v for v in sla_values if v is not None]
@@ -482,10 +484,11 @@ def apply_preventive_logic(host, snmp_data=None, ignore_ping_metrics: bool = Fal
 
     # ---------- Jitter ----------
     jitter_ping = None if ignore_ping_metrics else host.jitter_ms_ping
+    jitter_http = host.jitter_ms_http if http_is_active else None
     jitter_values = [
         jitter_ping,
         host.jitter_ms_tcp,
-        host.jitter_ms_http
+        jitter_http
     ]
 
     valid_jitters = [v for v in jitter_values if v is not None]
@@ -505,7 +508,7 @@ def apply_preventive_logic(host, snmp_data=None, ignore_ping_metrics: bool = Fal
         preventive_severity = max_severity(preventive_severity, "WARNING")
         reasons.append("Tendência de piora no ping")
 
-    if host.trend_http in HTTP_WORSENING_TRENDS:
+    if http_is_active and host.trend_http in HTTP_WORSENING_TRENDS:
         preventive_severity = max_severity(preventive_severity, "WARNING")
         reasons.append("Tendência de piora no HTTP")
 

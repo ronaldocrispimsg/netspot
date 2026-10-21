@@ -45,15 +45,28 @@
     </div>
 </header>
 
-<div class="container app-content">
+<main class="container app-content" id="main-content" role="main">
+    <h1 class="visually-hidden">NetSpot - Histórico de Incidentes</h1>
 
     <section class="panel-section">
         <article class="overview-card incidents-page-card">
             <div class="incidents-toolbar">
-                <input id="incidentsSearch" type="text" placeholder="Buscar por nome do host...">
+                <label for="incidentsSearch" class="visually-hidden">Buscar incidentes por nome do host ou motivo</label>
+                <input id="incidentsSearch" type="text" placeholder="Buscar por nome do host ou motivo...">
                 <button id="refreshIncidentsBtn" class="refresh-pill-btn" type="button" title="Atualizar lista de incidentes" aria-label="Atualizar lista de incidentes">
                     <svg class="refresh-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
                     <span>Atualizar</span>
+                </button>
+            </div>
+            <div class="status-chips incidents-chips" id="incidentStatusChips">
+                <button type="button" class="status-chip active" data-status="all">
+                    Todos <span class="status-chip-count" id="countAll">0</span>
+                </button>
+                <button type="button" class="status-chip chip-open" data-status="open">
+                    Abertos <span class="status-chip-count" id="countOpen">0</span>
+                </button>
+                <button type="button" class="status-chip chip-closed" data-status="closed">
+                    Fechados <span class="status-chip-count" id="countClosed">0</span>
                 </button>
             </div>
             <div id="incidentsList" class="incidents-list" aria-live="polite">
@@ -61,7 +74,7 @@
             </div>
         </article>
     </section>
-</div>
+</main>
 <script src="js/incidents.js"></script>
 </body>
 </html>

@@ -278,7 +278,8 @@ if (loginForm) {
                 // VERIFICA SE PRECISA TROCAR SENHA
                 if (data.must_change_password) {
                     showToast("info", "Troca de senha obrigatória para continuar.");
-                    document.getElementById("pwdModal").classList.remove("hidden");
+                    const pwdModal = document.getElementById("pwdModal");
+                    if (pwdModal) openAppModal(pwdModal);
                 } else {
                     showToast("success", "Login realizado com sucesso.");
                     setTimeout(() => {
@@ -393,11 +394,12 @@ async function changePassword(){
 // ======================
 // Cadastrar Host (POST)
 // ======================
+const currentHostsMap = new Map();
 const hostForm = document.getElementById("hostForm");
 const portsContainer = document.getElementById("portsContainer");
 const addPortBtn = document.getElementById("addPortBtn");
 
-function addPortInput(container, value = "", removable = false, placeholder = "Porta") {
+function addPortInput(container, value = "", removable = true, placeholder = "Porta") {
     if (!container) return;
     const row = document.createElement("div");
     row.className = "port-input-row";
@@ -416,6 +418,7 @@ function addPortInput(container, value = "", removable = false, placeholder = "P
         removeBtn.type = "button";
         removeBtn.className = "remove-port-btn";
         removeBtn.title = "Remover porta";
+        removeBtn.setAttribute("aria-label", "Remover porta");
         removeBtn.textContent = "−";
         removeBtn.addEventListener("click", () => row.remove());
         row.appendChild(removeBtn);
@@ -427,9 +430,7 @@ function addPortInput(container, value = "", removable = false, placeholder = "P
 function resetCreatePorts() {
     if (!portsContainer) return;
     portsContainer.innerHTML = "";
-    addPortInput(portsContainer, "", false, "Porta");
-    addPortInput(portsContainer, "", false, "Porta");
-    addPortInput(portsContainer, "", false, "Porta");
+    addPortInput(portsContainer, "", true, "Porta (opcional)");
 }
 
 function setModalPorts(ports) {
@@ -444,14 +445,11 @@ function setModalPorts(ports) {
         : [];
 
     if (normalized.length === 0) {
-        addPortInput(container, "", false, "Porta");
-        addPortInput(container, "", false, "Porta");
-        addPortInput(container, "", false, "Porta");
+        addPortInput(container, "", true, "Porta (opcional)");
         return;
     }
 
-    while (normalized.length < 3) normalized.push("");
-    normalized.forEach((value, index) => addPortInput(container, value, index >= 3, "Porta"));
+    normalized.forEach((value) => addPortInput(container, value, true, "Porta"));
 }
 
 function collectPorts(container) {
@@ -536,6 +534,12 @@ if (hostForm) {
             snmp_community: (snmpCommunityInput?.value || "").trim() || "netspot"
         };
 
+        const submitBtn = hostForm.querySelector('button[type="submit"]');
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.classList.add("is-loading");
+        }
+
         try {
             const response = await fetchWithAuth(`${API}/host/create`, {
                 method: "POST",
@@ -562,6 +566,11 @@ if (hostForm) {
         } catch (err) {
             console.error("Erro na requisição:", err);
             showToast("error", "Não foi possível conectar ao servidor.");
+        } finally {
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.classList.remove("is-loading");
+            }
         }
     });
 }
@@ -571,16 +580,22 @@ let discoveredLanHosts = [];
 function renderDiscoveredLanHosts() {
     const listBox = document.getElementById("networkDiscoveryList");
     const infoBox = document.getElementById("networkDiscoveryInfo");
+    const selectAllBtn = document.getElementById("selectAllDiscoveryBtn");
     if (!listBox || !infoBox) return;
 
     if (!Array.isArray(discoveredLanHosts) || discoveredLanHosts.length === 0) {
         infoBox.textContent = "";
         listBox.innerHTML = "<small>Nenhum host encontrado.</small>";
+        if (selectAllBtn) selectAllBtn.style.display = "none";
         return;
     }
 
     const selectableCount = discoveredLanHosts.filter((h) => !h.already_exists).length;
     infoBox.textContent = `${discoveredLanHosts.length} host(s) encontrado(s) • ${selectableCount} disponível(is) para importação`;
+    if (selectAllBtn) {
+        selectAllBtn.style.display = selectableCount > 0 ? "inline-flex" : "none";
+        selectAllBtn.textContent = "Desmarcar todos";
+    }
     listBox.innerHTML = discoveredLanHosts.map((host) => {
         const disabled = host.already_exists ? "disabled" : "";
         const checked = host.already_exists ? "" : "checked";
@@ -906,16 +921,17 @@ function buildHostCardHTML(h) {
         </div>
 
         <div class="face-nav">
-            <button class="face-nav-btn face-prev-btn hidden" type="button" title="Face anterior" aria-label="Face anterior" onclick="prevHostFace('${h.name}')">${iconSvg("arrow_left")}</button>
+            <button class="face-nav-btn face-prev-btn hidden" type="button" title="Voltar face" aria-label="Voltar face" onclick="prevHostFace('${h.name}')">${iconSvg("arrow_left")}</button>
+            <span class="face-indicator-label" title="Exibindo Face 1 de 3: Resumo e status">1/3</span>
             <div class="icon-actions">
-                <button class="icon-btn" type="button" title="Histórico" aria-label="Histórico" onclick="toggleHistory('${h.name}')">${iconSvg("history")}</button>
+                <button class="icon-btn" type="button" title="Histórico recente" aria-label="Histórico recente" onclick="toggleHistory('${h.name}')">${iconSvg("history")}</button>
                 <button class="icon-btn" type="button" title="Gráfico de latência" aria-label="Gráfico de latência" onclick="toggleLatencyChart('${h.name}')">${iconSvg("latency")}</button>
                 ${snmpConfigured ? `<button class="icon-btn" type="button" title="Gráfico SNMP" aria-label="Gráfico SNMP" onclick="toggleSnmpChart('${h.name}')">${iconSvg("snmp")}</button>` : ""}
                 <button class="icon-btn" type="button" title="Disponibilidade por tipo" aria-label="Disponibilidade por tipo" onclick="toggleAvailabilityChartType('${h.name}')">${iconSvg("availability_type")}</button>
                 <button class="icon-btn" type="button" title="Disponibilidade geral" aria-label="Disponibilidade geral" onclick="toggleAvailabilityChart('${h.name}')">${iconSvg("availability")}</button>
-                <button class="icon-btn" type="button" title="Editar host" aria-label="Editar host" onclick='openEditModal(${JSON.stringify(h.name)}, ${JSON.stringify(h.address)}, ${JSON.stringify(hostPorts)}, ${JSON.stringify(h.http_url || "")}, ${h.http_enabled ? "true" : "false"}, ${h.snmp_enabled ? "true" : "false"}, ${JSON.stringify(h.snmp_community || "netspot")})'>${iconSvg("edit")}</button>
+                <button class="icon-btn" type="button" title="Editar host" aria-label="Editar host" onclick='openEditModal(${JSON.stringify(h.name)})'>${iconSvg("edit")}</button>
             </div>
-            <button class="face-nav-btn face-next-btn" type="button" title="Próxima face" aria-label="Próxima face" onclick="nextHostFace('${h.name}')">${iconSvg("arrow_right")}</button>
+            <button class="face-nav-btn face-next-btn" type="button" title="Avançar para Face 2: Métricas de rede" aria-label="Avançar para Face 2: Métricas de rede" onclick="nextHostFace('${h.name}')">${iconSvg("arrow_right")}</button>
         </div>
 
         <!-- Body: três colunas (Resumo | Rede | SNMP) -->
@@ -944,13 +960,13 @@ function buildHostCardHTML(h) {
                             <small><b>Taxa de sucesso</b></small>
                             <small>Ping: ${h.sla_rolling_ping ?? "N/A"}%</small>
                             <small>TCP: ${h.sla_rolling_tcp ?? "N/A"}%</small>
-                            <small>HTTP: ${h.sla_rolling_http ?? "N/A"}%</small>
+                            <small>HTTP: ${h.http_enabled === false ? "Inativo" : (h.sla_rolling_http !== null && h.sla_rolling_http !== undefined ? `${h.sla_rolling_http}%` : "N/A")}</small>
                         </div>
                         <div class="network-col">
                             <small><b>Variação na latência</b></small>
                             <small>Ping: ${h.jitter_ms_ping ?? "N/A"} ms</small>
                             <small>TCP: ${h.jitter_ms_tcp ?? "N/A"} ms</small>
-                            <small>HTTP: ${h.jitter_ms_http ?? "N/A"} ms</small>
+                            <small>HTTP: ${h.http_enabled === false ? "Inativo" : (h.jitter_ms_http !== null && h.jitter_ms_http !== undefined ? `${h.jitter_ms_http} ms` : "N/A")}</small>
                         </div>
                     </div>
                     <div class="host-checks-section">
@@ -1109,13 +1125,13 @@ function updateHostCardInPlace(card, h) {
                 <small><b>Taxa de sucesso</b></small>
                 <small>Ping: ${h.sla_rolling_ping ?? "N/A"}%</small>
                 <small>TCP: ${h.sla_rolling_tcp ?? "N/A"}%</small>
-                <small>HTTP: ${h.sla_rolling_http ?? "N/A"}%</small>
+                <small>HTTP: ${h.http_enabled === false ? "Inativo" : (h.sla_rolling_http !== null && h.sla_rolling_http !== undefined ? `${h.sla_rolling_http}%` : "N/A")}</small>
             `;
             netCols[1].innerHTML = `
                 <small><b>Variação na latência</b></small>
                 <small>Ping: ${h.jitter_ms_ping ?? "N/A"} ms</small>
                 <small>TCP: ${h.jitter_ms_tcp ?? "N/A"} ms</small>
-                <small>HTTP: ${h.jitter_ms_http ?? "N/A"} ms</small>
+                <small>HTTP: ${h.http_enabled === false ? "Inativo" : (h.jitter_ms_http !== null && h.jitter_ms_http !== undefined ? `${h.jitter_ms_http} ms` : "N/A")}</small>
             `;
         }
     }
@@ -1229,6 +1245,10 @@ async function loadHosts() {
         }
 
         const activeHostNames = new Set(hosts.map((h) => h.name));
+        currentHostsMap.clear();
+        for (const h of hosts) {
+            currentHostsMap.set(h.name, h);
+        }
 
         // 1. Remover apenas cards de hosts que foram efetivamente excluídos e liberar instâncias Chart.js
         const existingCardNodes = Array.from(div.querySelectorAll(".card"));
@@ -1512,32 +1532,67 @@ async function toggleAvailabilityChartType(name) {
 
 let currentEditHost = null;
 
+let lastFocusedElementBeforeModal = null;
+
+function openAppModal(modalEl) {
+    if (!modalEl) return;
+    lastFocusedElementBeforeModal = document.activeElement;
+    modalEl.classList.remove("hidden");
+    modalEl.setAttribute("aria-hidden", "false");
+
+    const focusable = modalEl.querySelector("input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), [tabindex]:not([tabindex='-1'])");
+    if (focusable) {
+        setTimeout(() => {
+            try { focusable.focus(); } catch (e) {}
+        }, 50);
+    }
+}
+
+function closeAppModal(modalEl) {
+    if (!modalEl) return;
+    modalEl.classList.add("hidden");
+    modalEl.setAttribute("aria-hidden", "true");
+    if (lastFocusedElementBeforeModal && typeof lastFocusedElementBeforeModal.focus === "function") {
+        try { lastFocusedElementBeforeModal.focus(); } catch (e) {}
+    }
+}
+
 function openEditModal(name, ip, ports = [], httpUrl, httpEnabled = true, snmpEnabled = false, snmpCommunity = "netspot") {
     currentEditHost = name;
 
-    document.getElementById("modal-name").value = name;
-    document.getElementById("modal-ip").value = ip || "";
-    document.getElementById("modal-http-url").value = httpUrl || "";
+    const cached = currentHostsMap.get(name);
+    if (cached) {
+        ip = cached.address || ip;
+        ports = parseHostPorts(cached);
+        httpUrl = cached.http_url !== undefined ? (cached.http_url || "") : (httpUrl || "");
+        httpEnabled = cached.http_enabled !== false;
+        snmpEnabled = !!cached.snmp_enabled;
+        snmpCommunity = cached.snmp_community || "netspot";
+    }
+
+    const nameInput = document.getElementById("modal-name");
+    if (nameInput) nameInput.value = name;
+    const ipInput = document.getElementById("modal-ip");
+    if (ipInput) ipInput.value = ip || "";
+    const httpInput = document.getElementById("modal-http-url");
+    if (httpInput) httpInput.value = httpUrl || "";
     const modalHttpEnabled = document.getElementById("modal-http-enabled");
-    if (modalHttpEnabled) {
-        modalHttpEnabled.checked = !!httpEnabled;
-    }
+    if (modalHttpEnabled) modalHttpEnabled.checked = !!httpEnabled;
     const modalSnmpEnabled = document.getElementById("modal-snmp-enabled");
-    if (modalSnmpEnabled) {
-        modalSnmpEnabled.checked = !!snmpEnabled;
-    }
+    if (modalSnmpEnabled) modalSnmpEnabled.checked = !!snmpEnabled;
     const modalSnmpCommunity = document.getElementById("modal-snmp-community");
-    if (modalSnmpCommunity) {
-        modalSnmpCommunity.value = snmpCommunity || "netspot";
-    }
+    if (modalSnmpCommunity) modalSnmpCommunity.value = snmpCommunity || "netspot";
+
     setModalPorts(ports);
 
-    document.getElementById("editModal").classList.remove("hidden");
+    const modal = document.getElementById("editModal");
+    if (modal) openAppModal(modal);
 }
 
 function closeModal() {
-    document.getElementById("editModal").classList.add("hidden");
+    closeAppModal(document.getElementById("editModal"));
 }
+
 
 function formatBps(value) {
     if (value === null || value === undefined) return "N/A";
@@ -1824,14 +1879,25 @@ function formatMetric(value, suffix = "", digits = 2) {
 }
 
 async function submitModalEdit() {
-    const newName = document.getElementById("modal-name").value;
-    const newIp = document.getElementById("modal-ip").value;
-    const newHttp = document.getElementById("modal-http-url").value;
-    const newHttpEnabled = !!document.getElementById("modal-http-enabled")?.checked;
-    const newSnmpEnabled = !!document.getElementById("modal-snmp-enabled")?.checked;
+    if (!currentEditHost) return;
+    const ipInput = document.getElementById("modal-ip");
+    const httpInput = document.getElementById("modal-http-url");
+    const httpEnabledInput = document.getElementById("modal-http-enabled");
+    const snmpEnabledInput = document.getElementById("modal-snmp-enabled");
     const modalSnmpCommInput = document.getElementById("modal-snmp-community");
-    const newSnmpComm = (modalSnmpCommInput?.value || "").trim() || "netspot";
     const modalPortsContainer = document.getElementById("modalPortsContainer");
+
+    const newIp = (ipInput?.value || "").trim();
+    if (!newIp) {
+        showToast("warning", "O endereço/IP é obrigatório.");
+        return;
+    }
+
+    const newHttp = (httpInput?.value || "").trim();
+    const newHttpEnabled = !!httpEnabledInput?.checked;
+    const newSnmpEnabled = !!snmpEnabledInput?.checked;
+    const newSnmpComm = (modalSnmpCommInput?.value || "").trim() || "netspot";
+
     let ports = [];
     try {
         ports = collectPorts(modalPortsContainer);
@@ -1840,27 +1906,45 @@ async function submitModalEdit() {
         return;
     }
 
-    const res = await fetchWithAuth(`${API}/host/update/${currentEditHost}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-            address: newIp,
-            ports,
-            port: ports.length ? ports[0] : null,
-            url: newHttp || null,
-            http_url: newHttp || null,
-            http_enabled: newHttpEnabled,
-            snmp_enabled: newSnmpEnabled,
-            snmp_community: newSnmpComm
-        })
-    });
+    const saveBtn = document.querySelector("#editModal .modal-actions button.modal-btn-primary")
+        || document.querySelector("#editModal .modal-actions button:first-child");
+    const originalText = saveBtn ? saveBtn.textContent : "Salvar";
+    if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.textContent = "Salvando...";
+    }
 
-    if (res.ok) {
-        closeModal();
-        await loadHosts();
-        showToast("success", "Host atualizado com sucesso.");
-    } else {
-        showToast("error", "Erro ao salvar alterações do host.");
+    try {
+        const res = await fetchWithAuth(`${API}/host/update/${currentEditHost}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                address: newIp,
+                ports,
+                port: ports.length ? ports[0] : null,
+                url: newHttp || null,
+                http_url: newHttp || null,
+                http_enabled: newHttpEnabled,
+                snmp_enabled: newSnmpEnabled,
+                snmp_community: newSnmpComm
+            })
+        });
+
+        if (res && res.ok) {
+            closeModal();
+            await loadHosts();
+            showToast("success", "Host atualizado com sucesso.");
+        } else {
+            const errData = res ? await res.json().catch(() => ({})) : {};
+            showToast("error", errData.detail || "Erro ao salvar alterações do host.");
+        }
+    } catch (err) {
+        showToast("error", "Não foi possível conectar ao servidor.");
+    } finally {
+        if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.textContent = originalText;
+        }
     }
 }
 
@@ -2214,15 +2298,43 @@ function updateHostFace(hostName, faceNumber) {
     const safeFace = Math.max(1, Math.min(3, Number(faceNumber) || 1));
     card.dataset.face = String(safeFace);
 
+    const FACE_NAMES = {
+        1: "Resumo e status",
+        2: "Métricas de rede e latência",
+        3: "Hardware e tráfego SNMP"
+    };
+
     faces.forEach((face) => {
         const n = Number(face.getAttribute("data-face"));
         face.classList.toggle("active", n === safeFace);
     });
 
+    const indicator = card.querySelector(".face-indicator-label");
+    if (indicator) {
+        indicator.textContent = `${safeFace}/3`;
+        indicator.title = `Exibindo Face ${safeFace} de 3: ${FACE_NAMES[safeFace] || ""}`;
+    }
+
     const prevBtn = card.querySelector(".face-prev-btn");
     const nextBtn = card.querySelector(".face-next-btn");
-    if (prevBtn) prevBtn.classList.toggle("hidden", safeFace <= 1);
-    if (nextBtn) nextBtn.classList.toggle("hidden", safeFace >= 3);
+    if (prevBtn) {
+        prevBtn.classList.toggle("hidden", safeFace <= 1);
+        const prevFace = safeFace - 1;
+        if (prevFace >= 1) {
+            const desc = `Voltar para Face ${prevFace}: ${FACE_NAMES[prevFace] || ""}`;
+            prevBtn.title = desc;
+            prevBtn.setAttribute("aria-label", desc);
+        }
+    }
+    if (nextBtn) {
+        nextBtn.classList.toggle("hidden", safeFace >= 3);
+        const nextFace = safeFace + 1;
+        if (nextFace <= 3) {
+            const desc = `Avançar para Face ${nextFace}: ${FACE_NAMES[nextFace] || ""}`;
+            nextBtn.title = desc;
+            nextBtn.setAttribute("aria-label", desc);
+        }
+    }
 }
 
 function nextHostFace(hostName) {
@@ -2488,20 +2600,25 @@ async function softDeleteHost(hostId, hostName) {
 
 async function loadTrashHosts() {
     const box = document.getElementById("trashHostsList");
+    const emptyBtn = document.getElementById("emptyTrashBtn");
     if (!box) return;
 
     try {
         const res = await fetchWithAuth(`${API}/hosts/trash`);
         if (!res || !res.ok) {
             box.innerHTML = "<small>Não foi possível carregar a lixeira.</small>";
+            if (emptyBtn) emptyBtn.disabled = true;
             return;
         }
 
         const hosts = await res.json();
         if (!Array.isArray(hosts) || hosts.length === 0) {
-            box.innerHTML = "<small>Nenhum host na lixeira.</small>";
+            box.innerHTML = "<div class='ui-state ui-state-empty' style='text-align: center; padding: 20px; margin: 8px 0;'>A lixeira está vazia.</div>";
+            if (emptyBtn) emptyBtn.disabled = true;
             return;
         }
+
+        if (emptyBtn) emptyBtn.disabled = false;
 
         box.innerHTML = hosts.map((host) => `
             <div class="trash-item">
@@ -2518,20 +2635,67 @@ async function loadTrashHosts() {
         `).join("");
     } catch (err) {
         box.innerHTML = "<small>Erro ao carregar lixeira.</small>";
+        if (emptyBtn) emptyBtn.disabled = true;
     }
 }
 
 function openTrashModal() {
     const modal = document.getElementById("trashModal");
     if (!modal) return;
-    modal.classList.remove("hidden");
+    openAppModal(modal);
     runTaskOnce("trash", loadTrashHosts);
 }
 
 function closeTrashModal() {
     const modal = document.getElementById("trashModal");
     if (!modal) return;
-    modal.classList.add("hidden");
+    closeAppModal(modal);
+}
+
+function openConfirmEmptyTrashModal() {
+    const modal = document.getElementById("confirmEmptyTrashModal");
+    if (modal) openAppModal(modal);
+}
+
+function closeConfirmEmptyTrashModal() {
+    const modal = document.getElementById("confirmEmptyTrashModal");
+    if (modal) closeAppModal(modal);
+}
+
+
+async function confirmEmptyTrash() {
+    const confirmBtn = document.getElementById("confirmEmptyTrashBtn");
+    const originalText = confirmBtn ? confirmBtn.textContent : "Sim, Excluir Todos";
+    if (confirmBtn) {
+        confirmBtn.disabled = true;
+        confirmBtn.textContent = "Excluindo...";
+    }
+
+    try {
+        const res = await fetchWithAuth(`${API}/hosts/trash/empty`, {
+            method: "DELETE"
+        });
+
+        if (res && res.ok) {
+            const data = await res.json().catch(() => ({}));
+            closeConfirmEmptyTrashModal();
+            showToast("success", data.detail || "Lixeira esvaziada com sucesso.");
+            await Promise.all([
+                loadTrashHosts(),
+                loadDashboardSummary()
+            ]);
+        } else {
+            const err = res ? await res.json().catch(() => ({})) : {};
+            showToast("error", err.detail || "Erro ao esvaziar lixeira.");
+        }
+    } catch (err) {
+        showToast("error", "Não foi possível conectar ao servidor.");
+    } finally {
+        if (confirmBtn) {
+            confirmBtn.disabled = false;
+            confirmBtn.textContent = originalText;
+        }
+    }
 }
 
 function openSidebarMenu() {
@@ -2918,6 +3082,28 @@ if (!isLoginPage) {
     if (importSelectedBtn) {
         importSelectedBtn.addEventListener("click", importSelectedLanHosts);
     }
+    const selectAllDiscoveryBtn = document.getElementById("selectAllDiscoveryBtn");
+    if (selectAllDiscoveryBtn) {
+        selectAllDiscoveryBtn.addEventListener("click", () => {
+            const checkboxes = Array.from(document.querySelectorAll("#networkDiscoveryList .discover-host-check:not(:disabled)"));
+            if (checkboxes.length === 0) return;
+            const anyUnchecked = checkboxes.some(cb => !cb.checked);
+            checkboxes.forEach(cb => { cb.checked = anyUnchecked; });
+            selectAllDiscoveryBtn.textContent = anyUnchecked ? "Desmarcar todos" : "Selecionar todos";
+        });
+    }
+    const discoveryList = document.getElementById("networkDiscoveryList");
+    if (discoveryList) {
+        discoveryList.addEventListener("change", (e) => {
+            if (e.target.classList.contains("discover-host-check")) {
+                const checkboxes = Array.from(document.querySelectorAll("#networkDiscoveryList .discover-host-check:not(:disabled)"));
+                const allChecked = checkboxes.length > 0 && checkboxes.every(cb => cb.checked);
+                if (selectAllDiscoveryBtn) {
+                    selectAllDiscoveryBtn.textContent = allChecked ? "Desmarcar todos" : "Selecionar todos";
+                }
+            }
+        });
+    }
     const openMenuBtn = document.getElementById("openMenuBtn");
     if (openMenuBtn) {
         openMenuBtn.addEventListener("click", openSidebarMenu);
@@ -2963,33 +3149,87 @@ window.addEventListener("click", (event) => {
     const trashModal = document.getElementById("trashModal");
     const sidebarOverlay = document.getElementById("sidebarOverlay");
     const changePwdModal = document.getElementById("changePwdModal");
+    const confirmEmptyTrashModal = document.getElementById("confirmEmptyTrashModal");
+    const pwdModal = document.getElementById("pwdModal");
 
     if (event.target === editModal) closeModal();
     if (event.target === trashModal) closeTrashModal();
     if (event.target === sidebarOverlay) closeSidebarMenu();
     if (event.target === changePwdModal) closeChangePwdModal();
+    if (event.target === confirmEmptyTrashModal) closeConfirmEmptyTrashModal();
+    if (event.target === pwdModal) closeAppModal(pwdModal);
 });
 
 window.addEventListener("keydown", (event) => {
-    if (event.key !== "Escape") return;
-    closeModal();
-    closeTrashModal();
-    closeSidebarMenu();
-    closeChangePwdModal();
+    const activeModal = document.querySelector(".modal:not(.hidden)");
+
+    if (event.key === "Escape") {
+        if (activeModal) {
+            event.preventDefault();
+            closeModal();
+            closeTrashModal();
+            closeChangePwdModal();
+            closeConfirmEmptyTrashModal();
+            const pwdModal = document.getElementById("pwdModal");
+            if (pwdModal) closeAppModal(pwdModal);
+        }
+        closeSidebarMenu();
+        return;
+    }
+
+    // Gerenciamento de foco acessível (Focus Trap)
+    if (event.key === "Tab" && activeModal) {
+        const focusableSelectors = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+        const focusables = Array.from(activeModal.querySelectorAll(focusableSelectors)).filter(el => el.offsetParent !== null);
+        if (focusables.length === 0) return;
+
+        const firstElement = focusables[0];
+        const lastElement = focusables[focusables.length - 1];
+
+        if (event.shiftKey && document.activeElement === firstElement) {
+            event.preventDefault();
+            lastElement.focus();
+        } else if (!event.shiftKey && document.activeElement === lastElement) {
+            event.preventDefault();
+            firstElement.focus();
+        }
+    }
 });
+
+const editModalEl = document.getElementById("editModal");
+if (editModalEl) {
+    editModalEl.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && e.target.tagName === "INPUT") {
+            e.preventDefault();
+            submitModalEdit();
+        }
+    });
+}
+
+const changePwdModalEl = document.getElementById("changePwdModal");
+if (changePwdModalEl) {
+    changePwdModalEl.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && e.target.tagName === "INPUT") {
+            e.preventDefault();
+            changePassword();
+        }
+    });
+}
 
 const changePwdBtn = document.getElementById("changePasswordBtn");
 
-if(changePwdBtn){
-    changePwdBtn.onclick = () =>{
-        document.getElementById("changePwdModal").classList.remove("hidden");
-    }
+if (changePwdBtn) {
+    changePwdBtn.onclick = () => {
+        const modal = document.getElementById("changePwdModal");
+        if (modal) openAppModal(modal);
+    };
 }
 
-function closeChangePwdModal(){
+function closeChangePwdModal() {
     const modal = document.getElementById("changePwdModal");
-    if (modal) modal.classList.add("hidden");
+    if (modal) closeAppModal(modal);
 }
+
 
 const logoutBtn = document.getElementById("logoutBtn");
 

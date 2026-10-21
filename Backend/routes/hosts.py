@@ -80,6 +80,10 @@ def _apply_http_policy(host: Host, http_enabled: bool | None, selected_http: str
         host.tcp_http_port_latency = None
         host.tcp_https_port_ok = None
         host.tcp_https_port_latency = None
+        host.sla_rolling_http = None
+        host.jitter_ms_http = None
+        host.slope_http = None
+        host.trend_http = "UNKNOWN"
 
 
 def _normalize_ports(raw_ports, fallback_port: int | None = None) -> list[int]:
@@ -428,15 +432,27 @@ def _is_icmp_blocked_but_service_up(
 
 def infer_probable_cause(db: Session, host: Host) -> str:
     # 1. Caminho rápido antecipado para hosts comprovadamente saudáveis:
-    # Se host é UP, status_ping é UP e severidade é HEALTHY/UNKNOWN sem sobrecarga,
-    # sabemos com certeza que ICMP não está bloqueado e a operação é normal,
-    # eliminando 4 queries SQL (get_last_check) por host saudável.
     is_healthy = host.status == "UP" and host.severity in ("HEALTHY", "UNKNOWN", None)
+    cpu_val = getattr(host, "cpu_usage", None)
+    ram_val = getattr(host, "ram_usage", None)
+    disk_val = getattr(host, "disk_usage", None)
+    jitter_ping = getattr(host, "jitter_ms_ping", None)
+    jitter_tcp = getattr(host, "jitter_ms_tcp", None)
+    jitter_http = getattr(host, "jitter_ms_http", None)
+    sla_ping = getattr(host, "sla_rolling_ping", None)
+    sla_tcp = getattr(host, "sla_rolling_tcp", None)
+    sla_http = getattr(host, "sla_rolling_http", None)
+
     has_normal_resources = (
-        (host.cpu_usage is None or host.cpu_usage < 90)
-        and (host.ram_usage is None or host.ram_usage < 90)
-        and (host.disk_usage is None or host.disk_usage < 90)
-        and (host.jitter_ms_ping is None or host.jitter_ms_ping < 120)
+        (cpu_val is None or cpu_val < 85)
+        and (ram_val is None or ram_val < 85)
+        and (disk_val is None or disk_val < 90)
+        and (jitter_ping is None or jitter_ping < 80)
+        and (jitter_tcp is None or jitter_tcp < 80)
+        and (jitter_http is None or jitter_http < 80)
+        and (sla_ping is None or sla_ping >= 95)
+        and (sla_tcp is None or sla_tcp >= 95)
+        and (sla_http is None or sla_http >= 95)
     )
     if is_healthy and has_normal_resources and getattr(host, "status_ping", None) == "UP":
         host.icmp_blocked_but_service_up = False
@@ -445,7 +461,7 @@ def infer_probable_cause(db: Session, host: Host) -> str:
     last_dns = get_last_check(db, host.id, "dns")
     last_ping = get_last_check(db, host.id, "ping")
     last_tcp = get_last_check(db, host.id, "tcp")
-    last_http = get_last_check(db, host.id, "http")
+    last_http = get_last_check(db, host.id, "http") if bool(getattr(host, "http_enabled", True)) else None
     icmp_blocked_but_service_up = _is_icmp_blocked_but_service_up(
         host,
         last_ping,
@@ -455,41 +471,98 @@ def infer_probable_cause(db: Session, host: Host) -> str:
     host.icmp_blocked_but_service_up = icmp_blocked_but_service_up
 
     if icmp_blocked_but_service_up:
-        return "ICMP bloqueado por firewall\nServiço operando normalmente"
-
-    if is_healthy and has_normal_resources:
-        return "Operação normal"
+        return "ICMP bloqueado por firewall (Serviços TCP/Web operando normalmente)"
 
     if host.status == "DOWN":
         if last_dns and not last_dns.success:
-            return "Falha na resolução DNS"
+            return "Falha na resolução DNS (servidor não respondeu)"
         if last_http and not last_http.success and (last_http.status_code or 0) >= 500:
-            return f"Serviço HTTP instável (HTTP {last_http.status_code})"
+            return f"Serviço HTTP indisponível (HTTP {last_http.status_code})"
         if host.port is not None and last_tcp and not last_tcp.success:
-            return "Porta TCP indisponível"
+            return f"Porta TCP {host.port} indisponível (conexão recusada/timeout)"
         if last_ping and not last_ping.success:
-            return "Host sem resposta ICMP"
+            return "Host sem resposta ICMP (offline ou inalcançável)"
         return "Indisponibilidade geral do host"
 
-    if (
-        (host.cpu_usage is not None and host.cpu_usage >= 95) or
-        (host.ram_usage is not None and host.ram_usage >= 92) or
-        (host.disk_usage is not None and host.disk_usage >= 95)
-    ):
-        return "Sobrecarga de recursos locais (CPU/RAM/Disco)"
+    # Diagnóstico detalhado e pontual de causas de degradação:
+    causes = []
 
-    if last_http and not last_http.success and (last_http.status_code or 0) >= 500:
-        return f"Aplicação web com erro HTTP {last_http.status_code}"
+    # 1. Telemetria de Hardware (SNMP)
+    if host.disk_usage is not None:
+        if host.disk_usage >= 97:
+            causes.append(f"Disco crítico ({host.disk_usage:.1f}%)")
+        elif host.disk_usage >= 90:
+            causes.append(f"Disco elevado ({host.disk_usage:.1f}%)")
 
-    if (
-        (host.jitter_ms_ping is not None and host.jitter_ms_ping >= 120) or
-        (host.jitter_ms_http is not None and host.jitter_ms_http >= 180) or
-        (host.sla_rolling_ping is not None and host.sla_rolling_ping < 75 and host.status != "UP")
-    ):
-        return "Instabilidade de rede (jitter/perda)"
+    if host.ram_usage is not None:
+        if host.ram_usage >= 95:
+            causes.append(f"RAM crítica ({host.ram_usage:.1f}%)")
+        elif host.ram_usage >= 85:
+            causes.append(f"RAM elevada ({host.ram_usage:.1f}%)")
+
+    if host.cpu_usage is not None:
+        if host.cpu_usage >= 95:
+            causes.append(f"CPU crítica ({host.cpu_usage:.1f}%)")
+        elif host.cpu_usage >= 85:
+            causes.append(f"CPU elevada ({host.cpu_usage:.1f}%)")
+
+    # 2. Variação de Latência (Jitter)
+    if host.jitter_ms_ping is not None and host.jitter_ms_ping >= 80:
+        if host.jitter_ms_ping >= 150:
+            causes.append(f"Jitter crítico no Ping ({host.jitter_ms_ping:.1f} ms)")
+        else:
+            causes.append(f"Jitter alto no Ping ({host.jitter_ms_ping:.1f} ms)")
+
+    if host.jitter_ms_tcp is not None and host.jitter_ms_tcp >= 80:
+        if host.jitter_ms_tcp >= 150:
+            causes.append(f"Jitter crítico em portas TCP ({host.jitter_ms_tcp:.1f} ms)")
+        else:
+            causes.append(f"Jitter alto em portas TCP ({host.jitter_ms_tcp:.1f} ms)")
+
+    if bool(getattr(host, "http_enabled", True)) and host.jitter_ms_http is not None and host.jitter_ms_http >= 80:
+        if host.jitter_ms_http >= 150:
+            causes.append(f"Jitter crítico na aplicação Web ({host.jitter_ms_http:.1f} ms)")
+        else:
+            causes.append(f"Jitter alto na aplicação Web ({host.jitter_ms_http:.1f} ms)")
+
+    # 3. Taxa de Sucesso / SLA Móvel
+    if host.sla_rolling_ping is not None and host.sla_rolling_ping < 95:
+        if host.sla_rolling_ping < 85:
+            causes.append(f"SLA instável no Ping ({host.sla_rolling_ping:.1f}%)")
+        else:
+            causes.append(f"Queda de sucesso no Ping ({host.sla_rolling_ping:.1f}%)")
+
+    if host.sla_rolling_tcp is not None and host.sla_rolling_tcp < 95:
+        if host.sla_rolling_tcp < 85:
+            causes.append(f"SLA instável em portas TCP ({host.sla_rolling_tcp:.1f}%)")
+        else:
+            causes.append(f"Falhas pontuais em portas TCP ({host.sla_rolling_tcp:.1f}%)")
+
+    if bool(getattr(host, "http_enabled", True)) and host.sla_rolling_http is not None and host.sla_rolling_http < 95:
+        if host.sla_rolling_http < 85:
+            causes.append(f"SLA instável na aplicação Web ({host.sla_rolling_http:.1f}%)")
+        else:
+            causes.append(f"Falhas pontuais na aplicação Web ({host.sla_rolling_http:.1f}%)")
+
+    # 4. Tendências de Piora Contínua
+    if host.trend in ("DEGRADING", "FAST_DEGRADING"):
+        causes.append("Latência em tendência de piora contínua (Ping)")
+
+    if bool(getattr(host, "http_enabled", True)) and host.trend_http in ("DEGRADING", "CRITICAL"):
+        causes.append("Tempo de resposta web degradando progressivamente")
+
+    # 5. Respostas de Aplicação Web ou Portas
+    if last_http and not last_http.success and (last_http.status_code or 0) >= 400:
+        causes.append(f"Aplicação web respondendo HTTP {last_http.status_code}")
+
+    if host.port is not None and last_tcp and not last_tcp.success:
+        causes.append(f"Porta TCP {host.port} com falha intermitente")
+
+    if causes:
+        return " | ".join(causes[:2])
 
     if host.severity in ("WARNING", "DEGRADED", "CRITICAL"):
-        return "Degradação detectada por métricas preventivas"
+        return f"Métrica preventiva em estado {host.severity}"
 
     return "Operação normal"
 
@@ -992,6 +1065,35 @@ def hard_delete_host(
     db.commit()
 
     return {"detail": "Host removido permanentemente"}
+
+
+@router.delete("/hosts/trash/empty")
+def empty_trash(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_admin),
+):
+    trash_hosts = db.query(Host).filter(Host.active.is_(False)).all()
+    if not trash_hosts:
+        return {"detail": "Lixeira já está vazia", "deleted_count": 0}
+
+    trash_ids = [h.id for h in trash_hosts]
+    trash_names = [h.name for h in trash_hosts]
+
+    db.query(CheckResult).filter(CheckResult.host_id.in_(trash_ids)).delete(synchronize_session=False)
+    db.query(Alert).filter(Alert.host_id.in_(trash_ids)).delete(synchronize_session=False)
+    db.query(SNMPMetric).filter(SNMPMetric.host_id.in_(trash_ids)).delete(synchronize_session=False)
+    db.query(Incident).filter(Incident.host_name.in_(trash_names)).delete(synchronize_session=False)
+
+    for h in trash_hosts:
+        circuit_breaker.clear_host(h.id)
+        reset_snmp_backoff(h.id)
+        db.delete(h)
+
+    db.commit()
+    return {
+        "detail": f"{len(trash_hosts)} host(s) removido(s) permanentemente da lixeira",
+        "deleted_count": len(trash_hosts),
+    }
 
 
 @router.delete("/host/delete/{host_name}")

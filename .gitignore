@@ -53,9 +53,9 @@ N8N/data/
 
 # ===== Documentação / TCC & Scripts Auxiliares =====
 Escrita_TCC/
+RELATORIO-UIUX.md
 scripts/script_para_gerar_diagramas.py
 script_para_gerar_diagramas.py
-
 
 RabbitMQ/data/
 N8N/data/
