@@ -19,6 +19,9 @@ dist/
 *.swp
 *.swo
 
+# ===== Agentes e Arquivos Internos =====
+.agents/
+
 # ===== OS =====
 .DS_Store
 Thumbs.db
