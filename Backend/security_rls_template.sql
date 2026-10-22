@@ -12,14 +12,14 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 -- 2. Adicionar coluna tenant_id ou owner_id nas tabelas principais
 ALTER TABLE hosts ADD COLUMN IF NOT EXISTS tenant_id UUID DEFAULT gen_random_uuid();
 ALTER TABLE alerts ADD COLUMN IF NOT EXISTS tenant_id UUID;
-ALTER TABLE check_results ADD COLUMN IF NOT EXISTS tenant_id UUID;
+ALTER TABLE checks ADD COLUMN IF NOT EXISTS tenant_id UUID;
 ALTER TABLE incidents ADD COLUMN IF NOT EXISTS tenant_id UUID;
 ALTER TABLE snmp_metrics ADD COLUMN IF NOT EXISTS tenant_id UUID;
 
 -- 3. Habilitar Row Level Security (RLS) em cada tabela
 ALTER TABLE hosts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE alerts ENABLE ROW LEVEL SECURITY;
-ALTER TABLE check_results ENABLE ROW LEVEL SECURITY;
+ALTER TABLE checks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE incidents ENABLE ROW LEVEL SECURITY;
 ALTER TABLE snmp_metrics ENABLE ROW LEVEL SECURITY;
 
@@ -36,7 +36,7 @@ CREATE POLICY alert_tenant_isolation_policy ON alerts
     USING (tenant_id = NULLIF(current_setting('app.current_tenant_id', true), '')::uuid)
     WITH CHECK (tenant_id = NULLIF(current_setting('app.current_tenant_id', true), '')::uuid);
 
-CREATE POLICY check_results_tenant_isolation_policy ON check_results
+CREATE POLICY checks_tenant_isolation_policy ON checks
     FOR ALL
     USING (tenant_id = NULLIF(current_setting('app.current_tenant_id', true), '')::uuid)
     WITH CHECK (tenant_id = NULLIF(current_setting('app.current_tenant_id', true), '')::uuid);

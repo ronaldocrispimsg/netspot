@@ -47,6 +47,7 @@ poetry.lock
 
 # ===== Agentes e Arquivos Internos =====
 .agents/
+arquitetura.md
 
 # ===== Docker volumes data =====
 Database/postgres_data/
@@ -57,7 +58,9 @@ N8N/data/
 # ===== Documentação / TCC & Scripts Auxiliares =====
 Escrita_TCC/
 RELATORIO-UIUX.md
+docs/RELATORIO-UIUX.md
 scripts/script_para_gerar_diagramas.py
 script_para_gerar_diagramas.py
+scripts/audit_latex.py
 estrutura.txt
 *Zone.Identifier

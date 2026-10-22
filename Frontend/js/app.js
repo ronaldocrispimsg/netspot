@@ -9,8 +9,8 @@ let lastUserInteractionAt = 0;
 //
 
 const POLLING_INTERVALS = {
-    visible: { lightMs: 10000, heavyMs: 10000 },
-    hidden: { lightMs: 30000, heavyMs: 120000 }
+    visible: { lightMs: 10000, heavyMs: 30000 },
+    hidden: { lightMs: 30000, heavyMs: 60000 }
 };
 
 const pollingState = {
@@ -144,7 +144,7 @@ async function runTaskOnce(taskName, taskFn) {
 
 async function runLightRefresh() {
     await Promise.all([
-        runTaskOnce("hosts-quick", loadHostsQuick),
+        runTaskOnce("hosts", loadHosts),
         runTaskOnce("alerts", checkAlerts),
         runTaskOnce("summary", loadDashboardSummary)
     ]);
@@ -152,10 +152,10 @@ async function runLightRefresh() {
 
 async function runHeavyRefresh() {
     if (shouldDeferHeavyRefresh()) return;
-    await Promise.all([
-        runTaskOnce("hosts-full", loadHosts),
-        runTaskOnce("trash", loadTrashHosts)
-    ]);
+    const trashModal = document.getElementById("trashModal");
+    if (trashModal && !trashModal.classList.contains("hidden")) {
+        await runTaskOnce("trash", loadTrashHosts);
+    }
 }
 
 function clearDashboardPolling() {
@@ -395,6 +395,8 @@ async function changePassword(){
 // Cadastrar Host (POST)
 // ======================
 const currentHostsMap = new Map();
+const pendingDeletedHostNames = new Set();
+let hostsListRequestId = 0;
 const hostForm = document.getElementById("hostForm");
 const portsContainer = document.getElementById("portsContainer");
 const addPortBtn = document.getElementById("addPortBtn");
@@ -600,6 +602,8 @@ function renderDiscoveredLanHosts() {
         const disabled = host.already_exists ? "disabled" : "";
         const checked = host.already_exists ? "" : "checked";
         const hostnameText = host.hostname ? ` • ${escapeHtml(host.hostname)}` : "";
+        const portsList = Array.isArray(host.ports) && host.ports.length ? host.ports.join(", ") : "";
+        const portsText = portsList ? ` • Portas: ${escapeHtml(portsList)}` : "";
         const safeName = escapeHtml(host.name);
         const safeAddr = escapeHtml(host.address);
         const safeId = escapeHtml(host.id);
@@ -607,7 +611,7 @@ function renderDiscoveredLanHosts() {
             <label class="network-discovery-item">
                 <div class="network-discovery-meta">
                     <strong>${safeName}</strong>
-                    <small>${safeAddr}${hostnameText}</small>
+                    <small>${safeAddr}${hostnameText}${portsText}</small>
                 </div>
                 <div>
                     ${host.already_exists ? '<span class="network-exists-badge">já cadastrado</span>' : ""}
@@ -714,6 +718,9 @@ async function importSelectedLanHosts() {
         .map((host) => ({
             name: host.name,
             address: host.address,
+            ports: Array.isArray(host.ports) ? host.ports : null,
+            http_enabled: typeof host.http_enabled === "boolean" ? host.http_enabled : null,
+            http_url: host.http_url || null,
             snmp_enabled: true,
             snmp_community: communityVal || "netspot"
         }));
@@ -781,9 +788,29 @@ async function importSelectedLanHosts() {
 // ======================
 // Listar e Atualizar Hosts
 // ======================
+function formatHostAddressLabel(h) {
+    const addr = String(h?.address || "").trim();
+    const resolvedIp = String(h?.last_resolved_ip || "").trim();
+    if (resolvedIp && resolvedIp !== addr) {
+        return `${addr} → ${resolvedIp}`;
+    }
+    return addr;
+}
+
+function buildResolvedIpSummaryLine(h) {
+    const addr = String(h?.address || "").trim();
+    const resolvedIp = String(h?.last_resolved_ip || "").trim();
+    if (!resolvedIp || resolvedIp === addr) {
+        return "";
+    }
+    const ttlSuffix = h?.dns_ttl != null ? ` (TTL ${h.dns_ttl}s)` : "";
+    return `<small><b>IP resolvido (DNS):</b> ${escapeHtml(resolvedIp)}${escapeHtml(ttlSuffix)}</small>`;
+}
+
 function buildHostCardHTML(h) {
     const hostPorts = parseHostPorts(h);
-    const hostAddressLabel = `${h.address}`;
+    const hostAddressLabel = formatHostAddressLabel(h);
+    const resolvedIpLineHtml = buildResolvedIpSummaryLine(h);
     const tcpPortsLabel = hostPorts.length ? hostPorts.join(", ") : "Nenhuma";
     const httpEnabled = !!h.http_enabled;
     const webCheckBadge = httpEnabled
@@ -940,6 +967,7 @@ function buildHostCardHTML(h) {
                 <div class="host-section-card">
                     <div class="metrics-title">Resumo</div>
                     <div class="host-summary-list">
+                        ${resolvedIpLineHtml}
                         <small><b>Portas TCP monitoradas:</b> ${tcpPortsLabel}</small>
                         <small><b>Check Web:</b> ${webCheckBadge}</small>
                         <small><b>Protocolo resolvido:</b> ${httpProtocolLabel}</small>
@@ -1054,10 +1082,14 @@ function updateHostCardInPlace(card, h) {
     card.className = `card ${visualState.cardClass}`;
     card.dataset.face = currentFace;
 
-    // 2. Indicador de status (bolinha verde/vermelha/amarela)
+    // 2. Indicador de status (bolinha verde/vermelha/amarela) e endereço/IP resolvido
     const statusIndicator = card.querySelector(".status-indicator");
     if (statusIndicator) {
         statusIndicator.className = `status-indicator ${statusColor}`;
+    }
+    const addrEl = card.querySelector(".host-addr");
+    if (addrEl) {
+        addrEl.textContent = `(${formatHostAddressLabel(h)})`;
     }
 
     // 3. Flag de monitoramento (MONITORANDO / PAUSADO / OFFLINE)
@@ -1104,7 +1136,9 @@ function updateHostCardInPlace(card, h) {
     // 6. Resumo na Face 1
     const summaryList = card.querySelector(".host-summary-list");
     if (summaryList) {
+        const resolvedIpLineHtml = buildResolvedIpSummaryLine(h);
         summaryList.innerHTML = `
+            ${resolvedIpLineHtml}
             <small><b>Portas TCP monitoradas:</b> ${tcpPortsLabel}</small>
             <small><b>Check Web:</b> ${webCheckBadge}</small>
             <small><b>Protocolo resolvido:</b> ${httpProtocolLabel}</small>
@@ -1225,6 +1259,8 @@ async function loadHosts() {
         </div>`;
     }
 
+    const thisRequestId = ++hostsListRequestId;
+
     try {
         const res = await fetchWithAuth(`${API}/hosts/list`);
         if (!res) {
@@ -1234,9 +1270,27 @@ async function loadHosts() {
             return;
         }
 
-        const hosts = await res.json();
-        if (!Array.isArray(hosts) || hosts.length === 0) {
+        const rawHosts = await res.json();
+        // Se uma requisição mais recente já foi iniciada, descarta a resposta obsoleta (previne race conditions)
+        if (thisRequestId !== hostsListRequestId) return;
+
+        if (!Array.isArray(rawHosts)) {
+            return;
+        }
+
+        // Blindagem contra race conditions: filtra imediatamente qualquer host com exclusão pendente
+        const hosts = rawHosts.filter((h) => !pendingDeletedHostNames.has(h.name));
+
+        if (hosts.length === 0) {
+            const existingCardNodes = Array.from(div.querySelectorAll(".card"));
+            for (const cardNode of existingCardNodes) {
+                const cardHostName = cardNode.id.replace("card-", "");
+                destroyChartsForHost(cardHostName);
+                cardNode.remove();
+            }
+            currentHostsMap.clear();
             div.innerHTML = "<div class='ui-state ui-state-empty'>Nenhum host cadastrado ainda.</div>";
+            updateStatusChipCounts();
             return;
         }
 
@@ -1254,7 +1308,7 @@ async function loadHosts() {
         const existingCardNodes = Array.from(div.querySelectorAll(".card"));
         for (const cardNode of existingCardNodes) {
             const cardHostName = cardNode.id.replace("card-", "");
-            if (!activeHostNames.has(cardHostName)) {
+            if (!activeHostNames.has(cardHostName) || pendingDeletedHostNames.has(cardHostName)) {
                 destroyChartsForHost(cardHostName);
                 cardNode.remove();
             }
@@ -1262,6 +1316,8 @@ async function loadHosts() {
 
         // 2. Criar ou Atualizar cirurgicamente (in-place) cada card de host
         for (const h of hosts) {
+            if (pendingDeletedHostNames.has(h.name)) continue;
+
             let card = document.getElementById(`card-${h.name}`);
             const isNewCard = !card;
 
@@ -1283,11 +1339,14 @@ async function loadHosts() {
                 parseHostPorts(h),
                 !!h.http_enabled,
                 h.http_protocol,
-                h.http_latency,
+                h.http_latency ?? h.https_latency,
                 h.tcp_http_port_latency,
                 h.tcp_https_port_latency,
                 h.tcp_http_port_ok,
-                h.tcp_https_port_ok
+                h.tcp_https_port_ok,
+                h.status_ping,
+                h.latency_ping,
+                !!h.icmp_blocked_but_service_up
             );
 
             // Atualiza gráficos ativos sem piscar
@@ -1368,25 +1427,46 @@ async function loadLastResult(
     tcpHttpPortLatency = null,
     tcpHttpsPortLatency = null,
     tcpHttpPortOk = null,
-    tcpHttpsPortOk = null
+    tcpHttpsPortOk = null,
+    statusPing = null,
+    latencyPing = null,
+    icmpBlocked = false
 ) {
     const box = document.getElementById("result-" + name);
     if (!box) return;
 
-    const res = await fetchWithAuth(`${API}/host/history/${name}`);
-    
-    if (!res || !res.ok) return;
+    let lastPing = null;
+    let lastHttp = null;
 
-    const data = await res.json();
-    renderTcpPortsStatus(name, data.checks, expectedPorts);
-
-    const lastPing = data.checks.find(c => c.type === "ping");
-    const lastHttp = httpEnabled ? data.checks.find(c => c.type === "http") : null;
+    if (Array.isArray(expectedPorts) && expectedPorts.length > 0) {
+        const res = await fetchWithAuth(`${API}/host/history/${name}`);
+        if (!res || !res.ok) return;
+        const data = await res.json();
+        renderTcpPortsStatus(name, data.checks, expectedPorts);
+        lastPing = data.checks.find(c => c.type === "ping");
+        lastHttp = httpEnabled ? data.checks.find(c => c.type === "http") : null;
+    } else {
+        renderTcpPortsStatus(name, [], []);
+        if (statusPing === "UP" || statusPing === "DOWN") {
+            lastPing = {
+                success: statusPing === "UP",
+                latency: latencyPing,
+                error: statusPing === "DOWN" ? "timeout" : null,
+            };
+        }
+        if (httpEnabled) {
+            lastHttp = {
+                success: httpLatency !== null && httpLatency !== undefined,
+                latency: httpLatency,
+            };
+        }
+    }
 
     const pingLikelyFirewallBlocked =
-        !!lastPing &&
+        icmpBlocked ||
+        (!!lastPing &&
         !lastPing.success &&
-        (!!lastHttp && lastHttp.success);
+        (!!lastHttp && lastHttp.success));
 
     const pingDot = pingLikelyFirewallBlocked
         ? "bg-secondary"
@@ -1880,12 +1960,19 @@ function formatMetric(value, suffix = "", digits = 2) {
 
 async function submitModalEdit() {
     if (!currentEditHost) return;
+    const nameInput = document.getElementById("modal-name");
     const ipInput = document.getElementById("modal-ip");
     const httpInput = document.getElementById("modal-http-url");
     const httpEnabledInput = document.getElementById("modal-http-enabled");
     const snmpEnabledInput = document.getElementById("modal-snmp-enabled");
     const modalSnmpCommInput = document.getElementById("modal-snmp-community");
     const modalPortsContainer = document.getElementById("modalPortsContainer");
+
+    const newName = (nameInput?.value || "").trim();
+    if (!newName) {
+        showToast("warning", "O nome do host é obrigatório.");
+        return;
+    }
 
     const newIp = (ipInput?.value || "").trim();
     if (!newIp) {
@@ -1914,11 +2001,14 @@ async function submitModalEdit() {
         saveBtn.textContent = "Salvando...";
     }
 
+    const oldHostName = currentEditHost;
+
     try {
-        const res = await fetchWithAuth(`${API}/host/update/${currentEditHost}`, {
+        const res = await fetchWithAuth(`${API}/host/update/${encodeURIComponent(oldHostName)}`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
+                name: newName,
                 address: newIp,
                 ports,
                 port: ports.length ? ports[0] : null,
@@ -1932,8 +2022,15 @@ async function submitModalEdit() {
 
         if (res && res.ok) {
             closeModal();
-            await loadHosts();
             showToast("success", "Host atualizado com sucesso.");
+            // Se o nome foi alterado, limpa os gráficos associados e remove o cartão antigo
+            if (newName !== oldHostName) {
+                destroyChartsForHost(oldHostName);
+                const oldCard = document.getElementById(`card-${oldHostName}`);
+                if (oldCard) oldCard.remove();
+                currentHostsMap.delete(oldHostName);
+            }
+            await loadHosts();
         } else {
             const errData = res ? await res.json().catch(() => ({})) : {};
             showToast("error", errData.detail || "Erro ao salvar alterações do host.");
@@ -2554,7 +2651,16 @@ async function checkAlerts() {
 }
 
 async function softDeleteHost(hostId, hostName) {
+    if (!hostName) return;
+    if (pendingDeletedHostNames.has(hostName)) return; // Previne cliques duplicados
     if (!confirm(`Mover host "${hostName}" para a lixeira?`)) return;
+
+    // Registra como exclusão pendente imediatamente para blindar contra respostas concorrentes de polling
+    pendingDeletedHostNames.add(hostName);
+    currentHostsMap.delete(hostName);
+
+    // Destrói gráficos ativos para liberar memória
+    destroyChartsForHost(hostName);
 
     // Remoção visual imediata/otimista do card com animação suave
     const cardNode = document.getElementById(`card-${hostName}`);
@@ -2580,19 +2686,28 @@ async function softDeleteHost(hostId, hostName) {
 
         if (!res || !res.ok) {
             const err = res ? await res.json() : {};
+            pendingDeletedHostNames.delete(hostName);
             showToast("error", "Erro ao mover para lixeira: " + (err.detail || "erro"));
             await loadHosts();
             return;
         }
 
+        selectedBulkDeactivateNames.delete(hostName);
         showToast("success", "Host movido para a lixeira.");
         await Promise.all([
             loadHosts(),
             loadTrashHosts(),
+            loadBulkDeactivateHosts(),
             loadDashboardSummary()
         ]);
 
+        // Mantém proteção de 2 segundos para drenar qualquer resposta de rede concorrente defasada
+        setTimeout(() => {
+            pendingDeletedHostNames.delete(hostName);
+        }, 2000);
+
     } catch (e) {
+        pendingDeletedHostNames.delete(hostName);
         showToast("error", "Falha de conexão com a API.");
         await loadHosts();
     }
@@ -2639,11 +2754,255 @@ async function loadTrashHosts() {
     }
 }
 
+let bulkDeactivateHostsCache = [];
+const selectedBulkDeactivateNames = new Set();
+
+function updateBulkDeactivateSelectionUI() {
+    const checkboxes = Array.from(document.querySelectorAll("#bulkDeactivateHostsList .bulk-deactivate-check:not(:disabled)"));
+    const selectAllBtn = document.getElementById("selectAllBulkDeactivateBtn");
+    const actionBtn = document.getElementById("bulkDeactivateSelectedBtn");
+    const infoEl = document.getElementById("bulkDeactivateSelectionInfo");
+
+    const totalActive = bulkDeactivateHostsCache.length;
+    const selectedCount = selectedBulkDeactivateNames.size;
+
+    if (infoEl) {
+        infoEl.textContent = `${selectedCount} selecionado(s) de ${totalActive} host(s)`;
+    }
+    if (actionBtn) {
+        actionBtn.disabled = selectedCount === 0;
+        actionBtn.textContent = selectedCount > 0
+            ? `Mover selecionados (${selectedCount})`
+            : "Mover selecionados para lixeira";
+    }
+    if (selectAllBtn) {
+        selectAllBtn.disabled = checkboxes.length === 0;
+        const allVisibleChecked = checkboxes.length > 0 && checkboxes.every((cb) => cb.checked);
+        selectAllBtn.textContent = allVisibleChecked ? "Desmarcar todos" : "Selecionar todos";
+    }
+}
+
+function renderBulkDeactivateHostsList() {
+    const box = document.getElementById("bulkDeactivateHostsList");
+    const searchInput = document.getElementById("bulkDeactivateSearchInput");
+    if (!box) return;
+
+    const query = String(searchInput?.value || "").trim().toLowerCase();
+    const activeNamesSet = new Set(bulkDeactivateHostsCache.map((h) => h.name));
+    for (const name of Array.from(selectedBulkDeactivateNames)) {
+        if (!activeNamesSet.has(name)) {
+            selectedBulkDeactivateNames.delete(name);
+        }
+    }
+
+    if (bulkDeactivateHostsCache.length === 0) {
+        box.innerHTML = "<div class='ui-state ui-state-empty' style='text-align: center; padding: 20px; margin: 8px 0;'>Nenhum host ativo no momento.</div>";
+        updateBulkDeactivateSelectionUI();
+        return;
+    }
+
+    const filtered = bulkDeactivateHostsCache.filter((h) => {
+        if (!query) return true;
+        const nameStr = String(h.name || "").toLowerCase();
+        const addrStr = String(h.address || "").toLowerCase();
+        const resolvedStr = String(h.last_resolved_ip || "").toLowerCase();
+        return nameStr.includes(query) || addrStr.includes(query) || resolvedStr.includes(query);
+    });
+
+    if (filtered.length === 0) {
+        box.innerHTML = "<div class='ui-state ui-state-empty' style='text-align: center; padding: 20px; margin: 8px 0;'>Nenhum host encontrado para esse filtro.</div>";
+        updateBulkDeactivateSelectionUI();
+        return;
+    }
+
+    box.innerHTML = filtered.map((host) => {
+        const isChecked = selectedBulkDeactivateNames.has(host.name) ? "checked" : "";
+        let statusDot = "bg-secondary";
+        if (host.status === "UP") statusDot = "bg-success";
+        else if (host.status === "DOWN") statusDot = "bg-danger";
+        else if (host.status === "DEGRADED") statusDot = "bg-warning";
+
+        const addrLabel = formatHostAddressLabel(host);
+        return `
+            <label class="trash-item bulk-select-item">
+                <div class="bulk-select-left">
+                    <input
+                        type="checkbox"
+                        class="bulk-deactivate-check"
+                        data-id="${Number(host.id)}"
+                        data-name="${escapeHtml(String(host.name))}"
+                        ${isChecked}
+                    >
+                    <div class="trash-meta">
+                        <strong>
+                            <span class="status-indicator ${statusDot}" style="display:inline-block; margin-right:6px;"></span>${escapeHtml(host.name)}
+                        </strong>
+                        <small>${escapeHtml(addrLabel)}</small>
+                    </div>
+                </div>
+                <div class="trash-actions">
+                    <button
+                        type="button"
+                        class="danger-btn"
+                        onclick='event.preventDefault(); event.stopPropagation(); softDeleteHost(${Number(host.id)}, ${JSON.stringify(String(host.name))})'
+                    >Mover 1 para lixeira</button>
+                </div>
+            </label>
+        `;
+    }).join("");
+
+    updateBulkDeactivateSelectionUI();
+}
+
+async function loadBulkDeactivateHosts() {
+    const box = document.getElementById("bulkDeactivateHostsList");
+    if (!box) return;
+
+    try {
+        const res = await fetchWithAuth(`${API}/hosts/list`);
+        if (!res || !res.ok) {
+            box.innerHTML = "<small>Não foi possível carregar os hosts ativos.</small>";
+            return;
+        }
+        const rawHosts = await res.json();
+        bulkDeactivateHostsCache = Array.isArray(rawHosts)
+            ? rawHosts.filter((h) => !pendingDeletedHostNames.has(h.name))
+            : [];
+        renderBulkDeactivateHostsList();
+    } catch (err) {
+        box.innerHTML = "<small>Erro ao carregar hosts ativos.</small>";
+    }
+}
+
+async function bulkDeactivateSelectedHosts() {
+    const selectedHosts = bulkDeactivateHostsCache.filter((h) => selectedBulkDeactivateNames.has(h.name));
+    if (selectedHosts.length === 0) {
+        showToast("warning", "Selecione pelo menos um host para enviar à lixeira.");
+        return;
+    }
+
+    if (!confirm(`Mover ${selectedHosts.length} host(s) selecionado(s) para a lixeira?`)) {
+        return;
+    }
+
+    const hostIds = selectedHosts.map((h) => Number(h.id)).filter((id) => Number.isFinite(id));
+    const hostNames = selectedHosts.map((h) => String(h.name));
+
+    const actionBtn = document.getElementById("bulkDeactivateSelectedBtn");
+    if (actionBtn) {
+        actionBtn.disabled = true;
+        actionBtn.textContent = "Movendo...";
+    }
+
+    // Remoção visual imediata no Dashboard e proteção contra race condition de polling
+    for (const hostName of hostNames) {
+        pendingDeletedHostNames.add(hostName);
+        destroyChartsForHost(hostName);
+        currentHostsMap.delete(hostName);
+        const cardNode = document.getElementById(`card-${hostName}`);
+        if (cardNode) cardNode.remove();
+    }
+    const hostsDiv = document.getElementById("hosts");
+    if (hostsDiv && !hostsDiv.querySelector(".card")) {
+        hostsDiv.innerHTML = "<div class='ui-state ui-state-empty'>Nenhum host cadastrado ainda.</div>";
+    }
+    updateStatusChipCounts();
+
+    try {
+        const res = await fetchWithAuth(`${API}/hosts/bulk-deactivate`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                host_ids: hostIds,
+                host_names: hostNames
+            })
+        });
+
+        if (!res || !res.ok) {
+            const err = res ? await res.json().catch(() => ({})) : {};
+            for (const hostName of hostNames) {
+                pendingDeletedHostNames.delete(hostName);
+            }
+            showToast("error", "Erro ao mover hosts para lixeira: " + (err.detail || "erro"));
+            await Promise.all([loadHosts(), loadBulkDeactivateHosts()]);
+            return;
+        }
+
+        const data = await res.json().catch(() => ({}));
+        for (const hostName of hostNames) {
+            selectedBulkDeactivateNames.delete(hostName);
+        }
+
+        showToast("success", data.detail || `${hostNames.length} host(s) movido(s) para a lixeira.`);
+        await Promise.all([
+            loadHosts(),
+            loadTrashHosts(),
+            loadBulkDeactivateHosts(),
+            loadDashboardSummary()
+        ]);
+
+        setTimeout(() => {
+            for (const hostName of hostNames) {
+                pendingDeletedHostNames.delete(hostName);
+            }
+        }, 2000);
+    } catch (err) {
+        for (const hostName of hostNames) {
+            pendingDeletedHostNames.delete(hostName);
+        }
+        showToast("error", "Falha de conexão com a API.");
+        await Promise.all([loadHosts(), loadBulkDeactivateHosts()]);
+    } finally {
+        updateBulkDeactivateSelectionUI();
+    }
+}
+
+function switchTrashModalTab(tab) {
+    const tabDeactivateBtn = document.getElementById("tabBulkDeactivateBtn");
+    const tabTrashBtn = document.getElementById("tabTrashItemsBtn");
+    const panelDeactivate = document.getElementById("trashTabDeactivate");
+    const panelTrash = document.getElementById("trashTabItems");
+    const modalTitle = document.getElementById("trashModalTitle");
+
+    const isDeactivate = tab === "deactivate";
+
+    if (tabDeactivateBtn) {
+        tabDeactivateBtn.classList.toggle("active", isDeactivate);
+        tabDeactivateBtn.setAttribute("aria-selected", isDeactivate ? "true" : "false");
+    }
+    if (tabTrashBtn) {
+        tabTrashBtn.classList.toggle("active", !isDeactivate);
+        tabTrashBtn.setAttribute("aria-selected", !isDeactivate ? "true" : "false");
+    }
+    if (panelDeactivate) {
+        panelDeactivate.classList.toggle("hidden", !isDeactivate);
+    }
+    if (panelTrash) {
+        panelTrash.classList.toggle("hidden", isDeactivate);
+    }
+    if (modalTitle) {
+        modalTitle.textContent = isDeactivate ? "Enviar Hosts para a Lixeira" : "Itens na Lixeira";
+    }
+
+    if (isDeactivate) {
+        runTaskOnce("bulk-deactivate", loadBulkDeactivateHosts);
+    } else {
+        runTaskOnce("trash", loadTrashHosts);
+    }
+}
+
+function openBulkDeactivateModal() {
+    const modal = document.getElementById("trashModal");
+    if (!modal) return;
+    openAppModal(modal);
+    switchTrashModalTab("deactivate");
+}
+
 function openTrashModal() {
     const modal = document.getElementById("trashModal");
     if (!modal) return;
     openAppModal(modal);
-    runTaskOnce("trash", loadTrashHosts);
+    switchTrashModalTab("trash");
 }
 
 function closeTrashModal() {
@@ -2733,6 +3092,7 @@ async function restoreHost(hostId, hostName) {
         await Promise.all([
             loadHosts(),
             loadTrashHosts(),
+            loadBulkDeactivateHosts(),
             loadDashboardSummary()
         ]);
     } catch (err) {
@@ -2741,8 +3101,10 @@ async function restoreHost(hostId, hostName) {
 }
 
 async function hardDeleteHost(hostId, hostName) {
+    if (!hostName) return;
     if (!confirm(`Excluir permanentemente o host "${hostName}"?\nEssa ação não pode ser desfeita.`)) return;
 
+    destroyChartsForHost(hostName);
     const cardNode = document.getElementById(`card-${hostName}`);
     if (cardNode) {
         cardNode.remove();
@@ -3061,6 +3423,11 @@ if (!isLoginPage) {
         modalAddPortBtn.addEventListener("click", () => addPortInput(modalPortsContainer, "", true));
     }
 
+    const openBulkDeactivateBtn = document.getElementById("openBulkDeactivateBtn");
+    if (openBulkDeactivateBtn) {
+        openBulkDeactivateBtn.addEventListener("click", openBulkDeactivateModal);
+    }
+
     const openTrashBtn = document.getElementById("openTrashBtn");
     if (openTrashBtn) {
         openTrashBtn.addEventListener("click", openTrashModal);
@@ -3073,6 +3440,55 @@ if (!isLoginPage) {
     const refreshTrashBtn = document.getElementById("refreshTrashBtn");
     if (refreshTrashBtn) {
         refreshTrashBtn.addEventListener("click", () => runTaskOnce("trash", loadTrashHosts));
+    }
+    const refreshBulkDeactivateBtn = document.getElementById("refreshBulkDeactivateBtn");
+    if (refreshBulkDeactivateBtn) {
+        refreshBulkDeactivateBtn.addEventListener("click", () => runTaskOnce("bulk-deactivate", loadBulkDeactivateHosts));
+    }
+    const bulkDeactivateSelectedBtn = document.getElementById("bulkDeactivateSelectedBtn");
+    if (bulkDeactivateSelectedBtn) {
+        bulkDeactivateSelectedBtn.addEventListener("click", bulkDeactivateSelectedHosts);
+    }
+    const bulkDeactivateSearchInput = document.getElementById("bulkDeactivateSearchInput");
+    if (bulkDeactivateSearchInput) {
+        bulkDeactivateSearchInput.addEventListener("input", () => {
+            renderBulkDeactivateHostsList();
+        });
+    }
+    const selectAllBulkDeactivateBtn = document.getElementById("selectAllBulkDeactivateBtn");
+    if (selectAllBulkDeactivateBtn) {
+        selectAllBulkDeactivateBtn.addEventListener("click", () => {
+            const checkboxes = Array.from(document.querySelectorAll("#bulkDeactivateHostsList .bulk-deactivate-check:not(:disabled)"));
+            if (checkboxes.length === 0) return;
+            const anyUnchecked = checkboxes.some((cb) => !cb.checked);
+            checkboxes.forEach((cb) => {
+                cb.checked = anyUnchecked;
+                const hName = cb.getAttribute("data-name");
+                if (!hName) return;
+                if (anyUnchecked) {
+                    selectedBulkDeactivateNames.add(hName);
+                } else {
+                    selectedBulkDeactivateNames.delete(hName);
+                }
+            });
+            updateBulkDeactivateSelectionUI();
+        });
+    }
+    const bulkDeactivateHostsList = document.getElementById("bulkDeactivateHostsList");
+    if (bulkDeactivateHostsList) {
+        bulkDeactivateHostsList.addEventListener("change", (e) => {
+            if (e.target.classList.contains("bulk-deactivate-check")) {
+                const hName = e.target.getAttribute("data-name");
+                if (hName) {
+                    if (e.target.checked) {
+                        selectedBulkDeactivateNames.add(hName);
+                    } else {
+                        selectedBulkDeactivateNames.delete(hName);
+                    }
+                }
+                updateBulkDeactivateSelectionUI();
+            }
+        });
     }
     const discoverBtn = document.getElementById("discoverBtn");
     if (discoverBtn) {

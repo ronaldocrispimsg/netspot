@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 
 TELEGRAM_BOT_TOKEN = os.getenv("NETSPOT_TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("NETSPOT_TELEGRAM_CHAT_ID")
+NOTIFICATIONS_ENABLED = os.getenv("NETSPOT_NOTIFICATIONS_ENABLED", "1") != "0"
 TELEGRAM_ANTISPAM_ENABLED = os.getenv("NETSPOT_TELEGRAM_ANTISPAM_ENABLED", "1") != "0"
 TELEGRAM_ANTISPAM_WINDOW_SECONDS = int(os.getenv("NETSPOT_TELEGRAM_ANTISPAM_WINDOW_SECONDS", "120"))
 TELEGRAM_ANTISPAM_MAX_ENTRIES = int(os.getenv("NETSPOT_TELEGRAM_ANTISPAM_MAX_ENTRIES", "5000"))
@@ -240,7 +241,12 @@ def build_incident_closed_message(host, timestamp=None, incident_type=None):
 def _message_fingerprint(message) -> str:
     import json
     if isinstance(message, dict):
-        normalized = json.dumps(message, sort_keys=True)
+        filtered = {
+            k: v
+            for k, v in message.items()
+            if k not in ("timestamp", "ts", "created_at")
+        }
+        normalized = json.dumps(filtered, sort_keys=True)
     else:
         normalized = " ".join(str(message or "").split())
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
@@ -310,9 +316,7 @@ def _is_suppressed_by_antispam(message, now_ts: float) -> bool:
     return False
 
 def send_telegram_alert(message):
-    token = TELEGRAM_BOT_TOKEN
-    chat_id = TELEGRAM_CHAT_ID
-    if not token or not chat_id:
+    if not NOTIFICATIONS_ENABLED:
         return False
 
     now_ts = time.time()
@@ -325,9 +329,7 @@ def send_telegram_alert(message):
     return True
 
 async def send_telegram_alert_async(message):
-    token = TELEGRAM_BOT_TOKEN
-    chat_id = TELEGRAM_CHAT_ID
-    if not token or not chat_id:
+    if not NOTIFICATIONS_ENABLED:
         return False
 
     now_ts = time.time()

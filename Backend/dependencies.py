@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
@@ -21,7 +21,8 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
             raise HTTPException(status_code=401, detail="Usuário não encontrado")
 
         if user.locked:
-            if user.locked_until and user.locked_until <= datetime.now():
+            now_utc = datetime.now(timezone.utc).replace(tzinfo=None)
+            if user.locked_until and user.locked_until <= now_utc:
                 user.locked = False
                 user.locked_until = None
                 user.attempts = 0

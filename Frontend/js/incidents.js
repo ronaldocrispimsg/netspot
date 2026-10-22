@@ -184,12 +184,12 @@ window.addEventListener("DOMContentLoaded", async () => {
 
     await loadIncidents();
 
-    // Auto-refresh leve a cada 20 segundos em segundo plano (se a aba estiver visível)
+    // Auto-refresh padronizado a cada 10 segundos em segundo plano (se a aba estiver visível)
     setInterval(() => {
         if (!document.hidden) {
             loadIncidents(true);
         }
-    }, 20000);
+    }, 10000);
 });
 
 /* ==========================================================================

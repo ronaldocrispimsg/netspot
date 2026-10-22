@@ -1,5 +1,7 @@
 import socket
 import ipaddress
+import dns.resolver
+import dns.reversename
 from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -129,10 +131,26 @@ def calculate_availability_points(
 
     return points
 
-def reverse_dns(ip: str) -> str | None:
+def reverse_dns(ip: str, timeout: float = 0.8) -> str | None:
     try:
-        hostname, _, _ = socket.gethostbyaddr(ip)
-        return hostname
+        rev_name = dns.reversename.from_address(ip)
+        resolver = dns.resolver.Resolver()
+        resolver.lifetime = timeout
+        resolver.timeout = timeout
+        answers = resolver.resolve(rev_name, "PTR")
+        if answers:
+            return str(answers[0]).rstrip(".")
+    except Exception:
+        pass
+
+    try:
+        old_timeout = socket.getdefaulttimeout()
+        socket.setdefaulttimeout(timeout)
+        try:
+            hostname, _, _ = socket.gethostbyaddr(ip)
+            return hostname
+        finally:
+            socket.setdefaulttimeout(old_timeout)
     except Exception:
         return None
 

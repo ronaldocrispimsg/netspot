@@ -15,6 +15,7 @@ from Backend.checker import ping_host, tcp_check, resolve_dns_cached_sync
 from Backend.notifications import telegram_health_check
 from Backend.services.circuit_breaker import circuit_breaker
 from Backend.snmp_engine import reset_snmp_backoff
+from Backend.mq_manager import mq_manager
 from Backend.schemas import (
     HostCreate,
     HostUpdate,
@@ -22,6 +23,7 @@ from Backend.schemas import (
     PasswordChangeRequest,
     NetworkDiscoveryRequest,
     NetworkImportRequest,
+    BulkDeactivateRequest,
 )
 from Backend.utils import (
     is_ip,
@@ -176,23 +178,31 @@ def _interface_ignored(interface_name: str) -> bool:
 
 def _run_nmap_discovery(subnet: str) -> str:
     try:
-        dns_server = None
-        try:
-            net = ipaddress.ip_network(subnet, strict=False)
-            dns_server = str(next(net.hosts()))
-        except Exception:
-            pass
-
-        nmap_args = ["nmap", "-sn", "-PE", "-PS22,80,443", "-T4", "--max-rtt-timeout", "200ms", "--max-retries", "1"]
-        if dns_server:
-            nmap_args += ["--dns-servers", dns_server]
-        nmap_args += [subnet, "-oX", "-"]
+        # Varredura ágil e pura de conectividade ICMP (Echo Request -PE), desativando probes de portas TCP
+        # e desativando resolução reversa de DNS (-n) para garantir máxima velocidade e estabilidade
+        # sem travamentos por portas fechadas ou DNS indisponível, suportando faixas de até /20 (4.096 IPs).
+        nmap_args = [
+            "nmap",
+            "-sn",
+            "-PE",
+            "-n",
+            "-T4",
+            "--min-rate",
+            "300",
+            "--max-rtt-timeout",
+            "200ms",
+            "--max-retries",
+            "1",
+            subnet,
+            "-oX",
+            "-",
+        ]
 
         result = subprocess.run(
             nmap_args,
             capture_output=True,
             text=True,
-            timeout=60,
+            timeout=120,
             check=False,
         )
     except FileNotFoundError:
@@ -262,14 +272,274 @@ def _build_unique_name(base_name: str, used_names: set[str]) -> str:
     return candidate
 
 
+def _is_tcp_port_open(ip: str, port: int = 53, timeout: float = 0.25) -> bool:
+    try:
+        with socket.create_connection((ip, port), timeout=timeout):
+            return True
+    except Exception:
+        return False
+
+
+def _discover_local_dns_servers(subnet: str, active_ips: list[str]) -> list[str]:
+    """
+    Descobre dinamicamente quais IPs ativos na rede (ou gateways da sub-rede/tabela de rotas)
+    possuem o serviço DNS (porta 53) aberto, sem assumir um gateway fixo (.1).
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    candidates: list[str] = []
+    seen: set[str] = set()
+
+    def _add(ip_val: str | None) -> None:
+        val = (ip_val or "").strip()
+        if val and val not in seen:
+            seen.add(val)
+            candidates.append(val)
+
+    # 1. Todos os IPs ativos descobertos no scan (inclui roteadores em .1, .254 ou servidores DNS como 10.0.3.7)
+    for ip in active_ips:
+        _add(ip)
+
+    # 2. Gateways candidatos da sub-rede (.1 e último IP utilizável .254), caso bloqueiem ICMP mas aceitem DNS
+    try:
+        net = ipaddress.ip_network(subnet, strict=False)
+        if isinstance(net, ipaddress.IPv4Network) and net.num_addresses >= 4:
+            _add(str(net.network_address + 1))
+            _add(str(net.broadcast_address - 1))
+    except Exception:
+        pass
+
+    # 3. Gateways configurados na tabela de roteamento do sistema operacional
+    try:
+        route_out = subprocess.run(
+            ["ip", "route"],
+            capture_output=True,
+            text=True,
+            timeout=1.0,
+            check=False,
+        ).stdout or ""
+        for match in re.findall(r"\bvia\s+(\d+\.\d+\.\d+\.\d+)\b", route_out):
+            _add(match)
+    except Exception:
+        pass
+
+    if not candidates:
+        return []
+
+    max_workers = min(len(candidates), 20)
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        flags = list(pool.map(_is_tcp_port_open, candidates))
+
+    return [ip for ip, is_open in zip(candidates, flags) if is_open]
+
+
+def _query_snmp_sysname_sync(ip: str, community: str = "netspot", timeout: float = 0.6) -> str | None:
+    """Consulta de forma rápida o OID sysName.0 (1.3.6.1.2.1.1.5.0) via SNMPv2c."""
+    import asyncio
+    from pysnmp.hlapi.v3arch.asyncio import (
+        SnmpEngine,
+        CommunityData,
+        UdpTransportTarget,
+        ContextData,
+        ObjectType,
+        ObjectIdentity,
+        get_cmd,
+    )
+
+    async def _fetch() -> str | None:
+        snmp_engine = SnmpEngine()
+        try:
+            comm = (community or "netspot").strip() or "netspot"
+            error_indication, error_status, _, var_binds = await get_cmd(
+                snmp_engine,
+                CommunityData(comm, mpModel=1),
+                await UdpTransportTarget.create((ip, 161), timeout=timeout, retries=0),
+                ContextData(),
+                ObjectType(ObjectIdentity("1.3.6.1.2.1.1.5.0")),
+            )
+            if error_indication or error_status or not var_binds:
+                return None
+            val_str = str(var_binds[0][1]).strip()
+            if not val_str or "No Such" in val_str:
+                return None
+            return val_str
+        except Exception:
+            return None
+        finally:
+            snmp_engine.close_dispatcher()
+
+    try:
+        return asyncio.run(_fetch())
+    except Exception:
+        return None
+
+
+def _resolve_single_discovered_hostname(ip: str, dns_servers: list[str]) -> str | None:
+    """
+    Resolve o nome do dispositivo combinando:
+    1) DNS reverso nos servidores DNS/gateways descobertos dinamicamente na LAN;
+    2) DNS reverso padrão do sistema;
+    3) SNMP sysName.0 (1.3.6.1.2.1.1.5.0) direto no dispositivo.
+    """
+    import dns.resolver
+    import dns.reversename
+
+    # 1. DNS Reverso nos servidores DNS locais descobertos na sub-rede/rotas
+    if dns_servers:
+        try:
+            rev_name = dns.reversename.from_address(ip)
+            resolver = dns.resolver.Resolver(configure=False)
+            resolver.nameservers = dns_servers
+            resolver.timeout = 0.4
+            resolver.lifetime = 0.6
+            answers = resolver.resolve(rev_name, "PTR")
+            for rdata in answers:
+                target = str(rdata.target).rstrip(".").strip()
+                if target:
+                    return target
+        except Exception:
+            pass
+
+    # 2. DNS Reverso padrão do sistema
+    sys_rdns = reverse_dns(ip, timeout=0.5)
+    if sys_rdns:
+        clean_rdns = str(sys_rdns).rstrip(".").strip()
+        if clean_rdns and clean_rdns != ip:
+            return clean_rdns
+
+    # 3. Fallback SNMP sysName.0 (1.3.6.1.2.1.1.5.0) direto no host
+    snmp_name = _query_snmp_sysname_sync(ip, timeout=0.6)
+    if snmp_name:
+        return snmp_name
+
+    return None
+
+
+_DISCOVERY_SERVICE_PORTS = (
+    22,    # SSH
+    53,    # DNS
+    80,    # HTTP
+    443,   # HTTPS
+    3000,  # Web / Frontend Dev / Grafana
+    3306,  # MySQL / MariaDB
+    5432,  # PostgreSQL
+    5672,  # RabbitMQ / AMQP
+    6379,  # Redis
+    8000,  # API HTTP / Microserviço
+    8080,  # App Server / Tomcat / Admin HTTP
+    8443,  # HTTPS Alternativo / Gateway
+    9187,  # Prometheus Exporter
+)
+_DISCOVERY_WEB_PORTS = (80, 443, 8443, 8080, 8000, 3000)
+
+
+def _infer_http_policy_from_ports(address: str, open_ports: list[int]) -> tuple[bool, str | None]:
+    if not open_ports:
+        return False, None
+    port_set = set(open_ports)
+    if 80 in port_set and 443 in port_set:
+        return True, None
+    if 443 in port_set:
+        return True, f"https://{address}"
+    if 80 in port_set:
+        return True, f"http://{address}"
+    for wp in (8443, 8080, 8000, 3000):
+        if wp in port_set:
+            scheme = "https" if wp == 8443 else "http"
+            return True, f"{scheme}://{address}:{wp}"
+    return False, None
+
+
+def _discover_open_ports_batch(
+    ips: list[str],
+    ports: tuple[int, ...] = _DISCOVERY_SERVICE_PORTS,
+    timeout: float = 0.25,
+) -> dict[str, list[int]]:
+    clean_ips = sorted({str(ip or "").strip() for ip in ips if str(ip or "").strip()})
+    if not clean_ips:
+        return {}
+
+    import asyncio
+
+    async def _run_batch() -> dict[str, list[int]]:
+        sem = asyncio.Semaphore(256)
+        result_map: dict[str, list[int]] = {ip: [] for ip in clean_ips}
+
+        async def _probe(ip: str, port: int) -> None:
+            async with sem:
+                try:
+                    _, writer = await asyncio.wait_for(
+                        asyncio.open_connection(ip, port),
+                        timeout=timeout,
+                    )
+                    writer.close()
+                    try:
+                        await writer.wait_closed()
+                    except Exception:
+                        pass
+                    result_map[ip].append(port)
+                except Exception:
+                    pass
+
+        await asyncio.gather(
+            *[_probe(ip, p) for ip in clean_ips for p in ports],
+            return_exceptions=True,
+        )
+        for ip in result_map:
+            result_map[ip].sort()
+        return result_map
+
+    try:
+        return asyncio.run(_run_batch())
+    except Exception:
+        return {ip: [] for ip in clean_ips}
+
+
+def _enrich_discovered_hostnames(raw_hosts: list[dict], subnet: str) -> list[dict]:
+    if not raw_hosts:
+        return []
+
+    from concurrent.futures import ThreadPoolExecutor
+
+    active_ips = [str(item.get("address") or "").strip() for item in raw_hosts if item.get("address")]
+    dns_servers = _discover_local_dns_servers(subnet, active_ips)
+    open_ports_by_ip = _discover_open_ports_batch(active_ips)
+
+    def _enrich_item(item: dict) -> dict:
+        addr = str(item.get("address") or "").strip()
+        existing_hn = (item.get("hostname") or "").strip() or None
+        open_ports = item.get("ports") if item.get("ports") is not None else open_ports_by_ip.get(addr, [])
+        http_enabled, http_url = _infer_http_policy_from_ports(addr, open_ports)
+        if existing_hn or not addr:
+            return {
+                "address": addr,
+                "hostname": existing_hn,
+                "ports": open_ports,
+                "http_enabled": http_enabled,
+                "http_url": http_url,
+            }
+        resolved_hn = _resolve_single_discovered_hostname(addr, dns_servers)
+        return {
+            "address": addr,
+            "hostname": resolved_hn,
+            "ports": open_ports,
+            "http_enabled": http_enabled,
+            "http_url": http_url,
+        }
+
+    max_workers = min(len(raw_hosts), 20)
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        return list(pool.map(_enrich_item, raw_hosts))
+
+
 def _prepare_discovery_result(db: Session, raw_hosts: list[dict]) -> list[dict]:
     if not raw_hosts:
         return []
 
     addresses = sorted({str(item.get("address") or "").strip() for item in raw_hosts if item.get("address")})
-    existing_hosts = db.query(Host).filter(Host.address.in_(addresses)).all()
+    existing_hosts = db.query(Host).filter(Host.address.in_(addresses), Host.active.is_(True)).all()
     existing_ip_set = {h.address for h in existing_hosts}
-    used_names = {str(row[0]).strip() for row in db.query(Host.name).all() if row[0]}
+    used_names = {str(row[0]).strip() for row in db.query(Host.name).filter(Host.active.is_(True)).all() if row[0]}
     seen_ips = set()
 
     prepared = []
@@ -283,12 +553,23 @@ def _prepare_discovery_result(db: Session, raw_hosts: list[dict]) -> list[dict]:
         hostname = item.get("hostname")
         base_name = str(hostname).strip() if hostname else _slug_ip_name(address)
         safe_name = _build_unique_name(base_name, used_names)
+        open_ports = _normalize_ports(item.get("ports"), None) if item.get("ports") else []
+        inferred_http_enabled, inferred_http_url = _infer_http_policy_from_ports(address, open_ports)
+        http_enabled = (
+            bool(item["http_enabled"])
+            if item.get("http_enabled") is not None
+            else inferred_http_enabled
+        )
+        http_url = item.get("http_url") if item.get("http_url") is not None else inferred_http_url
 
         prepared.append({
             "id": f"temp-{temp_idx}",
             "name": safe_name,
             "address": address,
             "hostname": hostname,
+            "ports": open_ports,
+            "http_enabled": http_enabled,
+            "http_url": http_url,
             "already_exists": address in existing_ip_set,
         })
         temp_idx += 1
@@ -410,9 +691,10 @@ def _reset_host_operational_state(host: Host) -> None:
 
 
 def _deactivate_host_entity(host: Host) -> None:
+    now_utc = datetime.now(timezone.utc).replace(tzinfo=None)
     host.active = False
-    host.active_time = datetime.utcnow()
-    host.deleted_at = datetime.utcnow()
+    host.active_time = now_utc
+    host.deleted_at = now_utc
     circuit_breaker.clear_host(host.id)
     reset_snmp_backoff(host.id)
 
@@ -426,7 +708,8 @@ def _is_icmp_blocked_but_service_up(
     if not last_ping or last_ping.success:
         return False
 
-    tcp_ok = host.port is not None and bool(last_tcp and last_tcp.success)
+    has_tcp_ports = bool(_host_ports(host))
+    tcp_ok = has_tcp_ports and bool(last_tcp and last_tcp.success)
     http_ok = bool(last_http and last_http.success)
     return tcp_ok or http_ok
 
@@ -473,13 +756,16 @@ def infer_probable_cause(db: Session, host: Host) -> str:
     if icmp_blocked_but_service_up:
         return "ICMP bloqueado por firewall (Serviços TCP/Web operando normalmente)"
 
+    configured_ports = _host_ports(host)
+    primary_port = configured_ports[0] if configured_ports else host.port
+
     if host.status == "DOWN":
         if last_dns and not last_dns.success:
             return "Falha na resolução DNS (servidor não respondeu)"
         if last_http and not last_http.success and (last_http.status_code or 0) >= 500:
             return f"Serviço HTTP indisponível (HTTP {last_http.status_code})"
-        if host.port is not None and last_tcp and not last_tcp.success:
-            return f"Porta TCP {host.port} indisponível (conexão recusada/timeout)"
+        if primary_port is not None and last_tcp and not last_tcp.success:
+            return f"Porta TCP {primary_port} indisponível (conexão recusada/timeout)"
         if last_ping and not last_ping.success:
             return "Host sem resposta ICMP (offline ou inalcançável)"
         return "Indisponibilidade geral do host"
@@ -555,8 +841,8 @@ def infer_probable_cause(db: Session, host: Host) -> str:
     if last_http and not last_http.success and (last_http.status_code or 0) >= 400:
         causes.append(f"Aplicação web respondendo HTTP {last_http.status_code}")
 
-    if host.port is not None and last_tcp and not last_tcp.success:
-        causes.append(f"Porta TCP {host.port} com falha intermitente")
+    if primary_port is not None and last_tcp and not last_tcp.success:
+        causes.append(f"Porta TCP {primary_port} com falha intermitente")
 
     if causes:
         return " | ".join(causes[:2])
@@ -602,7 +888,6 @@ def create_host(data: HostCreate, db: Session = Depends(get_db), user: str = Dep
                 ports = _normalize_ports(data.ports, data.port)
             existing_host.address = normalized_address
             _store_host_ports(existing_host, ports)
-            existing_host.hostname_resolved = resolved
             _reset_host_operational_state(existing_host)
             existing_host.hostname_resolved = resolved
 
@@ -614,6 +899,7 @@ def create_host(data: HostCreate, db: Session = Depends(get_db), user: str = Dep
             db.refresh(existing_host)
             if not existing_host.active:
                 raise HTTPException(status_code=500, detail="Falha ao reativar host")
+            mq_manager.publish_host_checks_sync([existing_host.id])
             return existing_host
         else:
             raise HTTPException(status_code=409, detail="Host com esse nome já existe")
@@ -641,6 +927,7 @@ def create_host(data: HostCreate, db: Session = Depends(get_db), user: str = Dep
         _store_host_ports(host, ports)
 
         _apply_http_policy(host, data.http_enabled, selected_http)
+        _apply_snmp_policy(host, data.snmp_enabled, comm)
 
         db.add(host)
         db.commit()
@@ -648,6 +935,7 @@ def create_host(data: HostCreate, db: Session = Depends(get_db), user: str = Dep
         if not host.active:
             raise HTTPException(status_code=500, detail="Falha ao ativar host recém-criado")
 
+        mq_manager.publish_host_checks_sync([host.id])
         return host
 
 
@@ -661,7 +949,8 @@ def network_discover(
     subnet = _validate_private_subnet(data.subnet)
     xml_result = _run_nmap_discovery(subnet)
     parsed_hosts = _parse_nmap_hosts(xml_result)
-    hosts = _prepare_discovery_result(db, parsed_hosts)
+    enriched_hosts = _enrich_discovered_hostnames(parsed_hosts, subnet)
+    hosts = _prepare_discovery_result(db, enriched_hosts)
 
     return {
         "subnet": subnet,
@@ -690,6 +979,14 @@ def network_import(
     seen_addresses_in_request = set()
     created_count = 0
     skipped_count = 0
+    new_or_reactivated_hosts = []
+
+    ips_needing_probe = [
+        str(it.address or "").strip()
+        for it in requested_hosts
+        if getattr(it, "ports", None) is None and str(it.address or "").strip()
+    ]
+    probed_ports_by_ip = _discover_open_ports_batch(ips_needing_probe) if ips_needing_probe else {}
 
     for item in requested_hosts:
         address = str(item.address or "").strip()
@@ -736,15 +1033,46 @@ def network_import(
             getattr(item, "snmp_community", None) or getattr(data, "snmp_community", "netspot") or "netspot"
         ).strip() or "netspot"
 
+        raw_item_ports = getattr(item, "ports", None)
+        if raw_item_ports is None:
+            raw_item_ports = probed_ports_by_ip.get(address, [])
+        detected_ports = _normalize_ports(raw_item_ports, None) if raw_item_ports else []
+        inferred_http_enabled, inferred_http_url = _infer_http_policy_from_ports(address, detected_ports)
+        target_http_enabled = (
+            bool(getattr(item, "http_enabled"))
+            if getattr(item, "http_enabled", None) is not None
+            else inferred_http_enabled
+        )
+        target_http_url = (
+            getattr(item, "http_url")
+            if getattr(item, "http_url", None) is not None
+            else inferred_http_url
+        )
+
         if address in existing_ip_set:
             existing_host = db.query(Host).filter(Host.address == address).first()
-            if existing_host:
+            if existing_host and not existing_host.active:
                 existing_host.active = True
+                existing_host.active_time = None
                 existing_host.deleted_at = None
-                existing_host.snmp_enabled = target_snmp_enabled
-                existing_host.snmp_community = target_snmp_community
+                _reset_host_operational_state(existing_host)
+                if detected_ports:
+                    _store_host_ports(existing_host, detected_ports)
+                if target_http_enabled or getattr(item, "http_enabled", None) is not None:
+                    _apply_http_policy(existing_host, target_http_enabled, target_http_url)
+                _apply_snmp_policy(existing_host, target_snmp_enabled, target_snmp_community)
                 circuit_breaker.clear_host(existing_host.id)
                 reset_snmp_backoff(existing_host.id)
+                created_count += 1
+                new_or_reactivated_hosts.append(existing_host)
+                results.append({
+                    "name": existing_host.name,
+                    "address": address,
+                    "created": True,
+                    "reactivated": True,
+                })
+                continue
+
             skipped_count += 1
             results.append({
                 "name": existing_host.name if existing_host else (raw_name or _slug_ip_name(address)),
@@ -770,13 +1098,16 @@ def network_import(
             status_ping="UNKNOWN",
             status_tcp="UNKNOWN",
             http_url=None,
-            http_enabled=False,
+            http_enabled=target_http_enabled,
             last_http_protocol=None,
             snmp_enabled=target_snmp_enabled,
             snmp_community=target_snmp_community,
         )
+        _store_host_ports(host, detected_ports)
+        _apply_http_policy(host, target_http_enabled, target_http_url)
 
         db.add(host)
+        new_or_reactivated_hosts.append(host)
         existing_ip_set.add(address)
         created_count += 1
         results.append({
@@ -786,6 +1117,9 @@ def network_import(
         })
 
     db.commit()
+    mq_manager.publish_host_checks_sync([
+        h.id for h in new_or_reactivated_hosts if getattr(h, "id", None) is not None
+    ])
 
     return {
         "requested": len(requested_hosts),
@@ -838,7 +1172,7 @@ def list_hosts(db: Session = Depends(get_db), user: str = Depends(get_current_us
 
 
 @router.post("/host/check/{host_name}")
-def check_host(host_name: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+async def check_host(host_name: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
 
     host = db.query(Host).filter(Host.name == host_name).first()
 
@@ -852,11 +1186,12 @@ def check_host(host_name: str, db: Session = Depends(get_db), user: User = Depen
         raise HTTPException(400, "DNS fail")
 
     ip = ips[0]
+    host.last_resolved_ip = ip
 
-    ping_result = ping_host(ip)
+    ping_result = await ping_host(ip)
     tcp_results = []
     for tcp_port in _host_ports(host):
-        result = tcp_check(ip, tcp_port)
+        result = await tcp_check(ip, tcp_port)
         result["port"] = tcp_port
         tcp_results.append(result)
 
@@ -889,7 +1224,7 @@ def check_host(host_name: str, db: Session = Depends(get_db), user: User = Depen
         host.status_tcp = None
         host.latency_tcp = None
 
-    host.last_check = datetime.now()
+    host.last_check = datetime.now(timezone.utc).replace(tzinfo=None)
 
     if icmp_blocked_but_service_up:
         host.status = "UP"
@@ -979,24 +1314,69 @@ def deactivate_host(
     db: Session = Depends(get_db),
     user: str = Depends(get_current_user),
 ):
+    target_name = (host_name or "").strip()
     host = db.query(Host).filter(Host.id == host_id).first()
 
-    if not host:
-        raise HTTPException(status_code=404, detail="Host não encontrado")
+    if not host or host.name != target_name:
+        host_by_name = db.query(Host).filter(Host.name == target_name).first() if target_name else None
+        if host_by_name:
+            host = host_by_name
+        elif not host:
+            raise HTTPException(status_code=404, detail="Host não encontrado")
+        else:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Conflito de identificação: id={host_id} pertence a '{host.name}', não a '{target_name}'",
+            )
 
     if not host.active:
         return {"detail": "Host já está na lixeira"}
-
-    if host.name != host_name:
-        raise HTTPException(
-            status_code=409,
-            detail=f"Conflito de identificação: id={host_id} pertence a '{host.name}', não a '{host_name}'",
-        )
 
     _deactivate_host_entity(host)
     db.commit()
 
     return {"detail": "Host movido para a lixeira com sucesso"}
+
+
+@router.post("/hosts/bulk-deactivate")
+def bulk_deactivate_hosts(
+    data: BulkDeactivateRequest,
+    db: Session = Depends(get_db),
+    user: str = Depends(get_current_user),
+):
+    raw_ids = [int(i) for i in (data.host_ids or []) if i is not None]
+    raw_names = [str(n).strip() for n in (data.host_names or []) if n and str(n).strip()]
+
+    if not raw_ids and not raw_names:
+        raise HTTPException(status_code=400, detail="Nenhum host selecionado para mover para a lixeira")
+
+    query = db.query(Host).filter(Host.active.is_(True))
+    if raw_ids and raw_names:
+        query = query.filter((Host.id.in_(raw_ids)) | (Host.name.in_(raw_names)))
+    elif raw_ids:
+        query = query.filter(Host.id.in_(raw_ids))
+    else:
+        query = query.filter(Host.name.in_(raw_names))
+
+    hosts_to_deactivate = query.all()
+    if not hosts_to_deactivate:
+        return {
+            "detail": "Nenhum host ativo encontrado para os itens selecionados",
+            "deactivated_count": 0,
+            "deactivated_names": [],
+        }
+
+    deactivated_names = []
+    for h in hosts_to_deactivate:
+        _deactivate_host_entity(h)
+        deactivated_names.append(h.name)
+
+    db.commit()
+    return {
+        "detail": f"{len(deactivated_names)} host(s) movido(s) para a lixeira com sucesso",
+        "deactivated_count": len(deactivated_names),
+        "deactivated_names": deactivated_names,
+    }
 
 
 @router.post("/hosts/{host_id}/restore")
@@ -1006,19 +1386,23 @@ def restore_host(
     db: Session = Depends(get_db),
     user: str = Depends(get_current_user),
 ):
+    target_name = (host_name or "").strip()
     host = db.query(Host).filter(Host.id == host_id).first()
 
-    if not host:
-        raise HTTPException(status_code=404, detail="Host não encontrado")
+    if not host or host.name != target_name:
+        host_by_name = db.query(Host).filter(Host.name == target_name).first() if target_name else None
+        if host_by_name:
+            host = host_by_name
+        elif not host:
+            raise HTTPException(status_code=404, detail="Host não encontrado")
+        else:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Conflito de identificação: id={host_id} pertence a '{host.name}', não a '{target_name}'",
+            )
 
     if host.active:
         return {"detail": "Host já está ativo"}
-
-    if host.name != host_name:
-        raise HTTPException(
-            status_code=409,
-            detail=f"Conflito de identificação: id={host_id} pertence a '{host.name}', não a '{host_name}'",
-        )
 
     host.active = True
     host.active_time = None
@@ -1028,6 +1412,7 @@ def restore_host(
     _reset_host_operational_state(host)
 
     db.commit()
+    mq_manager.publish_host_checks_sync([host.id])
     return {"detail": "Host restaurado com sucesso"}
 
 
@@ -1038,21 +1423,25 @@ def hard_delete_host(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_admin),
 ):
+    target_name = (host_name or "").strip()
     host = db.query(Host).filter(Host.id == host_id).first()
 
-    if not host:
-        raise HTTPException(status_code=404, detail="Host não encontrado")
+    if not host or host.name != target_name:
+        host_by_name = db.query(Host).filter(Host.name == target_name).first() if target_name else None
+        if host_by_name:
+            host = host_by_name
+        elif not host:
+            raise HTTPException(status_code=404, detail="Host não encontrado")
+        else:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Conflito de identificação: id={host_id} pertence a '{host.name}', não a '{target_name}'",
+            )
 
     if host.active:
         raise HTTPException(
             status_code=409,
             detail="Host ativo não pode ser removido permanentemente. Mova para lixeira antes.",
-        )
-
-    if host.name != host_name:
-        raise HTTPException(
-            status_code=409,
-            detail=f"Conflito de identificação: id={host_id} pertence a '{host.name}', não a '{host_name}'",
         )
 
     db.query(CheckResult).filter(CheckResult.host_id == host.id).delete(synchronize_session=False)
@@ -1112,34 +1501,64 @@ def delete_host(host_name: str, db: Session = Depends(get_db), user: str = Depen
     return {"detail": "Host movido para a lixeira com sucesso"}
 
 @router.put("/host/update/{host_name}")
-def update_host(host_name: str, data: HostUpdate, db: Session = Depends(get_db), user: str = Depends(get_current_user)):
-    host = db.query(Host).filter(Host.name == host_name).first()
-    resolved = None
-    
+def update_host(
+    host_name: str,
+    data: HostUpdate,
+    db: Session = Depends(get_db),
+    user: str = Depends(get_current_user),
+):
+    clean_host_name = (host_name or "").strip()
+    host = db.query(Host).filter(Host.name == clean_host_name).first()
+    if not host and clean_host_name != host_name:
+        host = db.query(Host).filter(Host.name == host_name).first()
+
     if not host:
         raise HTTPException(status_code=404, detail="Host não encontrado")
 
+    # 1. Renomeação do host com validação de unicidade
+    target_name = (data.name or "").strip() if getattr(data, "name", None) else None
+    old_name = host.name
+    if target_name and target_name != host.name:
+        existing_other = db.query(Host).filter(Host.name == target_name, Host.id != host.id).first()
+        if existing_other:
+            raise HTTPException(status_code=409, detail=f"Já existe outro host com o nome '{target_name}'")
+        host.name = target_name
+        # Atualiza referências relacionais em Incident e CheckResult
+        db.query(Incident).filter(Incident.host_name == old_name).update(
+            {Incident.host_name: target_name}, synchronize_session=False
+        )
+        db.query(CheckResult).filter(CheckResult.host_id == host.id).update(
+            {CheckResult.host_name: target_name}, synchronize_session=False
+        )
+
+    # 2. Endereço e validação ágil (reutiliza cache imediato se o endereço não mudou)
     normalized_address = (data.address or "").strip()
     if not normalized_address:
         raise HTTPException(status_code=400, detail="Endereço do host é obrigatório")
 
-    if is_ip(normalized_address):
-        resolved = reverse_dns(normalized_address)
-    else:
-        dns_result = resolve_dns_cached_sync(normalized_address, db)
-        ips = extract_ips_from_dns_result(dns_result)
+    resolved = host.hostname_resolved
+    if normalized_address != host.address:
+        if is_ip(normalized_address):
+            resolved = None  # IP direto: não trava requisição com PTR reverso bloqueante
+        else:
+            dns_result = resolve_dns_cached_sync(normalized_address, db)
+            ips = extract_ips_from_dns_result(dns_result)
 
-        if not ips:
-            raise HTTPException(status_code=400, detail="Endereço inválido")
+            if not ips:
+                raise HTTPException(status_code=400, detail="Endereço inválido")
+            resolved = normalized_address
 
+    # 3. Portas
     if data.ports is None and data.port is None:
         ports = _host_ports(host)
     else:
         ports = _normalize_ports(data.ports, data.port)
+
     host.address = normalized_address
     _store_host_ports(host, ports)
     host.hostname_resolved = resolved
 
+    # 4. Políticas HTTP e SNMP
     selected_http = _resolve_http_input(data)
     _apply_http_policy(host, data.http_enabled, selected_http)
 
@@ -1148,7 +1567,11 @@ def update_host(host_name: str, data: HostUpdate, db: Session = Depends(get_db),
 
     db.commit()
 
-    return {"detail": "Host atualizado com sucesso"}
+    return {
+        "detail": "Host atualizado com sucesso",
+        "old_name": old_name,
+        "name": host.name,
+    }
 
 @router.get("/alerts/list")
 def list_alerts(db: Session = Depends(get_db), user: str = Depends(get_current_user)):
@@ -1231,7 +1654,7 @@ def availability_type(host_name: str, db: Session = Depends(get_db), user: User 
     
 @router.get("/hosts/metrics/availability/host/{host_name}")
 def availability_host(host_name: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     window_start = now - timedelta(minutes=60)
 
     # Otimização de performance: 1 única query para carregar os incidentes da janela em vez de 60 queries
@@ -1273,7 +1696,7 @@ def availability_host(host_name: str, db: Session = Depends(get_db), user: User 
 
 @router.get("/hosts/metrics/{host_name}/downtime")
 def downtime_history(host_name: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     since = now - timedelta(hours=1)
 
     incidents = (
@@ -1301,8 +1724,9 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
     password = data.password
     user = db.query(User).filter(User.username == username).first()
 
+    now_utc = datetime.now(timezone.utc).replace(tzinfo=None)
     if user and user.locked:
-        if user.locked_until and user.locked_until <= datetime.now():
+        if user.locked_until and user.locked_until <= now_utc:
             user.locked = False
             user.locked_until = None
             user.attempts = 0
@@ -1315,7 +1739,7 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
             user.attempts = (user.attempts or 0) + 1
             if user.attempts >= 5:
                 user.locked = True
-                user.locked_until = datetime.now() + timedelta(minutes=1)
+                user.locked_until = now_utc + timedelta(minutes=1)
                 db.commit()
                 raise HTTPException(status_code=403, detail="Conta bloqueada após 5 tentativas. Aguarde 1 minuto.")
             db.commit()

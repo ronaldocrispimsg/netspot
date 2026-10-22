@@ -12,8 +12,8 @@
 O sistema combina monitoramento ativo e passivo (**ICMP Ping, Portas TCP, HTTP/HTTPS, DNS e SNMP Multivendor**), heurística especialista de inferência de **Causa Provável**, inteligência de autocura (**Self-Healing & Circuit Breaker**), cálculo estatístico contínuo de **Health Score**, **SLA** e **Jitter** (RFC 3550), além de gestão e despacho assíncrono de notificações via **RabbitMQ, n8n e Telegram**.
 
 > 📄 **Documentação Completa**:
-> - [`funcionalidades.md`](funcionalidades.md): Especificação técnica exaustiva de cada módulo e regra de negócio.
-> - [`kathara.md`](kathara.md): Topologia e guia de execução no laboratório experimental emulado Kathará (40+ nós).
+> - [`docs/funcionalidades.md`](docs/funcionalidades.md): Especificação técnica exaustiva de cada módulo e regra de negócio.
+> - [`docs/kathara.md`](docs/kathara.md): Topologia e guia de execução no laboratório experimental emulado Kathará (40+ nós).
 
 ---
 
