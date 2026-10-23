@@ -64,17 +64,16 @@
         <h2>Cadastrar host</h2>
         <form id="hostForm">
             <label for="name" class="visually-hidden">Nome amigável do host</label>
-            <input id="name" placeholder="Nome do host (ex.: Servidor Web 01)" required title="Nome identificador do host (ex.: Servidor Apache, Router Core)">
+            <input id="name" placeholder="Nome (ex.: Servidor Web 01)" required title="Nome identificador do host (ex.: Servidor Apache, Router Core)">
 
             <label for="address" class="visually-hidden">Endereço IP ou Hostname</label>
-            <input id="address" placeholder="Hostname (ex.: pc1.lab.local) ou IP (ex.: 10.0.1.10)" title="Dica: Em redes com DHCP, cadastre o Hostname (DNS) para o NetSpot acompanhar mudanças de IP automaticamente." required>
+            <input id="address" placeholder="Hostname ou IP (ex.: pc1.lab.local)" title="Dica: Em redes com DHCP, prefira o Hostname (DNS) para acompanhar mudanças de IP automaticamente." required>
 
             <label for="http_url" class="visually-hidden">URL HTTP/HTTPS</label>
-            <input id="http_url" placeholder="URL Web opcional (ex.: http://10.0.0.10:80/ ou https://...)" title="Se preenchida, o NetSpot envia requisição GET a cada ciclo e mede a latência de aplicação. Se vazia, a URL é inferida automaticamente a partir das portas web monitoradas.">
+            <input id="http_url" placeholder="URL HTTP opcional (ex.: http://10.0.1.10:80/)" title="Se preenchida, o NetSpot envia requisição GET e afere a latência web.">
 
             <small class="discovery-helper-text" style="grid-column: 1 / -1; margin-top: -2px; margin-bottom: 4px;">
-                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: -2px; margin-right: 4px;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-                <strong>Redes Dinâmicas (DHCP):</strong> Cadastre o <strong>Hostname / FQDN (DNS)</strong> em vez do IP fixo para que o NetSpot acompanhe trocas de IP automaticamente (evento <code>DNS_CHANGE</code>) mantendo a identidade e o histórico do dispositivo.
+                <strong>Dica DHCP:</strong> Prefira cadastrar o <strong>Hostname (DNS)</strong> para rastrear trocas de IP automaticamente.
             </small>
 
             <label class="snmp-enable-field snmp-enable-switch">
@@ -82,7 +81,7 @@
                 <span class="snmp-switch" aria-hidden="true"></span>
                 <span class="snmp-enable-text">
                     <strong>Check HTTP/HTTPS</strong>
-                    <small>Mede latência e código HTTP de resposta</small>
+                    <small>Latência e código HTTP</small>
                 </span>
             </label>
             <div id="portsField" class="ports-field">
@@ -90,7 +89,7 @@
                 <span>Portas TCP</span>
                 <button id="addPortBtn" type="button" class="add-port-btn" title="Adicionar porta TCP" aria-label="Adicionar porta TCP">+</button>
               </div>
-              <small class="ports-help">Portas TCP a monitorar (ex.: 80, 443, 22, 5432, 8080). Clique em '+' para adicionar.</small>
+              <small class="ports-help">(ex.: 80, 443, 22). Use '+' para adicionar.</small>
               <div id="portsContainer" class="ports-container"></div>
             </div>
             <label class="snmp-enable-field snmp-enable-switch">
@@ -98,11 +97,11 @@
                 <span class="snmp-switch" aria-hidden="true"></span>
                 <span class="snmp-enable-text">
                     <strong>Ativar SNMP</strong>
-                    <small>Telemetria de CPU, RAM, Disco e Tráfego</small>
+                    <small>CPU, RAM, Disco e Rede</small>
                 </span>
             </label>
             <label for="snmp_community" class="visually-hidden">Community SNMP</label>
-            <input id="snmp_community" value="netspot" placeholder="Community SNMP (padrão: netspot)" title="Community SNMP v2c (padrão do NetSpot: netspot)">
+            <input id="snmp_community" value="netspot" placeholder="Community SNMP (padrão: netspot)" title="Community SNMP v2c (padrão: netspot)">
             <button type="submit">Cadastrar host</button>
         </form>
     </article>
@@ -113,11 +112,11 @@
         <h2>Descoberta de rede (LAN)</h2>
         <div class="network-discovery-form">
             <label for="discoverSubnet" class="visually-hidden">Subnet CIDR para varredura</label>
-            <input id="discoverSubnet" value="192.168.1.0/24" placeholder="Subnet CIDR (ex.: 10.0.1.0/24 ou 192.168.1.0/24)" title="Notação CIDR da sub-rede local. No laboratório Kathará, use 10.0.1.0/24, 10.0.2.0/24 ou 10.0.3.0/24.">
+            <input id="discoverSubnet" value="192.168.1.0/24" placeholder="Subnet CIDR (ex.: 10.0.1.0/24)" title="Notação CIDR da sub-rede local. No laboratório Kathará, use 10.0.1.0/24, 10.0.2.0/24 ou 10.0.3.0/24.">
             <button id="discoverBtn" type="button">Descobrir rede</button>
         </div>
         <small class="discovery-helper-text">
-            Varredura ICMP Ping concorrente com resolução automática de Hostnames (DNS/SNMP) e portas abertas. Limite máximo permitido: máscara <strong>/20</strong> (máx. 4096 endereços).
+            Varredura ICMP com resolução de nomes (DNS/SNMP) e portas abertas (máx. /20).
         </small>
         <div id="networkDiscoveryInfo" class="network-discovery-info" aria-live="polite"></div>
         <div id="networkDiscoveryList" class="network-discovery-list">
@@ -230,24 +229,23 @@
     </div>
 
     <label class="modal-label" for="modal-name">Nome do Host</label>
-    <input id="modal-name" placeholder="Nome do host (ex.: Servidor Web 01)" required title="Nome identificador do host">
+    <input id="modal-name" placeholder="Nome (ex.: Servidor Web 01)" required title="Nome identificador do host">
 
     <label class="modal-label" for="modal-ip">Endereço / IP (ou Hostname/FQDN)</label>
-    <input id="modal-ip" placeholder="Hostname (ex.: pc1.lab.local) ou IP (ex.: 10.0.1.10)" title="Dica: Em redes com DHCP, prefira o Hostname (DNS) para o NetSpot acompanhar mudanças de IP automaticamente.">
+    <input id="modal-ip" placeholder="Hostname ou IP (ex.: pc1.lab.local)" title="Dica: Em redes com DHCP, prefira o Hostname (DNS) para acompanhar mudanças de IP automaticamente.">
     <small class="discovery-helper-text" style="margin-top: 2px; margin-bottom: 8px;">
-      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: -2px; margin-right: 4px;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-      <strong>Redes Dinâmicas (DHCP):</strong> Prefira cadastrar o <strong>Hostname / FQDN (DNS)</strong> em vez do IP fixo para rastrear trocas de IP automaticamente (evento <code>DNS_CHANGE</code>).
+      <strong>Dica DHCP:</strong> Prefira o <strong>Hostname (DNS)</strong> para acompanhar mudanças de IP.
     </small>
 
     <label class="modal-label" for="modal-http-url">URL HTTP/HTTPS (opcional)</label>
-    <input id="modal-http-url" placeholder="URL Web opcional (ex.: http://10.0.0.10:80/ ou https://...)" title="Se preenchida, o NetSpot envia requisição GET a cada ciclo e mede a latência de aplicação. Se vazia, a URL é inferida automaticamente a partir das portas web monitoradas.">
+    <input id="modal-http-url" placeholder="URL HTTP opcional (ex.: http://10.0.1.10:80/)" title="Se preenchida, o NetSpot envia requisição GET e afere a latência web.">
 
     <label class="snmp-enable-field snmp-enable-switch">
       <input id="modal-http-enabled" type="checkbox">
       <span class="snmp-switch" aria-hidden="true"></span>
       <span class="snmp-enable-text">
         <strong>Check HTTP/HTTPS</strong>
-        <small>Mede latência e código HTTP de resposta</small>
+        <small>Latência e código HTTP</small>
       </span>
     </label>
 
@@ -256,7 +254,7 @@
         <span>Portas TCP</span>
         <button id="modalAddPortBtn" type="button" class="add-port-btn" title="Adicionar porta TCP" aria-label="Adicionar porta TCP">+</button>
       </div>
-      <small class="ports-help">Portas TCP a monitorar (ex.: 80, 443, 22, 5432, 8080). Clique em '+' para adicionar.</small>
+      <small class="ports-help">(ex.: 80, 443, 22). Use '+' para adicionar.</small>
       <div id="modalPortsContainer" class="ports-container"></div>
     </div>
 
@@ -265,12 +263,12 @@
       <span class="snmp-switch" aria-hidden="true"></span>
       <span class="snmp-enable-text">
         <strong>Ativar SNMP</strong>
-        <small>Telemetria de CPU, RAM, Disco e Tráfego</small>
+        <small>CPU, RAM, Disco e Rede</small>
       </span>
     </label>
 
     <label class="modal-label" for="modal-snmp-community">Community SNMP</label>
-    <input id="modal-snmp-community" value="netspot" placeholder="Community SNMP (padrão: netspot)" title="Community SNMP v2c (padrão do NetSpot: netspot)">
+    <input id="modal-snmp-community" value="netspot" placeholder="Community SNMP (padrão: netspot)" title="Community SNMP v2c (padrão: netspot)">
 
     <div class="modal-actions">
       <button type="button" class="modal-btn-primary" onclick="submitModalEdit()">Salvar</button>
@@ -289,23 +287,23 @@
 
     <label class="modal-label" for="current-pwd">Senha Atual</label>
     <div class="password-input-wrap">
-      <input id="current-pwd" type="password" placeholder="Senha atual de acesso" autocomplete="current-password" title="Digite sua senha atual de acesso">
+      <input id="current-pwd" type="password" placeholder="Senha atual" autocomplete="current-password" title="Digite sua senha atual de acesso">
       <button type="button" class="password-toggle-btn" onclick="togglePasswordVisibility('current-pwd', this)" title="Mostrar senha" aria-label="Mostrar senha">
         <svg class="eye-open" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-        <svg class="eye-closed hidden" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+        <svg class="eye-closed hidden" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle><line x1="2" y1="2" x2="22" y2="22"></line></svg>
       </button>
     </div>
 
     <label class="modal-label" for="new-pwd">Nova Senha</label>
     <div class="password-input-wrap">
-      <input id="new-pwd" type="password" placeholder="Nova senha (mínimo 4 caracteres)" autocomplete="new-password" title="A nova senha deve possuir no mínimo 4 caracteres">
+      <input id="new-pwd" type="password" placeholder="Nova senha (mín. 4 caracteres)" autocomplete="new-password" title="A nova senha deve possuir no mínimo 4 caracteres">
       <button type="button" class="password-toggle-btn" onclick="togglePasswordVisibility('new-pwd', this)" title="Mostrar senha" aria-label="Mostrar senha">
         <svg class="eye-open" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-        <svg class="eye-closed hidden" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+        <svg class="eye-closed hidden" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle><line x1="2" y1="2" x2="22" y2="22"></line></svg>
       </button>
     </div>
     <small class="discovery-helper-text" style="margin-top: -6px; margin-bottom: 8px;">
-      A nova senha deve conter no <strong>mínimo 4 caracteres</strong>.
+      Mínimo de 4 caracteres.
     </small>
 
     <label class="modal-label" for="confirm-pwd">Confirmar Nova Senha</label>
@@ -313,7 +311,7 @@
       <input id="confirm-pwd" type="password" placeholder="Confirmar nova senha" autocomplete="new-password" title="Repita a nova senha exatamente como digitada acima">
       <button type="button" class="password-toggle-btn" onclick="togglePasswordVisibility('confirm-pwd', this)" title="Mostrar senha" aria-label="Mostrar senha">
         <svg class="eye-open" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-        <svg class="eye-closed hidden" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+        <svg class="eye-closed hidden" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle><line x1="2" y1="2" x2="22" y2="22"></line></svg>
       </button>
     </div>
 
@@ -344,7 +342,7 @@
     <!-- Aba 1: Seleção em lote de hosts ativos para enviar à lixeira -->
     <div id="trashTabDeactivate" class="trash-tab-panel hidden" role="tabpanel">
       <p class="trash-tab-description">
-        Mover hosts para a lixeira pausa o monitoramento contínuo sem perder métricas históricas nem registros de incidentes (<strong>soft delete</strong>). Os hosts podem ser reativados a qualquer momento na aba <em>Itens na lixeira</em>.
+        Pausa o monitoramento mantendo histórico e métricas (soft delete).
       </p>
       <div class="bulk-deactivate-search-row">
         <label for="bulkDeactivateSearchInput" class="visually-hidden">Filtrar hosts ativos</label>
@@ -368,7 +366,7 @@
     <!-- Aba 2: Itens atualmente na lixeira -->
     <div id="trashTabItems" class="trash-tab-panel" role="tabpanel">
       <p class="trash-tab-description">
-        Hosts desativados. Clique em <strong>Restaurar</strong> para reativar o monitoramento ou em <strong>Excluir definitivamente</strong> para remover permanentemente do banco de dados (<strong>hard delete</strong>).
+        Hosts inativos. Restaure para monitorar ou exclua definitivamente (hard delete).
       </p>
       <div class="trash-modal-toolbar">
         <button id="emptyTrashBtn" class="trash-empty-btn danger-btn" type="button" onclick="openConfirmEmptyTrashModal()" title="Excluir permanentemente todos os hosts da lixeira">Excluir todos</button>
