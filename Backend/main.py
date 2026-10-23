@@ -57,11 +57,26 @@ def create_default_admin():
 def setup_kathara_routes():
     """Configura automaticamente as rotas estáticas para as redes Kathará (10.0.0.0/16 e 100.0.0.0/16) ao iniciar."""
     import subprocess
-    gateway = os.getenv("KATHARA_ROUTER_IP", "172.17.0.2")
+    import ipaddress
+    gateway = os.getenv("KATHARA_ROUTER_IP", "172.17.0.2").strip()
     subnets_raw = os.getenv("KATHARA_SUBNETS", "10.0.0.0/16,100.0.0.0/16")
     subnets = [s.strip() for s in subnets_raw.split(",") if s.strip()]
 
+    # Validação sintática defensiva do gateway (evita comandos inválidos no sistema)
+    try:
+        ipaddress.ip_address(gateway)
+    except ValueError:
+        logger.warning(f"[KATHARA] Gateway inválido configurado em KATHARA_ROUTER_IP: '{gateway}'. Roteamento abortado.")
+        return
+
     for subnet in subnets:
+        # Validação sintática defensiva da sub-rede CIDR
+        try:
+            ipaddress.ip_network(subnet, strict=False)
+        except ValueError:
+            logger.warning(f"[KATHARA] Sub-rede inválida em KATHARA_SUBNETS: '{subnet}'. Ignorada.")
+            continue
+
         try:
             res = subprocess.run(
                 ["ip", "route", "replace", subnet, "via", gateway],
@@ -74,9 +89,6 @@ def setup_kathara_routes():
                 logger.warning(f"[KATHARA] Aviso ao adicionar rota {subnet} via {gateway}: {res.stderr.strip()}")
         except Exception as e:
             logger.warning(f"[KATHARA] Não foi possível configurar rota para {subnet}: {e}")
-
-
-create_default_admin()
 
 
 # 5. Desligamento Gracioso (Graceful Shutdown)

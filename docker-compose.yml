@@ -3,6 +3,7 @@ services:
     image: postgres:15-alpine
     container_name: netspot-db
     restart: always
+    command: postgres -c max_connections=200
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-netspot}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -23,7 +24,7 @@ services:
       dockerfile: Backend/Dockerfile
     container_name: netspot-backend
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     cap_add:
       - NET_ADMIN
       - NET_RAW
@@ -82,7 +83,7 @@ services:
     container_name: netspot-n8n
     user: root
     ports:
-      - "5678:5678"
+      - "127.0.0.1:5678:5678"
     cap_add:
       - NET_ADMIN
       - NET_RAW

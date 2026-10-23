@@ -948,17 +948,17 @@ function buildHostCardHTML(h) {
         </div>
 
         <div class="face-nav">
-            <button class="face-nav-btn face-prev-btn hidden" type="button" title="Voltar face" aria-label="Voltar face" onclick="prevHostFace('${h.name}')">${iconSvg("arrow_left")}</button>
+            <button class="face-nav-btn face-prev-btn hidden" type="button" title="Voltar face" aria-label="Voltar face" onclick='prevHostFace(${JSON.stringify(h.name)})'>${iconSvg("arrow_left")}</button>
             <span class="face-indicator-label" title="Exibindo Face 1 de 3: Resumo e status">1/3</span>
             <div class="icon-actions">
-                <button class="icon-btn" type="button" title="Histórico recente" aria-label="Histórico recente" onclick="toggleHistory('${h.name}')">${iconSvg("history")}</button>
-                <button class="icon-btn" type="button" title="Gráfico de latência" aria-label="Gráfico de latência" onclick="toggleLatencyChart('${h.name}')">${iconSvg("latency")}</button>
-                ${snmpConfigured ? `<button class="icon-btn" type="button" title="Gráfico SNMP" aria-label="Gráfico SNMP" onclick="toggleSnmpChart('${h.name}')">${iconSvg("snmp")}</button>` : ""}
-                <button class="icon-btn" type="button" title="Disponibilidade por tipo" aria-label="Disponibilidade por tipo" onclick="toggleAvailabilityChartType('${h.name}')">${iconSvg("availability_type")}</button>
-                <button class="icon-btn" type="button" title="Disponibilidade geral" aria-label="Disponibilidade geral" onclick="toggleAvailabilityChart('${h.name}')">${iconSvg("availability")}</button>
+                <button class="icon-btn" type="button" title="Histórico recente" aria-label="Histórico recente" onclick='toggleHistory(${JSON.stringify(h.name)})'>${iconSvg("history")}</button>
+                <button class="icon-btn" type="button" title="Gráfico de latência" aria-label="Gráfico de latência" onclick='toggleLatencyChart(${JSON.stringify(h.name)})'>${iconSvg("latency")}</button>
+                ${snmpConfigured ? `<button class="icon-btn" type="button" title="Gráfico SNMP" aria-label="Gráfico SNMP" onclick='toggleSnmpChart(${JSON.stringify(h.name)})'>${iconSvg("snmp")}</button>` : ""}
+                <button class="icon-btn" type="button" title="Disponibilidade por tipo" aria-label="Disponibilidade por tipo" onclick='toggleAvailabilityChartType(${JSON.stringify(h.name)})'>${iconSvg("availability_type")}</button>
+                <button class="icon-btn" type="button" title="Disponibilidade geral" aria-label="Disponibilidade geral" onclick='toggleAvailabilityChart(${JSON.stringify(h.name)})'>${iconSvg("availability")}</button>
                 <button class="icon-btn" type="button" title="Editar host" aria-label="Editar host" onclick='openEditModal(${JSON.stringify(h.name)})'>${iconSvg("edit")}</button>
             </div>
-            <button class="face-nav-btn face-next-btn" type="button" title="Avançar para Face 2: Métricas de rede" aria-label="Avançar para Face 2: Métricas de rede" onclick="nextHostFace('${h.name}')">${iconSvg("arrow_right")}</button>
+            <button class="face-nav-btn face-next-btn" type="button" title="Avançar para Face 2: Métricas de rede" aria-label="Avançar para Face 2: Métricas de rede" onclick='nextHostFace(${JSON.stringify(h.name)})'>${iconSvg("arrow_right")}</button>
         </div>
 
         <!-- Body: três colunas (Resumo | Rede | SNMP) -->
@@ -975,7 +975,7 @@ function buildHostCardHTML(h) {
                         <small><b>Disponibilidade:</b> ${availability10m}%</small>
                         <small><b>Tendência HTTP:</b> ${trendIcon(h.trend_http)} ${h.trend_http ?? "N/A"}</small>
                         <small><b>Causa provável:</b></small>
-                        <small class="cause-pill ${causeClass}">${h.probable_cause ?? "Operação normal"}</small>
+                        <small class="cause-pill ${causeClass}">${escapeHtml(h.probable_cause ?? "Operação normal")}</small>
                     </div>
                 </div>
             </div>
@@ -1146,7 +1146,7 @@ function updateHostCardInPlace(card, h) {
             <small><b>Disponibilidade:</b> ${availability10m}%</small>
             <small><b>Tendência HTTP:</b> ${trendIcon(h.trend_http)} ${h.trend_http ?? "N/A"}</small>
             <small><b>Causa provável:</b></small>
-            <small class="cause-pill ${causeClass}">${h.probable_cause ?? "Operação normal"}</small>
+            <small class="cause-pill ${causeClass}">${escapeHtml(h.probable_cause ?? "Operação normal")}</small>
         `;
     }
 

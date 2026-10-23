@@ -420,7 +420,10 @@ def total_downtime(db, host_name):
     return sum(i.duration_seconds for i in incidents)
 
 def calculate_availability_from_incidents(incidents, now, since, total_period: int = 600) -> float:
-    downtime = 0
+    if total_period <= 0:
+        return 100.0
+
+    raw_intervals = []
     for incident in incidents:
         start = incident.started_time
         end = incident.ended_time or now
@@ -429,10 +432,27 @@ def calculate_availability_from_incidents(incidents, now, since, total_period: i
         overlap_end = min(end, now)
 
         if overlap_end > overlap_start:
-            downtime += (overlap_end - overlap_start).total_seconds()
+            raw_intervals.append((overlap_start, overlap_end))
 
+    if not raw_intervals:
+        return 100.0
+
+    # Algoritmo de União de Intervalos: mescla sobreposições para evitar dupla contagem de downtime
+    raw_intervals.sort(key=lambda item: item[0])
+    merged = []
+    for s, e in raw_intervals:
+        if not merged:
+            merged.append([s, e])
+        else:
+            prev_s, prev_e = merged[-1]
+            if s <= prev_e:
+                merged[-1][1] = max(prev_e, e)
+            else:
+                merged.append([s, e])
+
+    downtime = sum((e - s).total_seconds() for s, e in merged)
     availability = ((total_period - downtime) / total_period) * 100
-    return round(max(0.0, availability), 4)
+    return round(max(0.0, min(100.0, availability)), 4)
 
 def availability_last_10_min(db, host_name):
     now = datetime.now(timezone.utc).replace(tzinfo=None)

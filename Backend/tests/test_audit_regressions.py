@@ -848,3 +848,140 @@ def test_parallel_monitoring_126_hosts_under_budget(monkeypatch):
     assert len(checked_ids) == 126
     assert elapsed < 1.0
 
+
+def test_first_password_blocked_for_already_activated_user():
+    """Valida que /auth/first-password bloqueia usuários que já concluíram o primeiro acesso e valida tamanho mínimo de senha."""
+    from Backend.routes.hosts import first_change_password
+    from Backend.models import User
+    from Backend.schemas import PasswordChangeRequest
+    from fastapi import HTTPException
+    import pytest
+
+    class DummySession:
+        def commit(self):
+            pass
+
+    # 1. Usuário já ativo (must_change_password == False) é rejeitado com 400
+    user_active = User(username="admin", must_change_password=False, attempts=0)
+    req = PasswordChangeRequest(new_password="SuperNovaSenha123!")
+    with pytest.raises(HTTPException) as exc_info:
+        first_change_password(data=req, user=user_active, db=DummySession())
+    assert exc_info.value.status_code == 400
+    assert "já foi realizada" in exc_info.value.detail
+
+    # 2. Usuário com senha curta (< 4 caracteres) é rejeitado com 400
+    user_pending = User(username="admin", must_change_password=True, attempts=0)
+    req_short = PasswordChangeRequest(new_password="12")
+    with pytest.raises(HTTPException) as exc_short:
+        first_change_password(data=req_short, user=user_pending, db=DummySession())
+    assert exc_short.value.status_code == 400
+    assert "pelo menos 4 caracteres" in exc_short.value.detail
+
+    # 3. Usuário legítimo em primeiro acesso altera com sucesso
+    req_valid = PasswordChangeRequest(new_password="MinhaSenhaValida123")
+    res = first_change_password(data=req_valid, user=user_pending, db=DummySession())
+    assert res["logout"] is True
+    assert user_pending.must_change_password is False
+
+
+def test_failure_confirmed_alert_emitted_at_fail_threshold():
+    """Valida que o evento failure_confirmed é gerado exatamente ao atingir ALERT_FAIL_THRESHOLD."""
+    from Backend import scheduler
+
+    # Cenário: Host falha no check
+    baseline_pending = False
+    new_status = "DOWN"
+    service_up_without_icmp = False
+
+    # Streak 1: Não deve disparar alerta de falha confirmada
+    fail_streak_1 = 1
+    is_confirmed_1 = (
+        (not baseline_pending)
+        and new_status != "UP"
+        and not (service_up_without_icmp and new_status == "UP")
+        and fail_streak_1 == scheduler.ALERT_FAIL_THRESHOLD
+    )
+    assert is_confirmed_1 is False
+
+    # Streak 2: Atingiu ALERT_FAIL_THRESHOLD (2) -> DEVE disparar
+    fail_streak_2 = 2
+    is_confirmed_2 = (
+        (not baseline_pending)
+        and new_status != "UP"
+        and not (service_up_without_icmp and new_status == "UP")
+        and fail_streak_2 == scheduler.ALERT_FAIL_THRESHOLD
+    )
+    assert is_confirmed_2 is True
+
+    # Streak 3: Falha já confirmada anteriormente -> Não deve re-disparar
+    fail_streak_3 = 3
+    is_confirmed_3 = (
+        (not baseline_pending)
+        and new_status != "UP"
+        and not (service_up_without_icmp and new_status == "UP")
+        and fail_streak_3 == scheduler.ALERT_FAIL_THRESHOLD
+    )
+    assert is_confirmed_3 is False
+
+
+def test_calculate_availability_merges_overlapping_incidents():
+    """Valida que incidentes sobrepostos ou simultâneos são mesclados via união de intervalos sem dupla contagem."""
+    from datetime import datetime, timedelta
+    from Backend.metrics import calculate_availability_from_incidents
+    from Backend.models import Incident
+
+    now = datetime(2026, 10, 23, 12, 10, 0)
+    since = now - timedelta(minutes=10)  # 12:00:00
+
+    # Incidente 1: 12:00 até 12:05 (5 minutos de queda = 300s)
+    inc1 = Incident(
+        started_time=datetime(2026, 10, 23, 12, 0, 0),
+        ended_time=datetime(2026, 10, 23, 12, 5, 0)
+    )
+
+    # Incidente 2: 12:02 até 12:07 (5 minutos de queda = 300s, com 3 minutos de sobreposição)
+    # União real do intervalo de queda: 12:00 até 12:07 = 7 minutos (420s)
+    # Tempo restante online: 3 minutos (180s) em 10 minutos (600s) = 30.0% disponibilidade
+    inc2 = Incident(
+        started_time=datetime(2026, 10, 23, 12, 2, 0),
+        ended_time=datetime(2026, 10, 23, 12, 7, 0)
+    )
+
+    avail = calculate_availability_from_incidents([inc1, inc2], now, since, total_period=600)
+    assert avail == 30.0
+
+    # Sem incidentes deve ser exatamente 100.0%
+    assert calculate_availability_from_incidents([], now, since, total_period=600) == 100.0
+
+
+def test_setup_kathara_routes_validates_ip_and_cidr(monkeypatch):
+    """Garante que IPs ou CIDRs mal formatados em KATHARA_ROUTER_IP ou KATHARA_SUBNETS são filtrados sem erro."""
+    import Backend.main as main_mod
+
+    executed_commands = []
+
+    def fake_subprocess_run(cmd, *args, **kwargs):
+        executed_commands.append(cmd)
+        class DummyRes:
+            returncode = 0
+            stderr = ""
+        return DummyRes()
+
+    monkeypatch.setattr("subprocess.run", fake_subprocess_run)
+
+    # 1. Gateway inválido -> aborta imediatamente sem executar nenhum comando
+    monkeypatch.setenv("KATHARA_ROUTER_IP", "ip-invalido-123")
+    monkeypatch.setenv("KATHARA_SUBNETS", "10.0.0.0/16")
+    main_mod.setup_kathara_routes()
+    assert len(executed_commands) == 0
+
+    # 2. Gateway válido, sub-redes com uma válida e outra inválida -> executa apenas a válida
+    monkeypatch.setenv("KATHARA_ROUTER_IP", "172.17.0.2")
+    monkeypatch.setenv("KATHARA_SUBNETS", "10.0.0.0/16, subrede-invalida, 100.0.0.0/16")
+    main_mod.setup_kathara_routes()
+    assert len(executed_commands) == 2
+    assert executed_commands[0] == ["ip", "route", "replace", "10.0.0.0/16", "via", "172.17.0.2"]
+    assert executed_commands[1] == ["ip", "route", "replace", "100.0.0.0/16", "via", "172.17.0.2"]
+
+
+

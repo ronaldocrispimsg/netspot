@@ -210,14 +210,23 @@ class QueueManager:
         )
 
     def publish_notification_sync(self, payload: dict | str):
+        loop = getattr(self, "_loop", None)
+        if loop and loop.is_running():
+            asyncio.run_coroutine_threadsafe(self.publish_notification(payload), loop)
+            return
+
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                asyncio.run_coroutine_threadsafe(self.publish_notification(payload), loop)
+            running_loop = asyncio.get_running_loop()
+            if running_loop.is_running():
+                asyncio.run_coroutine_threadsafe(self.publish_notification(payload), running_loop)
                 return
         except RuntimeError:
             pass
-        asyncio.run(self.publish_notification(payload))
+
+        try:
+            asyncio.run(self.publish_notification(payload))
+        except Exception as e:
+            logger.warning(f"Falha ao despachar notificação síncrona: {e}")
 
     async def close(self):
         if self._monitor_task and not self._monitor_task.done():

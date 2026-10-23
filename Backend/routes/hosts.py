@@ -1672,24 +1672,10 @@ def availability_host(host_name: str, db: Session = Depends(get_db), user: User 
     for i in range(60):
         end = now - timedelta(minutes=i)
         start = end - timedelta(minutes=1)
-        downtime = 0
-
-        for incident in incidents:
-            if incident.started_time > end:
-                continue
-            s = incident.started_time
-            e = incident.ended_time or end
-
-            overlap_start = max(s, start)
-            overlap_end = min(e, end)
-
-            if overlap_end > overlap_start:
-                downtime += (overlap_end - overlap_start).total_seconds()
-
-        availability = ((60 - downtime) / 60) * 100
+        avail = calculate_availability_from_incidents(incidents, end, start, total_period=60)
         points.append({
             "timestamp": start.isoformat(),
-            "availability": round(max(0, availability), 2)
+            "availability": round(avail, 2)
         })
 
     return list(reversed(points))
@@ -1764,6 +1750,15 @@ def first_change_password(data: PasswordChangeRequest, user: User = Depends(get_
 
     if not user:
         raise HTTPException(status_code=404, detail="Usuário não encontrado")
+
+    if not user.must_change_password:
+        raise HTTPException(
+            status_code=400,
+            detail="A troca inicial de senha já foi realizada. Utilize a rota padrão de alteração de senha (/auth/change-password)."
+        )
+
+    if not data.new_password or len(data.new_password.strip()) < 4:
+        raise HTTPException(status_code=400, detail="A nova senha deve conter pelo menos 4 caracteres")
 
     user.password_hash = hash_password(data.new_password)
     user.must_change_password = False

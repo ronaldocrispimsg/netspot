@@ -561,14 +561,20 @@ async def _host_check_async(host_id: int) -> None:
             and host.success_streak >= ALERT_RECOVER_THRESHOLD
         )
 
-        if (not baseline_pending) and old_status and old_status != new_status:
-            if service_up_without_icmp and new_status == "UP":
-                pass
-            elif new_status != "UP" and host.fail_streak >= ALERT_FAIL_THRESHOLD:
+        is_confirmed_failure = (
+            (not baseline_pending)
+            and new_status != "UP"
+            and not (service_up_without_icmp and new_status == "UP")
+            and host.fail_streak == ALERT_FAIL_THRESHOLD
+        )
+
+        if not baseline_pending:
+            if is_confirmed_failure:
+                previous_state = old_status if (old_status and old_status != new_status) else "UP"
                 db.add(
                     Alert(
                         host_id=host.id,
-                        old_status=old_status,
+                        old_status=previous_state,
                         new_status=new_status,
                     )
                 )
@@ -576,7 +582,7 @@ async def _host_check_async(host_id: int) -> None:
                     "event": "failure_confirmed",
                     "host_name": host.name,
                     "host_address": host.address,
-                    "old_status": old_status,
+                    "old_status": previous_state,
                     "new_status": new_status,
                     "fail_streak": host.fail_streak,
                     "check_used": primary_check,
@@ -586,7 +592,7 @@ async def _host_check_async(host_id: int) -> None:
                 db.add(
                     Alert(
                         host_id=host.id,
-                        old_status=old_status,
+                        old_status=old_status or "DOWN",
                         new_status="UP_RECOVERED",
                     )
                 )
@@ -594,9 +600,18 @@ async def _host_check_async(host_id: int) -> None:
                     "event": "recovery",
                     "host_name": host.name,
                     "host_address": host.address,
-                    "old_status": old_status,
+                    "old_status": old_status or "DOWN",
                     "timestamp": datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
                 })
+            elif old_status and old_status != new_status and not (service_up_without_icmp and new_status == "UP"):
+                db.add(
+                    Alert(
+                        host_id=host.id,
+                        alert_type="STATUS_CHANGE",
+                        old_status=old_status,
+                        new_status=new_status,
+                    )
+                )
 
         host.last_check = datetime.now(timezone.utc).replace(tzinfo=None)
 
