@@ -373,9 +373,6 @@
 
     <!-- Aba 1: Seleção em lote de hosts ativos para enviar à lixeira -->
     <div id="trashTabDeactivate" class="trash-tab-panel hidden" role="tabpanel">
-      <p class="trash-tab-description">
-        Pausa o monitoramento mantendo histórico e métricas (soft delete).
-      </p>
       <div class="bulk-deactivate-search-row">
         <label for="bulkDeactivateSearchInput" class="visually-hidden">Filtrar hosts ativos</label>
         <input id="bulkDeactivateSearchInput" type="text" placeholder="Filtrar hosts ativos por nome ou IP..." title="Filtrar lista de hosts ativos">
@@ -397,9 +394,6 @@
 
     <!-- Aba 2: Itens atualmente na lixeira -->
     <div id="trashTabItems" class="trash-tab-panel" role="tabpanel">
-      <p class="trash-tab-description">
-        Hosts inativos. Restaure para monitorar ou exclua definitivamente (hard delete).
-      </p>
       <div class="trash-modal-toolbar">
         <button id="emptyTrashBtn" class="trash-empty-btn danger-btn" type="button" onclick="openConfirmEmptyTrashModal()" title="Excluir permanentemente todos os hosts da lixeira">Excluir todos</button>
         <button id="refreshTrashBtn" type="button">Atualizar lista</button>
