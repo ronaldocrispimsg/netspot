@@ -1196,22 +1196,24 @@ button[disabled],
     background: var(--bg-soft);
     border: 1px solid var(--line);
     border-radius: 8px;
-    padding: 3px;
-    gap: 3px;
+    padding: 2px;
+    gap: 2px;
     user-select: none;
+    flex-shrink: 0;
 }
 
 .face-pill {
     background: transparent !important;
     border: 1px solid transparent !important;
     border-radius: 6px !important;
-    padding: 5px 12px !important;
-    font-size: 0.78rem !important;
+    padding: 4px 8px !important;
+    font-size: 0.75rem !important;
     font-weight: 600 !important;
     color: var(--text-soft) !important;
     cursor: pointer !important;
     transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, transform 0.08s ease !important;
     line-height: 1.25 !important;
+    white-space: nowrap !important;
 }
 
 .face-pill:hover {
@@ -1288,18 +1290,19 @@ button[disabled],
 
 .icon-actions {
     display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
+    flex-wrap: nowrap !important;
+    gap: 4px;
     align-items: center;
+    flex-shrink: 0;
 }
 
 .icon-btn {
-    width: 32px !important;
-    height: 32px !important;
-    min-width: 32px !important;
-    min-height: 32px !important;
-    max-width: 32px !important;
-    max-height: 32px !important;
+    width: 28px !important;
+    height: 28px !important;
+    min-width: 28px !important;
+    min-height: 28px !important;
+    max-width: 28px !important;
+    max-height: 28px !important;
     padding: 0 !important;
     border: 1px solid var(--line) !important;
     border-radius: 6px !important;
@@ -4476,8 +4479,12 @@ input[type=number] {
 
     .icon-btn {
         flex: 1;
+        width: auto !important;
+        min-width: 0 !important;
         max-width: none !important;
         height: 34px !important;
+        min-height: 34px !important;
+        max-height: 34px !important;
     }
 
     .bulk-deactivate-toolbar {

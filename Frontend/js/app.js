@@ -2477,13 +2477,38 @@ async function loadSnmpChart(name) {
     if (!ctx) return;
 
     const T = window.NetSpotChartTheme;
-    T.renderSummary(ctx, [
-        { label: "CPU", color: cpuColor, values: cpu, fmt: metricPercent },
-        { label: "RAM", color: ramColor, values: ram, fmt: metricPercent },
-        { label: "Disco", color: diskColor, values: disk, fmt: metricPercent },
-        { label: "Download", color: rxColor, values: rx, fmt: formatBps },
-        { label: "Upload", color: txColor, values: tx, fmt: formatBps },
-    ]);
+
+    const hasCpu = cpu.some(v => v !== null && v !== undefined);
+    const hasRam = ram.some(v => v !== null && v !== undefined);
+    const hasDisk = disk.some(v => v !== null && v !== undefined);
+    const hasRx = rx.some(v => v !== null && v !== undefined);
+    const hasTx = tx.some(v => v !== null && v !== undefined);
+
+    const datasets = [];
+    const summaryItems = [];
+
+    if (hasCpu) {
+        datasets.push({ label: "CPU (%)", data: cpu, ...T.lineStyle(cpuColor, { yAxisID: "y_percent" }) });
+        summaryItems.push({ label: "CPU", color: cpuColor, values: cpu, fmt: metricPercent });
+    }
+    if (hasRam) {
+        datasets.push({ label: "RAM (%)", data: ram, ...T.lineStyle(ramColor, { fill: false, yAxisID: "y_percent" }) });
+        summaryItems.push({ label: "RAM", color: ramColor, values: ram, fmt: metricPercent });
+    }
+    if (hasDisk) {
+        datasets.push({ label: "Disco (%)", data: disk, ...T.lineStyle(diskColor, { fill: false, yAxisID: "y_percent" }) });
+        summaryItems.push({ label: "Disco", color: diskColor, values: disk, fmt: metricPercent });
+    }
+    if (hasRx) {
+        datasets.push({ label: "Download (RX)", data: rx, ...T.lineStyle(rxColor, { fill: false, yAxisID: "y_bps" }) });
+        summaryItems.push({ label: "Download", color: rxColor, values: rx, fmt: formatBps });
+    }
+    if (hasTx) {
+        datasets.push({ label: "Upload (TX)", data: tx, ...T.lineStyle(txColor, { fill: false, yAxisID: "y_bps" }) });
+        summaryItems.push({ label: "Upload", color: txColor, values: tx, fmt: formatBps });
+    }
+
+    T.renderSummary(ctx, summaryItems);
 
     // Eixos: % (esquerda, com faixas de limiar) e bps (direita, agora visível e legível).
     const opts = chartCommonOptions();
@@ -2523,13 +2548,7 @@ async function loadSnmpChart(name) {
         type: "line",
         data: {
             labels,
-            datasets: [
-                { label: "CPU (%)", data: cpu, ...T.lineStyle(cpuColor, { yAxisID: "y_percent" }) },
-                { label: "RAM (%)", data: ram, ...T.lineStyle(ramColor, { fill: false, yAxisID: "y_percent" }) },
-                { label: "Disco (%)", data: disk, ...T.lineStyle(diskColor, { fill: false, yAxisID: "y_percent" }) },
-                { label: "Download (RX)", data: rx, ...T.lineStyle(rxColor, { fill: false, yAxisID: "y_bps" }) },
-                { label: "Upload (TX)", data: tx, ...T.lineStyle(txColor, { fill: false, yAxisID: "y_bps" }) }
-            ]
+            datasets
         },
         options: opts
     });
@@ -2546,20 +2565,18 @@ async function loadAvailabilityChartType(name) {
     const tcp  = takeLast(data.tcp || []);
     const http = takeLast(data.http || []);
 
-    const base = ping.length ? ping : (tcp.length ? tcp : http);
-
-    const labels = base.map(p => formatApiTime(p.timestamp));
-
-    const pingValues = ping.map(p => p.availability);
-    const tcpValues  = tcp.map(p => p.availability);
-    const httpValues = http.map(p => p.availability);
-
     const ctx = document.getElementById("availability-chart-type-" + name);
     if (!ctx) return;
 
     const chartKey = `availability-type-${name}`;
 
-    if (!labels.length) {
+    // Apenas protocolos que realmente possuem dados monitorados para este host
+    const activeSeries = [];
+    if (ping.length) activeSeries.push({ key: "ping", label: "Ping", points: ping });
+    if (tcp.length)  activeSeries.push({ key: "tcp",  label: "TCP",  points: tcp });
+    if (http.length) activeSeries.push({ key: "http", label: "HTTP", points: http });
+
+    if (!activeSeries.length) {
         showChartEmpty(
             "availability-chart-type-box-" + name,
             "availability-chart-type-" + name,
@@ -2569,17 +2586,50 @@ async function loadAvailabilityChartType(name) {
     }
     clearChartEmpty("availability-chart-type-box-" + name, "availability-chart-type-" + name);
 
+    // Unifica e ordena cronologicamente todos os timestamps das séries ativas
+    const timestampSet = new Set();
+    activeSeries.forEach((s) => {
+        s.points.forEach((p) => {
+            if (p.timestamp) timestampSet.add(p.timestamp);
+        });
+    });
+    const sortedTimestamps = Array.from(timestampSet).sort();
+
+    const labels = sortedTimestamps.map((ts) => formatApiTime(ts));
+
     const isDark = document.body.classList.contains("dark-theme") || document.documentElement.classList.contains("dark-theme");
-    const pingColor = isDark ? "#81c995" : "#1e8e3e";
-    const tcpColor = isDark ? "#8ab4f8" : "#1a73e8";
-    const httpColor = isDark ? "#fde293" : "#f9ab00";
+    const colorMap = {
+        ping: isDark ? "#81c995" : "#1e8e3e",
+        tcp:  isDark ? "#8ab4f8" : "#1a73e8",
+        http: isDark ? "#fde293" : "#f9ab00",
+    };
 
     const T = window.NetSpotChartTheme;
-    T.renderSummary(ctx, [
-        { label: "Ping", color: pingColor, values: pingValues, fmt: (v) => `${v.toFixed(1)}%` },
-        { label: "TCP", color: tcpColor, values: tcpValues, fmt: (v) => `${v.toFixed(1)}%` },
-        { label: "HTTP", color: httpColor, values: httpValues, fmt: (v) => `${v.toFixed(1)}%` },
-    ]);
+    const datasets = [];
+    const summaryItems = [];
+
+    activeSeries.forEach((s) => {
+        const color = colorMap[s.key] || "#8ab4f8";
+        const mapByTs = new Map(s.points.map((p) => [p.timestamp, p.availability]));
+        const alignedValues = sortedTimestamps.map((ts) => (mapByTs.has(ts) ? mapByTs.get(ts) : null));
+        const rawValues = s.points.map((p) => p.availability);
+
+        datasets.push({
+            label: `Disponibilidade ${s.label} (%)`,
+            data: alignedValues,
+            spanGaps: true,
+            ...T.lineStyle(color, { fill: false })
+        });
+
+        summaryItems.push({
+            label: s.label,
+            color: color,
+            values: rawValues,
+            fmt: (v) => `${Number(v).toFixed(1)}%`
+        });
+    });
+
+    T.renderSummary(ctx, summaryItems);
 
     const availOpts = chartCommonOptions(0, 100, "Disponibilidade (%)");
     availOpts.plugins.thresholdBands = T.thresholdBands("y", [
@@ -2591,11 +2641,7 @@ async function loadAvailabilityChartType(name) {
         type: "line",
         data: {
             labels: labels,
-            datasets: [
-                { label: "Disponibilidade Ping (%)", data: pingValues, ...T.lineStyle(pingColor, { fill: false }) },
-                { label: "Disponibilidade TCP (%)", data: tcpValues, ...T.lineStyle(tcpColor, { fill: false }) },
-                { label: "Disponibilidade HTTP (%)", data: httpValues, ...T.lineStyle(httpColor, { fill: false }) }
-            ]
+            datasets: datasets
         },
         options: availOpts
     });
