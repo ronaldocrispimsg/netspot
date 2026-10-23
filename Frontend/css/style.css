@@ -195,20 +195,33 @@ LOGIN
 .login-box button[type="submit"] {
     width: 100%;
     margin-top: 14px;
-    padding: 10px 24px;
-    border-radius: 20px;
+    padding: 11px 20px;
+    border-radius: 8px;
     border: none;
     background: var(--primary);
-    color: white;
+    color: #ffffff;
     font-family: inherit;
-    font-weight: 500;
-    font-size: 0.9rem;
+    font-weight: 600;
+    font-size: 0.925rem;
     letter-spacing: 0.25px;
     cursor: pointer;
+    box-shadow: 0 1px 3px rgba(26, 115, 232, 0.25);
+    transition: background-color 0.18s ease, transform 0.08s ease, box-shadow 0.18s ease;
 }
 
 .login-box button[type="submit"]:hover {
     background: var(--primary-dark);
+    transform: translateY(-1px);
+    box-shadow: 0 3px 8px rgba(26, 115, 232, 0.35);
+}
+
+.login-box button[type="submit"]:active {
+    transform: translateY(0);
+}
+
+.login-box button[type="submit"]:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
 }
 
 button.is-loading,
@@ -409,16 +422,99 @@ select:focus {
     box-shadow: 0 0 0 3px rgba(120, 120, 120, 0.16);
 }
 
-button {
-    padding: 8px 20px;
+/* =========================
+SISTEMA DE BOTÕES PADRONIZADO
+========================= */
+button:not(.password-toggle-btn):not(.theme-switch-pill),
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 8px 16px;
     cursor: pointer;
-    border-radius: 20px;
+    border-radius: 8px;
     font-family: inherit;
     font-size: 0.875rem;
-    font-weight: 500;
-    letter-spacing: 0.25px;
-    transition: background-color 0.2s, box-shadow 0.2s, transform 0.1s;
+    font-weight: 600;
+    line-height: 1.25;
+    letter-spacing: 0.15px;
+    text-decoration: none;
+    box-sizing: border-box;
+    transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease, box-shadow 0.18s ease, transform 0.08s ease;
     border: 1px solid transparent;
+}
+
+button:not(.password-toggle-btn):not(.theme-switch-pill):hover,
+.btn:hover {
+    transform: translateY(-1px);
+}
+
+button:not(.password-toggle-btn):not(.theme-switch-pill):active,
+.btn:active {
+    transform: translateY(0);
+}
+
+button:focus-visible,
+.btn:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+}
+
+button:disabled,
+.btn:disabled,
+button[disabled],
+.btn[disabled] {
+    opacity: 0.55;
+    cursor: not-allowed;
+    pointer-events: none;
+    transform: none !important;
+    box-shadow: none !important;
+}
+
+/* Utilitários globais de botões */
+.btn-primary {
+    background: var(--primary);
+    color: #ffffff !important;
+    border: 1px solid transparent;
+    box-shadow: 0 1px 3px rgba(26, 115, 232, 0.25);
+}
+
+.btn-primary:hover {
+    background: var(--primary-dark);
+    box-shadow: 0 3px 8px rgba(26, 115, 232, 0.35);
+}
+
+.btn-secondary {
+    background: var(--bg-panel);
+    border: 1px solid var(--line);
+    color: var(--text-main);
+}
+
+.btn-secondary:hover {
+    background: var(--bg-soft);
+    border-color: var(--primary);
+    color: var(--primary);
+}
+
+.btn-danger,
+.danger-btn {
+    background: #dc2626;
+    color: #ffffff !important;
+    border: 1px solid transparent;
+    box-shadow: 0 1px 3px rgba(220, 38, 38, 0.25);
+}
+
+.btn-danger:hover:not(:disabled),
+.danger-btn:hover:not(:disabled) {
+    background: #b91c1c;
+    box-shadow: 0 3px 8px rgba(220, 38, 38, 0.35);
+}
+
+.btn-danger:focus-visible,
+.danger-btn:focus-visible {
+    outline: 2px solid #dc2626;
+    outline-offset: 2px;
 }
 
 #hostForm {
@@ -428,16 +524,29 @@ button {
     align-items: center;
 }
 
-#hostForm button {
+#hostForm button[type="submit"],
+#hostForm button:not([type="button"]) {
     grid-column: span 4;
     border: none;
-    border-radius: 20px;
+    border-radius: 8px;
     background: var(--primary);
-    color: #fff;
+    color: #ffffff;
+    font-weight: 600;
+    padding: 10px 20px;
+    box-shadow: 0 1px 3px rgba(26, 115, 232, 0.25);
+    transition: background-color 0.18s ease, transform 0.08s ease, box-shadow 0.18s ease;
 }
 
-#hostForm button:hover {
+#hostForm button[type="submit"]:hover,
+#hostForm button:not([type="button"]):hover {
     background: var(--primary-dark);
+    transform: translateY(-1px);
+    box-shadow: 0 3px 8px rgba(26, 115, 232, 0.35);
+}
+
+#hostForm button[type="submit"]:active,
+#hostForm button:not([type="button"]):active {
+    transform: translateY(0);
 }
 
 .network-discovery-form {
@@ -844,15 +953,47 @@ button {
 }
 
 .sidebar-actions button {
-    border: 1px solid #d7dee8;
+    width: 100%;
+    padding: 10px 14px;
+    border: 1px solid var(--line);
     border-radius: 8px;
-    background: #f8fafc;
+    background: var(--bg-panel);
     color: var(--text-main);
     font-weight: 600;
+    font-size: 0.875rem;
     text-align: left;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
+    cursor: pointer;
+    box-sizing: border-box;
+    transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease, transform 0.08s ease, box-shadow 0.18s ease;
+}
+
+.sidebar-actions button:hover {
+    background: var(--bg-soft);
+    border-color: var(--primary);
+    color: var(--primary);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+}
+
+.sidebar-actions button:active {
+    transform: translateY(0);
+}
+
+.sidebar-actions button:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+}
+
+.sidebar-actions #logoutBtn:hover {
+    border-color: #ef4444;
+    color: #dc2626;
+}
+
+.sidebar-actions #logoutBtn:hover svg {
+    stroke: #dc2626;
 }
 
 #hosts {
@@ -1129,24 +1270,35 @@ a:focus-visible {
     align-items: center;
     gap: 6px;
     padding: 7px 14px;
-    background: #ffffff;
-    border: 1px solid #d7dee8;
-    border-radius: 20px;
-    font-size: 13px;
-    font-weight: 500;
-    color: #475569;
+    background: var(--bg-panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--text-main);
     cursor: pointer;
-    transition: all 0.2s ease;
     white-space: nowrap;
+    transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease, transform 0.08s ease, box-shadow 0.15s ease;
 }
 
 .refresh-pill-btn:hover {
-    background: #f1f5f9;
-    border-color: #3b82f6;
-    color: #2563eb;
+    background: var(--bg-soft);
+    border-color: var(--primary);
+    color: var(--primary);
+    transform: translateY(-1px);
 }
 
-.refresh-pill-btn svg.spin {
+.refresh-pill-btn:active {
+    transform: translateY(0);
+}
+
+.refresh-pill-btn:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+}
+
+.refresh-pill-btn svg.spin,
+.refresh-icon.spin {
     animation: icon-spin 0.8s linear infinite;
 }
 
@@ -1156,15 +1308,15 @@ a:focus-visible {
 }
 
 .dark-theme .refresh-pill-btn {
-    background: #1e293b;
-    border-color: #334155;
-    color: #94a3b8;
+    background: rgba(255, 255, 255, 0.05);
+    border-color: var(--line);
+    color: #e2e8f0;
 }
 
 .dark-theme .refresh-pill-btn:hover {
-    background: #334155;
-    border-color: #60a5fa;
-    color: #93c5fd;
+    background: rgba(255, 255, 255, 0.1);
+    border-color: var(--primary);
+    color: #ffffff;
 }
 
 .incidents-list {
@@ -1495,13 +1647,6 @@ BOTÕES SUPERIORES
     background: var(--primary-dark);
 }
 
-#logoutBtn {
-    background: #a3a3a3;
-}
-
-#logoutBtn:hover {
-    background: #7f7f7f;
-}
 
 .filter-bar {
     display: grid;
@@ -1635,71 +1780,55 @@ BOTÕES SUPERIORES
     color: #ffffff !important;
 }
 
-.refresh-pill-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 14px;
-    font-size: 0.82rem;
-    font-weight: 600;
-    border-radius: 8px;
-    background: var(--bg-panel);
-    border: 1px solid var(--line);
-    color: var(--text-main);
-    cursor: pointer;
-    transition: background 0.15s ease, border-color 0.15s ease, transform 0.08s ease;
-}
-
-.refresh-pill-btn:hover {
-    background: var(--bg-soft);
-    border-color: #cbd5e1;
-}
-
-.refresh-pill-btn:active {
-    transform: translateY(1px);
-}
-
-.refresh-icon.spin {
-    animation: spin-refresh 0.6s linear infinite;
-}
-
-@keyframes spin-refresh {
-    100% { transform: rotate(360deg); }
-}
-
 .trash-open-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 8px;
-    padding: 6px 14px;
-    border: 1px solid #d7dee8;
-    border-radius: 6px;
-    background: #f8fafc;
-    color: var(--text-soft);
-    font-size: 0.95rem;
+    padding: 7px 14px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--bg-panel);
+    color: var(--text-main);
+    font-size: 0.8125rem;
     font-weight: 600;
     cursor: pointer;
-    transition:
-        background .15s ease,
-        border-color .15s ease,
-        box-shadow .15s ease,
-        transform .08s ease;
+    box-sizing: border-box;
+    transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease, box-shadow 0.15s ease, transform 0.08s ease;
 }
 
 .trash-open-btn span {
-    font-size: 1.25rem;
-    line-height: 1;
+    display: inline-flex;
+    align-items: center;
 }
 
 .trash-open-btn:hover {
-    background: #eef2f7;
-    border-color: #cbd5e1;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    background: var(--bg-soft);
+    border-color: var(--primary);
+    color: var(--primary);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
 }
 
 .trash-open-btn:active {
-    transform: scale(0.97);
+    transform: translateY(0);
+}
+
+.trash-open-btn:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+}
+
+.dark-theme .trash-open-btn {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: var(--line);
+    color: #e2e8f0;
+}
+
+.dark-theme .trash-open-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: var(--primary);
+    color: #ffffff;
 }
 
 .trash-list {
@@ -1713,10 +1842,10 @@ BOTÕES SUPERIORES
     justify-content: space-between;
     align-items: center;
     gap: 12px;
-    border: 1px solid #e2e8f0;
+    border: 1px solid var(--line);
     border-radius: 10px;
     padding: 10px 12px;
-    background: linear-gradient(180deg, #ffffff 0%, #fafafa 100%);
+    background: var(--bg-panel);
 }
 
 .trash-meta {
@@ -1728,7 +1857,7 @@ BOTÕES SUPERIORES
 
 .trash-meta strong {
     font-size: 0.95rem;
-    color: #1f2937;
+    color: var(--text-main);
 }
 
 .trash-meta small {
@@ -1743,42 +1872,75 @@ BOTÕES SUPERIORES
 }
 
 .trash-actions button {
-    min-width: 150px;
+    min-width: 130px;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.875rem;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: background-color 0.18s ease, transform 0.08s ease, box-shadow 0.18s ease;
+}
+
+.trash-actions button:first-child:not(.danger-btn) {
+    background: var(--primary);
+    color: #ffffff;
+    box-shadow: 0 1px 3px rgba(26, 115, 232, 0.25);
+}
+
+.trash-actions button:first-child:not(.danger-btn):hover {
+    background: var(--primary-dark);
+    transform: translateY(-1px);
+    box-shadow: 0 3px 8px rgba(26, 115, 232, 0.35);
 }
 
 .trash-actions .danger-btn {
-    background: #c23b3b;
-    color: #fff;
-    border: none;
+    background: #dc2626;
+    color: #ffffff;
+    border: 1px solid transparent;
     border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(220, 38, 38, 0.25);
 }
 
 .trash-actions .danger-btn:hover {
-    background: #a92f2f;
+    background: #b91c1c;
+    transform: translateY(-1px);
+    box-shadow: 0 3px 8px rgba(220, 38, 38, 0.35);
 }
 
-#refreshBtn {
-    border: none;
+#refreshTrashBtn,
+#refreshBulkDeactivateBtn {
+    border: 1px solid var(--line);
     border-radius: 8px;
-    background: #b4b4b4;
-    color: #fff;
+    background: var(--bg-panel);
+    color: var(--text-main);
     font-weight: 600;
+    font-size: 0.8125rem;
+    padding: 7px 14px;
+    cursor: pointer;
+    transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease, transform 0.08s ease;
 }
 
-#refreshBtn:hover {
-    background: #919191;
+#refreshTrashBtn:hover,
+#refreshBulkDeactivateBtn:hover {
+    background: var(--bg-soft);
+    border-color: var(--primary);
+    color: var(--primary);
+    transform: translateY(-1px);
 }
 
-#refreshTrashBtn {
-    border: none;
-    border-radius: 8px;
-    background: #b4b4b4;
-    color: #fff;
-    font-weight: 600;
+.dark-theme #refreshTrashBtn,
+.dark-theme #refreshBulkDeactivateBtn {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: var(--line);
+    color: #e2e8f0;
 }
 
-#refreshTrashBtn:hover {
-    background: #919191;
+.dark-theme #refreshTrashBtn:hover,
+.dark-theme #refreshBulkDeactivateBtn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: var(--primary);
+    color: #ffffff;
 }
 
 /* =========================
@@ -4226,13 +4388,6 @@ input[type=number] {
     border-color: var(--line) !important;
 }
 
-/* Custom buttons (Lixeira and Atualizar Lista) blue style in Dark Theme */
-.dark-theme .trash-open-btn,
-.dark-theme #refreshBtn {
-    background: var(--primary) !important;
-    color: white !important;
-    border: none !important;
-}
 
 /* Summary Clickable & Empty State overrides in Dark Theme */
 .dark-theme .summary-card-clickable:hover {
@@ -4255,10 +4410,6 @@ input[type=number] {
     color: var(--text-soft);
 }
 
-.dark-theme .trash-open-btn:hover,
-.dark-theme #refreshBtn:hover {
-    background: var(--primary-dark) !important;
-}
 
 /* Host Details, Cause Pills, charts and history overrides in Dark Theme */
 .dark-theme .host-meta-item {
@@ -4643,16 +4794,21 @@ textarea::placeholder {
 }
 
 .dark-theme .sidebar-actions button {
-    background: var(--bg-soft) !important;
+    background: rgba(255, 255, 255, 0.05) !important;
     border: 1px solid var(--line) !important;
-    color: var(--text-main) !important;
-    border-radius: 20px !important;
+    color: #e2e8f0 !important;
+    border-radius: 8px !important;
 }
 
 .dark-theme .sidebar-actions button:hover {
-    background: var(--bg-panel) !important;
+    background: rgba(255, 255, 255, 0.1) !important;
     border-color: var(--primary) !important;
-    color: var(--primary) !important;
+    color: #ffffff !important;
+}
+
+.dark-theme .sidebar-actions #logoutBtn:hover {
+    border-color: #ef4444 !important;
+    color: #f87171 !important;
 }
 
 .dark-theme .sidebar-actions button svg {
