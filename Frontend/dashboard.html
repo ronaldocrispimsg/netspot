@@ -63,17 +63,18 @@
     <article class="overview-card">
         <h2>Cadastrar host</h2>
         <form id="hostForm">
-            <label for="name" class="visually-hidden">Nome do host</label>
-            <input id="name" placeholder="Nome" required>
+            <label for="name" class="visually-hidden">Nome amigável do host</label>
+            <input id="name" placeholder="Nome do host (ex.: Servidor Web 01)" required title="Nome identificador do host (ex.: Servidor Apache, Router Core)">
 
-            <label for="address" class="visually-hidden">Endereço ou IP</label>
-            <input id="address" placeholder="Hostname ou IP (ex.: pc1.local ou 10.0.0.10)" title="Dica: Em redes com DHCP, cadastre o Hostname (DNS) para o NetSpot acompanhar mudanças de IP automaticamente." required>
+            <label for="address" class="visually-hidden">Endereço IP ou Hostname</label>
+            <input id="address" placeholder="Hostname (ex.: pc1.lab.local) ou IP (ex.: 10.0.1.10)" title="Dica: Em redes com DHCP, cadastre o Hostname (DNS) para o NetSpot acompanhar mudanças de IP automaticamente." required>
 
-            <label for="http_url" class="visually-hidden">URL HTTP opcional</label>
-            <input id="http_url" placeholder="URL HTTP (opcional)">
+            <label for="http_url" class="visually-hidden">URL HTTP/HTTPS</label>
+            <input id="http_url" placeholder="URL Web opcional (ex.: http://10.0.0.10:80/ ou https://...)" title="Se preenchida, o NetSpot envia requisição GET a cada ciclo e mede a latência de aplicação. Se vazia, a URL é inferida automaticamente a partir das portas web monitoradas.">
 
             <small class="discovery-helper-text" style="grid-column: 1 / -1; margin-top: -2px; margin-bottom: 4px;">
-                <strong>Dica para redes dinâmicas (DHCP):</strong> cadastre o <strong>Hostname(DNS)</strong> em vez do IP fixo para que o NetSpot acompanhe trocas de IP automaticamente (via <code>DNS_CHANGE</code>) sem perder a identidade nem o histórico do dispositivo.
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: -2px; margin-right: 4px;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                <strong>Redes Dinâmicas (DHCP):</strong> Cadastre o <strong>Hostname / FQDN (DNS)</strong> em vez do IP fixo para que o NetSpot acompanhe trocas de IP automaticamente (evento <code>DNS_CHANGE</code>) mantendo a identidade e o histórico do dispositivo.
             </small>
 
             <label class="snmp-enable-field snmp-enable-switch">
@@ -81,15 +82,15 @@
                 <span class="snmp-switch" aria-hidden="true"></span>
                 <span class="snmp-enable-text">
                     <strong>Check HTTP/HTTPS</strong>
-                    <small>Ativa monitoramento web</small>
+                    <small>Mede latência e código HTTP de resposta</small>
                 </span>
             </label>
             <div id="portsField" class="ports-field">
               <div class="ports-field-head">
                 <span>Portas TCP</span>
-                <button id="addPortBtn" type="button" class="add-port-btn" title="Adicionar porta" aria-label="Adicionar porta">+</button>
+                <button id="addPortBtn" type="button" class="add-port-btn" title="Adicionar porta TCP" aria-label="Adicionar porta TCP">+</button>
               </div>
-              <small class="ports-help">Informe apenas portas TCP que deseja monitorar.</small>
+              <small class="ports-help">Portas TCP a monitorar (ex.: 80, 443, 22, 5432, 8080). Clique em '+' para adicionar.</small>
               <div id="portsContainer" class="ports-container"></div>
             </div>
             <label class="snmp-enable-field snmp-enable-switch">
@@ -97,11 +98,11 @@
                 <span class="snmp-switch" aria-hidden="true"></span>
                 <span class="snmp-enable-text">
                     <strong>Ativar SNMP</strong>
-                    <small>Usar community netspot</small>
+                    <small>Telemetria de CPU, RAM, Disco e Tráfego</small>
                 </span>
             </label>
             <label for="snmp_community" class="visually-hidden">Community SNMP</label>
-            <input id="snmp_community" value="netspot" placeholder="netspot">
+            <input id="snmp_community" value="netspot" placeholder="Community SNMP (padrão: netspot)" title="Community SNMP v2c (padrão do NetSpot: netspot)">
             <button type="submit">Cadastrar host</button>
         </form>
     </article>
@@ -112,10 +113,12 @@
         <h2>Descoberta de rede (LAN)</h2>
         <div class="network-discovery-form">
             <label for="discoverSubnet" class="visually-hidden">Subnet CIDR para varredura</label>
-            <input id="discoverSubnet" value="192.168.1.0/24" placeholder="Subnet CIDR (ex.: 192.168.0.0/24)">
+            <input id="discoverSubnet" value="192.168.1.0/24" placeholder="Subnet CIDR (ex.: 10.0.1.0/24 ou 192.168.1.0/24)" title="Notação CIDR da sub-rede local. No laboratório Kathará, use 10.0.1.0/24, 10.0.2.0/24 ou 10.0.3.0/24.">
             <button id="discoverBtn" type="button">Descobrir rede</button>
         </div>
-        <small class="discovery-helper-text">Limite máximo permitido: máscara <strong>/20</strong> (máx. 4096 endereços).</small>
+        <small class="discovery-helper-text">
+            Varredura ICMP Ping concorrente com resolução automática de Hostnames (DNS/SNMP) e portas abertas. Limite máximo permitido: máscara <strong>/20</strong> (máx. 4096 endereços).
+        </small>
         <div id="networkDiscoveryInfo" class="network-discovery-info" aria-live="polite"></div>
         <div id="networkDiscoveryList" class="network-discovery-list">
             <small>Nenhuma descoberta executada.</small>
@@ -145,6 +148,7 @@
     <div class="hosts-toolbar">
       <div class="hosts-toolbar-main">
         <h2>Hosts</h2>
+        <span id="hostsCountBadge" class="hosts-count-badge" title="Total de hosts visíveis">0 hosts</span>
         <button id="openBulkDeactivateBtn" class="trash-open-btn" type="button" title="Selecionar múltiplos hosts ativos para enviar à lixeira" aria-label="Mover hosts em lote para lixeira">
             <span class="btn-icon-wrap">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
@@ -158,9 +162,60 @@
             Lixeira
         </button>
       </div>
-      <button id="refreshBtn" type="button">Atualizar lista</button>
+
+      <div class="hosts-toolbar-actions">
+        <!-- View Mode Switcher (Cards vs Tabela NOC) -->
+        <div class="view-mode-toggle" role="group" aria-label="Modo de visualização dos hosts">
+          <button id="viewCardsBtn" type="button" class="view-mode-btn active" onclick="setViewMode('cards')" title="Visualização em Grade de Cards 3D" aria-pressed="true">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+            <span>Cards</span>
+          </button>
+          <button id="viewTableBtn" type="button" class="view-mode-btn" onclick="setViewMode('table')" title="Visualização em Tabela Compacta de Operação NOC" aria-pressed="false">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+            <span>Tabela NOC</span>
+          </button>
+        </div>
+
+        <button id="refreshBtn" class="refresh-pill-btn" type="button" title="Atualizar lista de hosts" aria-label="Atualizar lista de hosts">
+            <svg class="refresh-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+            </svg>
+            <span>Atualizar lista</span>
+        </button>
+      </div>
     </div>
     <div id="hosts"></div>
+    <div id="hostsTableView" class="noc-table-wrap hidden">
+      <div class="noc-table-responsive">
+        <table class="noc-table" role="table">
+          <thead>
+            <tr>
+              <th scope="col" style="width: 48px;">Status</th>
+              <th scope="col">Dispositivo</th>
+              <th scope="col" style="width: 120px;">Saúde</th>
+              <th scope="col" style="width: 105px;">SLA (10m)</th>
+              <th scope="col" style="width: 90px;">Ping</th>
+              <th scope="col" style="width: 110px;">Web Check</th>
+              <th scope="col" style="width: 130px;">Portas TCP</th>
+              <th scope="col">Causa Provável</th>
+              <th scope="col" style="width: 155px; text-align: right;">Ações</th>
+            </tr>
+          </thead>
+          <tbody id="nocTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+    <div id="hostsEmptyState" class="empty-state-box hidden" aria-live="polite">
+        <div class="empty-state-icon">
+            <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+        </div>
+        <h3 class="empty-state-title">Nenhum host encontrado</h3>
+        <p class="empty-state-desc">Nenhum dispositivo corresponde aos critérios de pesquisa ou filtros aplicados.</p>
+        <button type="button" class="btn-clear-filter" onclick="clearHostFilters()">Limpar busca e filtros</button>
+    </div>
 </section>
 
 <div id="toastContainer" class="toast-container"></div>
@@ -175,31 +230,33 @@
     </div>
 
     <label class="modal-label" for="modal-name">Nome do Host</label>
-    <input id="modal-name" placeholder="Nome do host" required title="Nome do host">
+    <input id="modal-name" placeholder="Nome do host (ex.: Servidor Web 01)" required title="Nome identificador do host">
 
     <label class="modal-label" for="modal-ip">Endereço / IP (ou Hostname/FQDN)</label>
-    <input id="modal-ip" placeholder="Hostname ou IP (ex.: pc1.local ou 10.0.0.10)" title="Em redes com DHCP, prefira Hostname para rastrear mudanças de IP automaticamente via DNS.">
+    <input id="modal-ip" placeholder="Hostname (ex.: pc1.lab.local) ou IP (ex.: 10.0.1.10)" title="Dica: Em redes com DHCP, prefira o Hostname (DNS) para o NetSpot acompanhar mudanças de IP automaticamente.">
     <small class="discovery-helper-text" style="margin-top: 2px; margin-bottom: 8px;">
-      Em redes com DHCP, prefira informar o <strong>Hostname (DNS)</strong> para preservar a identidade do host caso o IP mude.
+      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: -2px; margin-right: 4px;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+      <strong>Redes Dinâmicas (DHCP):</strong> Prefira cadastrar o <strong>Hostname / FQDN (DNS)</strong> em vez do IP fixo para rastrear trocas de IP automaticamente (evento <code>DNS_CHANGE</code>).
     </small>
 
-    <label class="modal-label" for="modal-http-url">URL HTTP (opcional)</label>
-    <input id="modal-http-url" placeholder="URL HTTP (opcional)">
+    <label class="modal-label" for="modal-http-url">URL HTTP/HTTPS (opcional)</label>
+    <input id="modal-http-url" placeholder="URL Web opcional (ex.: http://10.0.0.10:80/ ou https://...)" title="Se preenchida, o NetSpot envia requisição GET a cada ciclo e mede a latência de aplicação. Se vazia, a URL é inferida automaticamente a partir das portas web monitoradas.">
 
     <label class="snmp-enable-field snmp-enable-switch">
       <input id="modal-http-enabled" type="checkbox">
       <span class="snmp-switch" aria-hidden="true"></span>
       <span class="snmp-enable-text">
         <strong>Check HTTP/HTTPS</strong>
-        <small>Ativa monitoramento web</small>
+        <small>Mede latência e código HTTP de resposta</small>
       </span>
     </label>
 
     <div id="modalPortsField" class="ports-field">
       <div class="ports-field-head">
         <span>Portas TCP</span>
-        <button id="modalAddPortBtn" type="button" class="add-port-btn" title="Adicionar porta" aria-label="Adicionar porta">+</button>
+        <button id="modalAddPortBtn" type="button" class="add-port-btn" title="Adicionar porta TCP" aria-label="Adicionar porta TCP">+</button>
       </div>
+      <small class="ports-help">Portas TCP a monitorar (ex.: 80, 443, 22, 5432, 8080). Clique em '+' para adicionar.</small>
       <div id="modalPortsContainer" class="ports-container"></div>
     </div>
 
@@ -208,12 +265,12 @@
       <span class="snmp-switch" aria-hidden="true"></span>
       <span class="snmp-enable-text">
         <strong>Ativar SNMP</strong>
-        <small>Usar community netspot</small>
+        <small>Telemetria de CPU, RAM, Disco e Tráfego</small>
       </span>
     </label>
 
     <label class="modal-label" for="modal-snmp-community">Community SNMP</label>
-    <input id="modal-snmp-community" value="netspot" placeholder="netspot">
+    <input id="modal-snmp-community" value="netspot" placeholder="Community SNMP (padrão: netspot)" title="Community SNMP v2c (padrão do NetSpot: netspot)">
 
     <div class="modal-actions">
       <button type="button" class="modal-btn-primary" onclick="submitModalEdit()">Salvar</button>
@@ -231,16 +288,37 @@
     </div>
 
     <label class="modal-label" for="current-pwd">Senha Atual</label>
-    <input id="current-pwd" type="password" placeholder="Senha atual" autocomplete="current-password">
+    <div class="password-input-wrap">
+      <input id="current-pwd" type="password" placeholder="Senha atual de acesso" autocomplete="current-password" title="Digite sua senha atual de acesso">
+      <button type="button" class="password-toggle-btn" onclick="togglePasswordVisibility('current-pwd', this)" title="Mostrar senha" aria-label="Mostrar senha">
+        <svg class="eye-open" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+        <svg class="eye-closed hidden" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+      </button>
+    </div>
 
     <label class="modal-label" for="new-pwd">Nova Senha</label>
-    <input id="new-pwd" type="password" placeholder="Nova senha" autocomplete="new-password">
+    <div class="password-input-wrap">
+      <input id="new-pwd" type="password" placeholder="Nova senha (mínimo 4 caracteres)" autocomplete="new-password" title="A nova senha deve possuir no mínimo 4 caracteres">
+      <button type="button" class="password-toggle-btn" onclick="togglePasswordVisibility('new-pwd', this)" title="Mostrar senha" aria-label="Mostrar senha">
+        <svg class="eye-open" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+        <svg class="eye-closed hidden" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+      </button>
+    </div>
+    <small class="discovery-helper-text" style="margin-top: -6px; margin-bottom: 8px;">
+      A nova senha deve conter no <strong>mínimo 4 caracteres</strong>.
+    </small>
 
     <label class="modal-label" for="confirm-pwd">Confirmar Nova Senha</label>
-    <input id="confirm-pwd" type="password" placeholder="Confirmar nova senha" autocomplete="new-password">
+    <div class="password-input-wrap">
+      <input id="confirm-pwd" type="password" placeholder="Confirmar nova senha" autocomplete="new-password" title="Repita a nova senha exatamente como digitada acima">
+      <button type="button" class="password-toggle-btn" onclick="togglePasswordVisibility('confirm-pwd', this)" title="Mostrar senha" aria-label="Mostrar senha">
+        <svg class="eye-open" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+        <svg class="eye-closed hidden" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+      </button>
+    </div>
 
     <div class="modal-actions">
-      <button type="button" class="modal-btn-primary" onclick="changePassword()">Alterar</button>
+      <button type="button" class="modal-btn-primary" onclick="changePassword()">Alterar senha</button>
       <button type="button" class="modal-btn-secondary" onclick="closeChangePwdModal()">Cancelar</button>
     </div>
 
@@ -265,9 +343,12 @@
 
     <!-- Aba 1: Seleção em lote de hosts ativos para enviar à lixeira -->
     <div id="trashTabDeactivate" class="trash-tab-panel hidden" role="tabpanel">
+      <p class="trash-tab-description">
+        Mover hosts para a lixeira pausa o monitoramento contínuo sem perder métricas históricas nem registros de incidentes (<strong>soft delete</strong>). Os hosts podem ser reativados a qualquer momento na aba <em>Itens na lixeira</em>.
+      </p>
       <div class="bulk-deactivate-search-row">
         <label for="bulkDeactivateSearchInput" class="visually-hidden">Filtrar hosts ativos</label>
-        <input id="bulkDeactivateSearchInput" type="text" placeholder="Filtrar hosts ativos por nome ou IP...">
+        <input id="bulkDeactivateSearchInput" type="text" placeholder="Filtrar hosts ativos por nome ou IP..." title="Filtrar lista de hosts ativos">
       </div>
       <div class="trash-modal-toolbar bulk-deactivate-toolbar">
         <div class="bulk-toolbar-left">
@@ -286,6 +367,9 @@
 
     <!-- Aba 2: Itens atualmente na lixeira -->
     <div id="trashTabItems" class="trash-tab-panel" role="tabpanel">
+      <p class="trash-tab-description">
+        Hosts desativados. Clique em <strong>Restaurar</strong> para reativar o monitoramento ou em <strong>Excluir definitivamente</strong> para remover permanentemente do banco de dados (<strong>hard delete</strong>).
+      </p>
       <div class="trash-modal-toolbar">
         <button id="emptyTrashBtn" class="trash-empty-btn danger-btn" type="button" onclick="openConfirmEmptyTrashModal()" title="Excluir permanentemente todos os hosts da lixeira">Excluir todos</button>
         <button id="refreshTrashBtn" type="button">Atualizar lista</button>

@@ -306,12 +306,21 @@ if (loginForm) {
     };
 }
 
-async function submitChangePassword(){
+async function submitChangePassword() {
+    const newPwd = (document.getElementById("new-pwd")?.value || "").trim();
+    const confirmPwd = (document.getElementById("confirm-pwd")?.value || "").trim();
 
-    const newPwd = document.getElementById("new-pwd").value;
-    const confirmPwd = document.getElementById("confirm-pwd").value;
+    if (!newPwd) {
+        showToast("warning", "Informe a nova senha.");
+        return;
+    }
 
-    if(newPwd !== confirmPwd) {
+    if (newPwd.length < 4) {
+        showToast("warning", "A nova senha deve possuir no mínimo 4 caracteres.");
+        return;
+    }
+
+    if (newPwd !== confirmPwd) {
         showToast("warning", "As senhas não coincidem.");
         return;
     }
@@ -319,72 +328,88 @@ async function submitChangePassword(){
     const token = localStorage.getItem("token");
 
     try {
-        const res = await fetch(`${API}/auth/first-password`,{
-            method:"POST",
-            headers:{ 
-                "Content-Type":"application/json",
+        const res = await fetch(`${API}/auth/first-password`, {
+            method: "POST",
+            headers: { 
+                "Content-Type": "application/json",
                 "Authorization": "Bearer " + token
             },
-            body:JSON.stringify({
-                new_password:newPwd
+            body: JSON.stringify({
+                new_password: newPwd
             })
         });
 
-        if(res.ok){
+        if (res.ok) {
             showToast("success", "Senha alterada com sucesso.");
             setTimeout(() => {
                 window.location.href = "dashboard.html";
             }, 700);
-        }else{
-            showToast("error", "Erro ao alterar senha.");
+        } else {
+            const errData = await res.json().catch(() => null);
+            const detailMsg = (errData && errData.detail) ? errData.detail : "Erro ao alterar senha.";
+            showToast("error", detailMsg);
         }
     } catch (error) {
         showToast("error", "Não foi possível conectar ao servidor.");
     }
 }
 
-async function changePassword(){
-    const currentPwd = document.getElementById("current-pwd").value;
-    const newPwd = document.getElementById("new-pwd").value;
-    const confirmPwd = document.getElementById("confirm-pwd").value;
+async function changePassword() {
+    const currentPwd = (document.getElementById("current-pwd")?.value || "").trim();
+    const newPwd = (document.getElementById("new-pwd")?.value || "").trim();
+    const confirmPwd = (document.getElementById("confirm-pwd")?.value || "").trim();
+
+    if (!currentPwd) {
+        showToast("warning", "Informe a senha atual.");
+        return;
+    }
+
+    if (!newPwd) {
+        showToast("warning", "Informe a nova senha.");
+        return;
+    }
+
+    if (newPwd.length < 4) {
+        showToast("warning", "A nova senha deve possuir no mínimo 4 caracteres.");
+        return;
+    }
 
     if (newPwd !== confirmPwd) {
         showToast("warning", "As senhas não coincidem.");
-        return;
-    }
-    if (newPwd.length < 6) {
-        showToast("warning", "Senha muito curta.");
         return;
     }
 
     const token = localStorage.getItem("token");
 
     try {
-        const res = await fetch(`${API}/auth/change-password`,{
-            method:"POST",
-            headers:{
-                "Content-Type":"application/json",
-                "Authorization":"Bearer "+token
+        const res = await fetch(`${API}/auth/change-password`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": "Bearer " + token
             },
             body: JSON.stringify({
-                current_password:currentPwd,
-                new_password:newPwd
+                current_password: currentPwd,
+                new_password: newPwd
             })
         });
 
-        if(res.status === 403){
-            showToast("error", "Conta bloqueada. Contate o administrador.");
+        if (res.status === 403) {
+            const errData = await res.json().catch(() => null);
+            showToast("error", (errData && errData.detail) || "Conta bloqueada por excesso de tentativas.");
             return;
         }
 
-        if(res.ok){
-            showToast("success", "Senha alterada com sucesso.");
+        if (res.ok) {
+            showToast("success", "Senha alterada com sucesso. Faça login novamente.");
             localStorage.removeItem("token");
             setTimeout(() => {
                 window.location.href = "login.html";
             }, 700);
-        }else{
-            showToast("error", "Erro ao alterar senha.");
+        } else {
+            const errData = await res.json().catch(() => null);
+            const detailMsg = (errData && errData.detail) ? errData.detail : "Erro ao alterar senha.";
+            showToast("error", detailMsg);
         }
     } catch (error) {
         showToast("error", "Não foi possível conectar ao servidor.");
@@ -401,7 +426,7 @@ const hostForm = document.getElementById("hostForm");
 const portsContainer = document.getElementById("portsContainer");
 const addPortBtn = document.getElementById("addPortBtn");
 
-function addPortInput(container, value = "", removable = true, placeholder = "Porta") {
+function addPortInput(container, value = "", removable = true, placeholder = "Porta (ex: 80)") {
     if (!container) return;
     const row = document.createElement("div");
     row.className = "port-input-row";
@@ -412,6 +437,8 @@ function addPortInput(container, value = "", removable = true, placeholder = "Po
     input.max = "65535";
     input.placeholder = placeholder;
     input.className = "port-input";
+    input.title = "Porta TCP (1 a 65535)";
+    input.setAttribute("aria-label", "Porta TCP (1 a 65535)");
     input.value = value === null || value === undefined ? "" : String(value);
     row.appendChild(input);
 
@@ -924,6 +951,18 @@ function buildHostCardHTML(h) {
                     <strong class="host-title">
                         ${escapeHtml(h.name)}
                         <small class="host-addr">(${escapeHtml(hostAddressLabel)})</small>
+                        <button
+                            class="copy-addr-btn"
+                            type="button"
+                            title="Copiar endereço (${escapeHtml(h.address)})"
+                            aria-label="Copiar endereço (${escapeHtml(h.address)})"
+                            onclick='copyHostAddress(${JSON.stringify(h.address)}, this, event)'
+                        >
+                            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"></path>
+                            </svg>
+                        </button>
                     </strong>
                 </div>
                 <div class="host-top-actions">
@@ -948,8 +987,11 @@ function buildHostCardHTML(h) {
         </div>
 
         <div class="face-nav">
-            <button class="face-nav-btn face-prev-btn hidden" type="button" title="Voltar face" aria-label="Voltar face" onclick='prevHostFace(${JSON.stringify(h.name)})'>${iconSvg("arrow_left")}</button>
-            <span class="face-indicator-label" title="Exibindo Face 1 de 3: Resumo e status">1/3</span>
+            <div class="face-segmented-control" role="tablist" aria-label="Faces do card de monitoramento">
+                <button type="button" class="face-pill active" data-face-num="1" role="tab" aria-selected="true" title="Face 1: Resumo do host" onclick='setHostFace(${JSON.stringify(h.name)}, 1)'>Resumo</button>
+                <button type="button" class="face-pill" data-face-num="2" role="tab" aria-selected="false" title="Face 2: Métricas de rede e SLA" onclick='setHostFace(${JSON.stringify(h.name)}, 2)'>Rede</button>
+                <button type="button" class="face-pill" data-face-num="3" role="tab" aria-selected="false" title="Face 3: Hardware e telemetria SNMP" onclick='setHostFace(${JSON.stringify(h.name)}, 3)'>SNMP</button>
+            </div>
             <div class="icon-actions">
                 <button class="icon-btn" type="button" title="Histórico recente" aria-label="Histórico recente" onclick='toggleHistory(${JSON.stringify(h.name)})'>${iconSvg("history")}</button>
                 <button class="icon-btn" type="button" title="Gráfico de latência" aria-label="Gráfico de latência" onclick='toggleLatencyChart(${JSON.stringify(h.name)})'>${iconSvg("latency")}</button>
@@ -958,7 +1000,6 @@ function buildHostCardHTML(h) {
                 <button class="icon-btn" type="button" title="Disponibilidade geral" aria-label="Disponibilidade geral" onclick='toggleAvailabilityChart(${JSON.stringify(h.name)})'>${iconSvg("availability")}</button>
                 <button class="icon-btn" type="button" title="Editar host" aria-label="Editar host" onclick='openEditModal(${JSON.stringify(h.name)})'>${iconSvg("edit")}</button>
             </div>
-            <button class="face-nav-btn face-next-btn" type="button" title="Avançar para Face 2: Métricas de rede" aria-label="Avançar para Face 2: Métricas de rede" onclick='nextHostFace(${JSON.stringify(h.name)})'>${iconSvg("arrow_right")}</button>
         </div>
 
         <!-- Body: três colunas (Resumo | Rede | SNMP) -->
@@ -1247,16 +1288,264 @@ function refreshVisibleChartsForHost(hostName) {
     }
 }
 
+// ============================================================================
+// VISUALIZAÇÃO EM ALTA DENSIDADE (FASE 3: CARDS 3D VS TABELA NOC)
+// ============================================================================
+
+let currentViewMode = "cards";
+try {
+    currentViewMode = localStorage.getItem("netspot_view_mode") || "cards";
+} catch (_) {
+    currentViewMode = "cards";
+}
+
+function setViewMode(mode) {
+    if (mode !== "cards" && mode !== "table") mode = "cards";
+    currentViewMode = mode;
+    try {
+        localStorage.setItem("netspot_view_mode", mode);
+    } catch (_) {}
+
+    const cardsContainer = document.getElementById("hosts");
+    const tableContainer = document.getElementById("hostsTableView");
+    const btnCards = document.getElementById("viewCardsBtn");
+    const btnTable = document.getElementById("viewTableBtn");
+
+    if (cardsContainer) {
+        cardsContainer.classList.toggle("hidden", mode !== "cards");
+    }
+    if (tableContainer) {
+        tableContainer.classList.toggle("hidden", mode !== "table");
+    }
+    if (btnCards) {
+        btnCards.classList.toggle("active", mode === "cards");
+        btnCards.setAttribute("aria-pressed", mode === "cards" ? "true" : "false");
+    }
+    if (btnTable) {
+        btnTable.classList.toggle("active", mode === "table");
+        btnTable.setAttribute("aria-pressed", mode === "table" ? "true" : "false");
+    }
+}
+
+function initViewMode() {
+    let saved = "cards";
+    try {
+        saved = localStorage.getItem("netspot_view_mode") || "cards";
+    } catch (_) {}
+    setViewMode(saved);
+}
+
+function focusHostCard(hostName) {
+    setViewMode("cards");
+    setTimeout(() => {
+        const card = document.getElementById(`card-${hostName}`);
+        if (!card) return;
+        card.scrollIntoView({ behavior: "smooth", block: "center" });
+        card.classList.add("card-highlight-pulse");
+        setTimeout(() => card.classList.remove("card-highlight-pulse"), 2200);
+    }, 60);
+}
+
+function buildNocTableRowHTML(h) {
+    const visualState = hostVisualState(h);
+    const causeClass = probableCauseClass(h);
+    const hostAddressLabel = h.resolved_ip ? `${h.address} → ${h.resolved_ip}` : h.address;
+
+    let statusDot = "bg-secondary";
+    if (h.status === "UP") statusDot = "bg-success";
+    else if (h.status === "DOWN") statusDot = "bg-danger";
+    else if (h.status === "DEGRADED") statusDot = "bg-warning";
+
+    let sevClass = "sev-unknown";
+    if (h.severity === "HEALTHY") sevClass = "sev-healthy";
+    else if (h.severity === "WARNING") sevClass = "sev-warning";
+    else if (h.severity === "DEGRADED") sevClass = "sev-degraded";
+    else if (h.severity === "CRITICAL") sevClass = "sev-critical";
+    const severityIndicatorHtml = h.icmp_blocked_but_service_up
+        ? ""
+        : `<span class="severity-indicator ${sevClass}">✚</span>`;
+
+    const availability10m = h.availability_10m != null
+        ? h.availability_10m.toFixed(2)
+        : "N/A";
+
+    const availNum = Number(h.availability_10m);
+    let availClass = "sla-high";
+    if (Number.isFinite(availNum)) {
+        if (availNum < 90) availClass = "sla-low";
+        else if (availNum < 98) availClass = "sla-mid";
+    }
+
+    // Ping check
+    let pingText = "sem dados";
+    let pingDot = "bg-secondary";
+    if (h.icmp_blocked_but_service_up) {
+        pingText = "ICMP Bloq.";
+        pingDot = "bg-secondary";
+    } else if (h.status_ping === "UP") {
+        pingText = h.latency_ping != null ? `${h.latency_ping} ms` : "OK";
+        pingDot = "bg-success";
+    } else if (h.status_ping === "DOWN") {
+        pingText = "Timeout";
+        pingDot = "bg-danger";
+    }
+
+    // Web check
+    let webHtml = `<span class="noc-badge-off">Inativo</span>`;
+    if (h.http_enabled) {
+        const proto = h.http_protocol ? String(h.http_protocol).toUpperCase() : "HTTP";
+        const lat = h.http_latency ?? h.https_latency;
+        const latText = lat != null ? `${lat} ms` : "Aguardando";
+        const isOk = lat != null;
+        webHtml = `<span class="noc-badge-proto ${isOk ? "proto-ok" : "proto-err"}">${escapeHtml(proto)} <small>(${escapeHtml(latText)})</small></span>`;
+    }
+
+    // Portas TCP
+    const ports = parseHostPorts(h);
+    let tcpHtml = `<span class="noc-empty-text">—</span>`;
+    if (ports.length > 0) {
+        tcpHtml = `<div class="noc-ports-wrap">${ports.map((p) => `<span class="noc-port-pill">${p}</span>`).join("")}</div>`;
+    }
+
+    const incidentHtml = h.has_open_incident
+        ? `<span class="noc-incident-dot" title="Existe incidente em aberto para este host">!</span>`
+        : "";
+
+    return `
+      <tr id="row-${escapeHtml(h.name)}" class="noc-row ${visualState.cardClass}" data-host-name="${escapeHtml(h.name)}">
+        <td class="noc-col-status">
+          <div class="noc-status-cell">
+            <span class="status-indicator ${statusDot}"></span>
+            <span class="noc-status-label ${visualState.badgeClass}">${visualState.label}</span>
+            ${incidentHtml}
+          </div>
+        </td>
+        <td class="noc-col-device">
+          <div class="noc-device-cell">
+            <strong class="noc-device-name">${escapeHtml(h.name)}</strong>
+            <span class="noc-device-addr">
+              ${escapeHtml(hostAddressLabel)}
+              <button
+                class="copy-addr-btn"
+                type="button"
+                title="Copiar endereço (${escapeHtml(h.address)})"
+                aria-label="Copiar endereço (${escapeHtml(h.address)})"
+                onclick='copyHostAddress(${JSON.stringify(h.address)}, this, event)'
+              >
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                  <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"></path>
+                </svg>
+              </button>
+            </span>
+          </div>
+        </td>
+        <td class="noc-col-health">
+          <div class="noc-health-cell">
+            ${healthMeterHtml(h, severityIndicatorHtml)}
+          </div>
+        </td>
+        <td class="noc-col-sla">
+          <span class="noc-sla-badge ${availClass}">${availability10m}%</span>
+        </td>
+        <td class="noc-col-ping">
+          <span class="noc-ping-cell">
+            <span class="status-indicator ${pingDot}"></span>
+            <span>${escapeHtml(pingText)}</span>
+          </span>
+        </td>
+        <td class="noc-col-web">
+          ${webHtml}
+        </td>
+        <td class="noc-col-tcp">
+          ${tcpHtml}
+        </td>
+        <td class="noc-col-cause">
+          <span class="cause-pill ${causeClass}">${escapeHtml(h.probable_cause ?? "Operação normal")}</span>
+        </td>
+        <td class="noc-col-actions">
+          <div class="noc-actions-cell">
+            <button class="noc-action-btn" type="button" title="Focar no Card 3D" aria-label="Focar no Card 3D" onclick='focusHostCard(${JSON.stringify(h.name)})'>
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+            </button>
+            <button class="noc-action-btn" type="button" title="Editar host" aria-label="Editar host" onclick='openEditModal(${JSON.stringify(h.name)})'>
+              ${iconSvg("edit")}
+            </button>
+            <button class="noc-action-btn noc-btn-danger" type="button" title="Mover para lixeira" aria-label="Mover para lixeira" onclick='softDeleteHost(${h.id}, ${JSON.stringify(h.name)})'>
+              ${iconSvg("trash")}
+            </button>
+          </div>
+        </td>
+      </tr>
+    `;
+}
+
+function renderNocTable(hosts) {
+    const tbody = document.getElementById("nocTableBody");
+    if (!tbody) return;
+
+    if (!Array.isArray(hosts) || hosts.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="9" class="noc-table-empty">Nenhum host monitorado no momento.</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = hosts.map(buildNocTableRowHTML).join("");
+}
+
+function buildSkeletonCardsHTML() {
+    const card = `
+        <div class="skeleton-card" aria-hidden="true">
+            <div class="skeleton-header">
+                <div class="skeleton-line skeleton-title"></div>
+                <div class="skeleton-pill"></div>
+            </div>
+            <div class="skeleton-meta-grid">
+                <div class="skeleton-meta-box"></div>
+                <div class="skeleton-meta-box"></div>
+                <div class="skeleton-meta-box"></div>
+                <div class="skeleton-meta-box"></div>
+            </div>
+            <div class="skeleton-tabs">
+                <div class="skeleton-tab"></div>
+                <div class="skeleton-tab"></div>
+                <div class="skeleton-tab"></div>
+            </div>
+            <div class="skeleton-body">
+                <div class="skeleton-line"></div>
+                <div class="skeleton-line short"></div>
+                <div class="skeleton-bar"></div>
+            </div>
+        </div>
+    `;
+    return `<div class="skeleton-wrap" aria-busy="true" aria-label="Carregando lista de hosts...">${card.repeat(6)}</div>`;
+}
+
+function buildSkeletonTableRowsHTML() {
+    return Array(6).fill(0).map(() => `
+        <tr class="skeleton-row" aria-hidden="true">
+            <td><div class="skeleton-dot"></div></td>
+            <td><div class="skeleton-line" style="width: 130px;"></div></td>
+            <td><div class="skeleton-bar" style="width: 85px;"></div></td>
+            <td><div class="skeleton-line" style="width: 55px;"></div></td>
+            <td><div class="skeleton-line" style="width: 50px;"></div></td>
+            <td><div class="skeleton-line" style="width: 65px;"></div></td>
+            <td><div class="skeleton-line" style="width: 75px;"></div></td>
+            <td><div class="skeleton-line" style="width: 120px;"></div></td>
+            <td><div class="skeleton-line" style="width: 65px; margin-left: auto;"></div></td>
+        </tr>
+    `).join("");
+}
+
 async function loadHosts() {
     const div = document.getElementById("hosts");
+    const tbody = document.getElementById("nocTableBody");
     if (!div) return;
 
     if (!div.querySelector(".card") && !div.querySelector(".skeleton-wrap") && !div.querySelector(".ui-state")) {
-        div.innerHTML = `<div class="skeleton-wrap">
-            <div class="skeleton-card"></div>
-            <div class="skeleton-card"></div>
-            <div class="skeleton-card"></div>
-        </div>`;
+        div.innerHTML = buildSkeletonCardsHTML();
+    }
+    if (tbody && tbody.children.length === 0) {
+        tbody.innerHTML = buildSkeletonTableRowsHTML();
     }
 
     const thisRequestId = ++hostsListRequestId;
@@ -1290,6 +1579,13 @@ async function loadHosts() {
             }
             currentHostsMap.clear();
             div.innerHTML = "<div class='ui-state ui-state-empty'>Nenhum host cadastrado ainda.</div>";
+            const tbody = document.getElementById("nocTableBody");
+            if (tbody) tbody.innerHTML = '<tr><td colspan="9" class="noc-table-empty">Nenhum host monitorado no momento.</td></tr>';
+            const countBadge = document.getElementById("hostsCountBadge");
+            if (countBadge) {
+                countBadge.textContent = "0 hosts";
+                countBadge.classList.remove("is-filtered");
+            }
             updateStatusChipCounts();
             return;
         }
@@ -1353,17 +1649,20 @@ async function loadHosts() {
             refreshVisibleChartsForHost(h.name);
         }
 
-        // Reaplica o filtro de busca de forma transparente
-        const searchInput = document.getElementById("searchInput");
-        const statusFilter = document.getElementById("statusFilter");
-        if (searchInput?.value || (statusFilter && statusFilter.value !== "all")) {
-            filterHosts();
-        }
+        // 3. Renderiza tabela NOC em alta densidade (Fase 3)
+        renderNocTable(hosts);
+
+        // Sincroniza busca, filtros e badge de contagem
+        filterHosts();
         updateStatusChipCounts();
     } catch (err) {
         console.error("Erro ao carregar lista de hosts:", err);
         if (div.querySelector(".skeleton-wrap")) {
             div.innerHTML = "<div class='ui-state ui-state-warning'>Não foi possível carregar os hosts.</div>";
+        }
+        const tbody = document.getElementById("nocTableBody");
+        if (tbody && tbody.querySelector(".skeleton-row")) {
+            tbody.innerHTML = '<tr><td colspan="9" class="noc-table-empty">Não foi possível carregar os dados da tabela.</td></tr>';
         }
     }
 }
@@ -2386,6 +2685,10 @@ function closeHostExpandedPanels(hostName, exceptId = null) {
     });
 }
 
+function setHostFace(hostName, faceNumber) {
+    updateHostFace(hostName, faceNumber);
+}
+
 function updateHostFace(hostName, faceNumber) {
     const card = document.getElementById(`card-${hostName}`);
     if (!card) return;
@@ -2406,32 +2709,13 @@ function updateHostFace(hostName, faceNumber) {
         face.classList.toggle("active", n === safeFace);
     });
 
-    const indicator = card.querySelector(".face-indicator-label");
-    if (indicator) {
-        indicator.textContent = `${safeFace}/3`;
-        indicator.title = `Exibindo Face ${safeFace} de 3: ${FACE_NAMES[safeFace] || ""}`;
-    }
-
-    const prevBtn = card.querySelector(".face-prev-btn");
-    const nextBtn = card.querySelector(".face-next-btn");
-    if (prevBtn) {
-        prevBtn.classList.toggle("hidden", safeFace <= 1);
-        const prevFace = safeFace - 1;
-        if (prevFace >= 1) {
-            const desc = `Voltar para Face ${prevFace}: ${FACE_NAMES[prevFace] || ""}`;
-            prevBtn.title = desc;
-            prevBtn.setAttribute("aria-label", desc);
-        }
-    }
-    if (nextBtn) {
-        nextBtn.classList.toggle("hidden", safeFace >= 3);
-        const nextFace = safeFace + 1;
-        if (nextFace <= 3) {
-            const desc = `Avançar para Face ${nextFace}: ${FACE_NAMES[nextFace] || ""}`;
-            nextBtn.title = desc;
-            nextBtn.setAttribute("aria-label", desc);
-        }
-    }
+    // Atualiza pílulas segmentadas de navegação
+    card.querySelectorAll(".face-pill").forEach((pill) => {
+        const pNum = Number(pill.getAttribute("data-face-num"));
+        const isActive = pNum === safeFace;
+        pill.classList.toggle("active", isActive);
+        pill.setAttribute("aria-selected", isActive ? "true" : "false");
+    });
 }
 
 function nextHostFace(hostName) {
@@ -2444,6 +2728,56 @@ function prevHostFace(hostName) {
     const card = document.getElementById(`card-${hostName}`);
     const current = Number(card?.dataset?.face || 1);
     updateHostFace(hostName, current - 1);
+}
+
+async function copyHostAddress(address, btnEl, event) {
+    if (event) event.stopPropagation();
+    if (!address) return;
+    try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(address);
+        } else {
+            const ta = document.createElement("textarea");
+            ta.value = address;
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand("copy");
+            document.body.removeChild(ta);
+        }
+
+        if (btnEl) {
+            btnEl.classList.add("copied");
+            const originalSvg = btnEl.innerHTML;
+            btnEl.innerHTML = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
+            setTimeout(() => {
+                btnEl.classList.remove("copied");
+                btnEl.innerHTML = originalSvg;
+            }, 1400);
+        }
+        showToast(`Endereço "${address}" copiado!`, "success");
+    } catch (err) {
+        showToast(`Não foi possível copiar: ${err}`, "error");
+    }
+}
+
+function togglePasswordVisibility(inputId, btnEl) {
+    const input = document.getElementById(inputId);
+    if (!input) return;
+
+    const isPassword = input.type === "password";
+    input.type = isPassword ? "text" : "password";
+
+    if (btnEl) {
+        const eyeOpen = btnEl.querySelector(".eye-open");
+        const eyeClosed = btnEl.querySelector(".eye-closed");
+        if (eyeOpen && eyeClosed) {
+            eyeOpen.classList.toggle("hidden", isPassword);
+            eyeClosed.classList.toggle("hidden", !isPassword);
+        }
+        const label = isPassword ? "Ocultar senha" : "Mostrar senha";
+        btnEl.title = label;
+        btnEl.setAttribute("aria-label", label);
+    }
 }
 
 function alertSeverityClass(severity) {
@@ -2662,7 +2996,7 @@ async function softDeleteHost(hostId, hostName) {
     // Destrói gráficos ativos para liberar memória
     destroyChartsForHost(hostName);
 
-    // Remoção visual imediata/otimista do card com animação suave
+    // Remoção visual imediata/otimista do card e linha da tabela NOC
     const cardNode = document.getElementById(`card-${hostName}`);
     if (cardNode) {
         cardNode.style.transition = "opacity 0.2s ease, transform 0.2s ease";
@@ -2676,6 +3010,14 @@ async function softDeleteHost(hostId, hostName) {
                     hostsDiv.innerHTML = "<div class='ui-state ui-state-empty'>Nenhum host cadastrado ainda.</div>";
                 }
             }
+        }, 200);
+    }
+    const rowNode = document.getElementById(`row-${hostName}`);
+    if (rowNode) {
+        rowNode.style.transition = "opacity 0.2s ease";
+        rowNode.style.opacity = "0";
+        setTimeout(() => {
+            if (rowNode.parentNode) rowNode.remove();
         }, 200);
     }
 
@@ -2901,6 +3243,8 @@ async function bulkDeactivateSelectedHosts() {
         currentHostsMap.delete(hostName);
         const cardNode = document.getElementById(`card-${hostName}`);
         if (cardNode) cardNode.remove();
+        const rowNode = document.getElementById(`row-${hostName}`);
+        if (rowNode) rowNode.remove();
     }
     const hostsDiv = document.getElementById("hosts");
     if (hostsDiv && !hostsDiv.querySelector(".card")) {
@@ -3277,15 +3621,15 @@ async function loadDashboardSummary() {
 
     if (box.querySelectorAll(".summary-card").length !== 6) {
         const defs = [
-            ["Hosts monitorados", "summary-total"],
-            ["Online", "summary-ok"],
-            ["Degradados", "summary-warn"],
-            ["Offline", "summary-bad"],
-            ["Incidentes abertos", "summary-bad"],
-            ["Incidentes fechados", "summary-muted"],
+            ["Hosts monitorados", "summary-total", "all", "Exibir todos os hosts"],
+            ["Online", "summary-ok", "bg-success", "Filtrar apenas hosts Online"],
+            ["Degradados", "summary-warn", "bg-warning", "Filtrar apenas hosts Degradados"],
+            ["Offline", "summary-bad", "bg-danger", "Filtrar apenas hosts Offline"],
+            ["Incidentes abertos", "summary-bad", "incidents-open", "Ver incidentes abertos no histórico"],
+            ["Incidentes fechados", "summary-muted", "incidents-closed", "Ver incidentes fechados no histórico"],
         ];
-        box.innerHTML = defs.map(([label, cls]) => `
-            <div class="summary-card ${cls}">
+        box.innerHTML = defs.map(([label, cls, filterKey, titleText]) => `
+            <div class="summary-card ${cls} summary-card-clickable" data-filter="${filterKey}" role="button" tabindex="0" title="${titleText}" aria-label="${titleText}">
                 <small>${label}</small>
                 <strong>0</strong>
             </div>`).join("") + `
@@ -3294,6 +3638,17 @@ async function loadDashboardSummary() {
                 <span class="summary-bar-seg seg-warn"></span>
                 <span class="summary-bar-seg seg-bad"></span>
             </div>`;
+
+        box.querySelectorAll(".summary-card-clickable").forEach((card) => {
+            const trigger = () => handleSummaryCardClick(card.dataset.filter);
+            card.addEventListener("click", trigger);
+            card.addEventListener("keydown", (e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    trigger();
+                }
+            });
+        });
     }
 
     const values = [
@@ -3305,6 +3660,47 @@ async function loadDashboardSummary() {
         if (strongs[i]) strongs[i].textContent = v ?? 0;
     });
     updateSummaryBar(box, data);
+    syncSummaryCardHighlight();
+}
+
+function handleSummaryCardClick(filterKey) {
+    if (!filterKey) return;
+    if (filterKey === "incidents-open") {
+        window.location.href = "incidents.html?status=open";
+        return;
+    }
+    if (filterKey === "incidents-closed") {
+        window.location.href = "incidents.html?status=closed";
+        return;
+    }
+
+    const select = document.getElementById("statusFilter");
+    if (!select) return;
+
+    if (select.value === filterKey && filterKey !== "all") {
+        select.value = "all";
+    } else {
+        select.value = filterKey;
+    }
+
+    syncStatusChips();
+    syncSummaryCardHighlight();
+    filterHosts();
+
+    const labelMap = { "all": "Todos", "bg-success": "Online", "bg-warning": "Degradados", "bg-danger": "Offline" };
+    showToast(`Filtro: ${labelMap[select.value] || select.value}`, "info");
+}
+
+function syncSummaryCardHighlight() {
+    const select = document.getElementById("statusFilter");
+    const currentVal = select ? select.value : "all";
+    const box = document.getElementById("dashboardSummary");
+    if (!box) return;
+    box.querySelectorAll(".summary-card-clickable").forEach((card) => {
+        const filter = card.dataset.filter;
+        if (filter === "incidents-open" || filter === "incidents-closed") return;
+        card.classList.toggle("active-filter", filter === currentVal);
+    });
 }
 
 // Barra proporcional Online / Degradado / Offline (soma = hosts monitorados).
@@ -3344,6 +3740,7 @@ function syncStatusChips() {
         chip.classList.toggle("active", active);
         chip.setAttribute("aria-pressed", active ? "true" : "false");
     });
+    syncSummaryCardHighlight();
 }
 
 function updateStatusChipCounts() {
@@ -3377,22 +3774,31 @@ function initStatusChips() {
         if (!chip) return;
         select.value = chip.dataset.status;
         syncStatusChips();
+        syncSummaryCardHighlight();
         filterHosts();
     });
-    select.addEventListener("change", syncStatusChips);
+    select.addEventListener("change", () => {
+        syncStatusChips();
+        syncSummaryCardHighlight();
+    });
     syncStatusChips();
 }
 
 function filterHosts() {
     const searchInput = document.getElementById("searchInput");
     const statusInput = document.getElementById("statusFilter");
+    const emptyState = document.getElementById("hostsEmptyState");
+    const countBadge = document.getElementById("hostsCountBadge");
     if (!searchInput || !statusInput) return;
 
-    const searchTerm = String(searchInput.value || "").toLowerCase();
+    const searchTerm = String(searchInput.value || "").toLowerCase().trim();
     const statusFilter = String(statusInput.value || "all");
-    const cards = document.querySelectorAll(".card");
+    const cards = document.querySelectorAll("#hosts .card");
+    const rows = document.querySelectorAll("#nocTableBody tr.noc-row");
 
-    cards.forEach(card => {
+    let visibleCardsCount = 0;
+
+    cards.forEach((card) => {
         const hostTitleEl = card.querySelector(".host-title");
         const hostAddrEl = card.querySelector(".host-addr");
         const indicator = card.querySelector(".status-indicator");
@@ -3401,15 +3807,65 @@ function filterHosts() {
         const hostName = hostTitleEl.innerText.toLowerCase();
         const hostAddr = hostAddrEl.innerText.toLowerCase();
         
-        const matchesSearch = hostName.includes(searchTerm) || hostAddr.includes(searchTerm);
+        const matchesSearch = !searchTerm || hostName.includes(searchTerm) || hostAddr.includes(searchTerm);
         const matchesStatus = statusFilter === "all" || indicator.classList.contains(statusFilter);
 
         if (matchesSearch && matchesStatus) {
             card.style.display = "";
+            visibleCardsCount++;
         } else {
             card.style.display = "none";
         }
     });
+
+    rows.forEach((row) => {
+        const hostNameEl = row.querySelector(".noc-device-name");
+        const hostAddrEl = row.querySelector(".noc-device-addr");
+        const indicator = row.querySelector(".status-indicator");
+        if (!hostNameEl || !hostAddrEl || !indicator) return;
+
+        const hostName = hostNameEl.innerText.toLowerCase();
+        const hostAddr = hostAddrEl.innerText.toLowerCase();
+
+        const matchesSearch = !searchTerm || hostName.includes(searchTerm) || hostAddr.includes(searchTerm);
+        const matchesStatus = statusFilter === "all" || indicator.classList.contains(statusFilter);
+
+        if (matchesSearch && matchesStatus) {
+            row.style.display = "";
+        } else {
+            row.style.display = "none";
+        }
+    });
+
+    const totalCount = cards.length > 0 ? cards.length : rows.length;
+    if (countBadge) {
+        if (searchTerm || statusFilter !== "all") {
+            countBadge.textContent = `${visibleCardsCount} de ${totalCount} hosts`;
+            countBadge.classList.add("is-filtered");
+        } else {
+            countBadge.textContent = `${totalCount} ${totalCount === 1 ? "host" : "hosts"}`;
+            countBadge.classList.remove("is-filtered");
+        }
+    }
+
+    if (emptyState) {
+        if (visibleCardsCount === 0 && totalCount > 0) {
+            emptyState.classList.remove("hidden");
+        } else {
+            emptyState.classList.add("hidden");
+        }
+    }
+}
+
+function clearHostFilters() {
+    const searchInput = document.getElementById("searchInput");
+    const statusInput = document.getElementById("statusFilter");
+    if (searchInput) searchInput.value = "";
+    if (statusInput) statusInput.value = "all";
+    syncStatusChips();
+    syncSummaryCardHighlight();
+    filterHosts();
+    showToast("Filtros limpos", "info");
 }
 
 // ======================
@@ -3435,7 +3891,16 @@ if (!isLoginPage) {
 
     const refreshBtn = document.getElementById("refreshBtn");
     if (refreshBtn) {
-        refreshBtn.addEventListener("click", () => runTaskOnce("hosts-full", loadHosts));
+        refreshBtn.addEventListener("click", async () => {
+            const icon = refreshBtn.querySelector(".refresh-icon") || refreshBtn.querySelector("svg");
+            if (icon) icon.classList.add("spin");
+            try {
+                await runTaskOnce("hosts-full", loadHosts);
+                await runTaskOnce("summary", loadDashboardSummary);
+            } finally {
+                if (icon) setTimeout(() => icon.classList.remove("spin"), 450);
+            }
+        });
     }
     const refreshTrashBtn = document.getElementById("refreshTrashBtn");
     if (refreshTrashBtn) {
@@ -3748,4 +4213,5 @@ if (logoutBtn) {
 
 if (!isLoginPage) {
     initStatusChips();
+    initViewMode();
 }
