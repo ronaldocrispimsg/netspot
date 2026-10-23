@@ -98,7 +98,10 @@
             <div id="portsField" class="ports-field">
               <div class="ports-field-head">
                 <span>Portas TCP</span>
-                <button id="addPortBtn" type="button" class="add-port-btn" title="Adicionar porta TCP" aria-label="Adicionar porta TCP">+</button>
+                <button id="addPortBtn" type="button" class="add-port-btn" title="Adicionar porta TCP" aria-label="Adicionar porta TCP">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                    <span>Adicionar porta</span>
+                </button>
               </div>
               <small class="ports-help">(ex.: 80, 443, 22). Use '+' para adicionar.</small>
               <div id="portsContainer" class="ports-container"></div>
@@ -113,7 +116,10 @@
             </label>
             <label for="snmp_community" class="visually-hidden">Community SNMP</label>
             <input id="snmp_community" value="netspot" placeholder="Community SNMP (padrão: netspot)" title="Community SNMP v2c (padrão: netspot)">
-            <button type="submit">Cadastrar host</button>
+            <button type="submit" class="btn-primary">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
+                <span>Cadastrar host</span>
+            </button>
         </form>
     </article>
 </section>
@@ -124,7 +130,10 @@
         <div class="network-discovery-form">
             <label for="discoverSubnet" class="visually-hidden">Subnet CIDR para varredura</label>
             <input id="discoverSubnet" value="192.168.1.0/24" placeholder="Subnet CIDR (ex.: 10.0.1.0/24)" title="Notação CIDR da sub-rede local. No laboratório Kathará, use 10.0.1.0/24, 10.0.2.0/24 ou 10.0.3.0/24.">
-            <button id="discoverBtn" type="button">Descobrir rede</button>
+            <button id="discoverBtn" type="button" class="btn-primary">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                <span>Descobrir rede</span>
+            </button>
         </div>
         <small class="discovery-helper-text">
             Varredura ICMP com resolução de nomes (DNS/SNMP) e portas abertas (máx. /20).
@@ -135,7 +144,10 @@
         </div>
         <div class="network-discovery-actions">
             <button id="selectAllDiscoveryBtn" type="button" class="btn-secondary-action" style="display: none;">Selecionar todos</button>
-            <button id="importSelectedBtn" type="button">Adicionar selecionados</button>
+            <button id="importSelectedBtn" type="button" class="btn-primary">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 13l4 4L19 7"></path></svg>
+                <span>Adicionar selecionados</span>
+            </button>
         </div>
         <div id="networkImportResult" class="network-import-result" aria-live="polite"></div>
     </article>
@@ -263,7 +275,10 @@
     <div id="modalPortsField" class="ports-field">
       <div class="ports-field-head">
         <span>Portas TCP</span>
-        <button id="modalAddPortBtn" type="button" class="add-port-btn" title="Adicionar porta TCP" aria-label="Adicionar porta TCP">+</button>
+        <button id="modalAddPortBtn" type="button" class="add-port-btn" title="Adicionar porta TCP" aria-label="Adicionar porta TCP">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            <span>Adicionar porta</span>
+        </button>
       </div>
       <small class="ports-help">(ex.: 80, 443, 22). Use '+' para adicionar.</small>
       <div id="modalPortsContainer" class="ports-container"></div>
@@ -282,7 +297,10 @@
     <input id="modal-snmp-community" value="netspot" placeholder="Community SNMP (padrão: netspot)" title="Community SNMP v2c (padrão: netspot)">
 
     <div class="modal-actions">
-      <button type="button" class="modal-btn-primary" onclick="submitModalEdit()">Salvar</button>
+      <button type="button" class="modal-btn-primary" onclick="submitModalEdit()">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+          <span>Salvar alterações</span>
+      </button>
       <button type="button" class="modal-btn-secondary" onclick="closeModal()">Cancelar</button>
     </div>
 
@@ -327,7 +345,10 @@
     </div>
 
     <div class="modal-actions">
-      <button type="button" class="modal-btn-primary" onclick="changePassword()">Alterar senha</button>
+      <button type="button" class="modal-btn-primary" onclick="changePassword()">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2a5 5 0 00-5 5v3H6a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2v-8a2 2 0 00-2-2h-1V7a5 5 0 00-5-5zm-3 8V7a3 3 0 116 0v3H9zm3 3a2 2 0 012 2 2 2 0 11-2-2z"/></svg>
+          <span>Alterar senha</span>
+      </button>
       <button type="button" class="modal-btn-secondary" onclick="closeChangePwdModal()">Cancelar</button>
     </div>
 
