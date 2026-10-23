@@ -115,6 +115,8 @@ body {
     margin: 0;
     color: var(--text-main);
     transition: background-color 0.3s ease, color 0.3s ease;
+    overflow-x: hidden;
+    width: 100%;
 }
 
 /* Suavização de transição entre temas claro e escuro (Fase 4: Polimento) */
@@ -4092,9 +4094,16 @@ input[type=number] {
     border: 1px solid #d1d5db;
 }
 
+/* ==========================================================================
+   RESPONSIVIDADE AVANÇADA (MOBILE-FIRST, TELAS DE CELULAR ATÉ 4K/ULTRAWIDE)
+   ========================================================================== */
+
+/* 1. Telas Médias / Tablets em Landscape (<= 992px) */
 @media (max-width: 992px) {
     .dashboard-hero-top {
         flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
     }
 
     .top-actions-hero {
@@ -4111,7 +4120,8 @@ input[type=number] {
         grid-template-columns: 1fr 1fr;
     }
 
-    #hostForm button {
+    #hostForm button[type="submit"],
+    #hostForm button:not([type="button"]) {
         grid-column: span 2;
     }
 
@@ -4121,8 +4131,8 @@ input[type=number] {
 
     .hosts-toolbar {
         flex-direction: row;
-        align-items: flex-end;
-        gap: 8px;
+        align-items: center;
+        gap: 10px;
     }
 
     .host-card-body {
@@ -4138,11 +4148,18 @@ input[type=number] {
     }
 
     .summary-grid {
-        grid-template-columns: repeat(3, minmax(140px, 1fr));
+        grid-template-columns: repeat(3, minmax(130px, 1fr));
+        gap: 8px;
     }
 
     #hosts {
-        grid-template-columns: repeat(2, 1fr);
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+    }
+
+    .skeleton-wrap {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
     }
 
     #alert-container {
@@ -4152,10 +4169,18 @@ input[type=number] {
     }
 }
 
+/* 2. Tablets em Portrait e Smartphones Grandes (<= 768px) */
 @media (max-width: 768px) {
     #hosts {
         grid-template-columns: 1fr;
+        gap: 12px;
     }
+
+    .skeleton-wrap {
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+
     .container {
         padding: 0 12px;
     }
@@ -4169,23 +4194,30 @@ input[type=number] {
     }
 
     .summary-grid {
-        grid-template-columns: repeat(2, minmax(130px, 1fr));
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
     }
 
     #hostForm {
         grid-template-columns: 1fr;
+        gap: 10px;
     }
 
-    #hostForm button {
+    #hostForm button[type="submit"],
+    #hostForm button:not([type="button"]) {
         grid-column: span 1;
+        width: 100%;
     }
 
-    #hostForm .ports-field {
-        grid-column: span 1;
-    }
-
+    #hostForm .ports-field,
     #hostForm .snmp-enable-field {
         grid-column: span 1;
+    }
+
+    #hostForm input,
+    #hostForm select {
+        font-size: 16px; /* Evita auto-zoom incômodo no iOS Safari e Chrome Mobile */
+        padding: 11px 12px;
     }
 
     .top-actions {
@@ -4201,7 +4233,12 @@ input[type=number] {
     .card {
         width: 100%;
         margin: 10px 0;
-        padding: 12px;
+        padding: 14px 12px;
+        border-radius: 12px;
+    }
+
+    .host-main-info {
+        min-width: 0;
     }
 
     .host-top-line {
@@ -4211,7 +4248,10 @@ input[type=number] {
     }
 
     .host-title-wrap {
+        flex: 1 1 100%;
         flex-wrap: wrap;
+        gap: 6px;
+        min-width: 0;
     }
 
     .incident-badge {
@@ -4220,6 +4260,7 @@ input[type=number] {
 
     .host-title {
         font-size: 1rem;
+        word-break: break-all;
     }
 
     .host-addr {
@@ -4234,6 +4275,7 @@ input[type=number] {
 
     .host-meta-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
     }
 
     .host-meta-item {
@@ -4267,7 +4309,7 @@ input[type=number] {
     }
 
     .chart-box canvas {
-        height: 220px !important;
+        height: 200px !important;
     }
 
     .network-discovery-item {
@@ -4275,36 +4317,38 @@ input[type=number] {
         align-items: flex-start;
     }
 
-    .network-discovery-item>div:last-child {
+    .network-discovery-item > div:last-child {
         width: 100%;
         display: flex;
         align-items: center;
         justify-content: space-between;
     }
 
-
     .login-box {
-        width: min(320px, 92vw);
-        padding: 20px;
+        width: min(380px, 92vw);
+        padding: 24px 20px;
+        border-radius: 14px;
     }
 
     .login-box input,
     .login-box button[type="submit"] {
         width: 100%;
+        font-size: 16px;
     }
 
     .modal-content {
-        width: min(320px, 92vw);
-        padding: 20px;
-    }
-
-    .modal-actions {
-        bottom: -20px;
+        width: min(94vw, 540px);
+        max-height: 92vh;
+        overflow-y: auto;
+        padding: 20px 16px;
+        border-radius: 14px;
     }
 
     .trash-modal-content {
-        width: min(92vw, 760px);
-        padding: 14px;
+        width: min(96vw, 760px);
+        max-height: 92vh;
+        padding: 16px 12px;
+        border-radius: 14px;
     }
 
     .modal-content input,
@@ -4319,26 +4363,27 @@ input[type=number] {
     }
 }
 
-@media (max-width: 480px) {
-    .summary-grid {
-        grid-template-columns: 1fr;
+/* 3. Smartphones em Portrait (<= 580px) */
+@media (max-width: 580px) {
+    .app-topbar-inner {
+        padding: 8px 12px;
+        gap: 8px;
     }
 
-    .top-actions button {
-        flex: 1 1 100%;
+    .topbar-btn-text {
+        display: none !important;
     }
 
-    .host-meta-grid {
-        grid-template-columns: 1fr;
+    .topbar-action-btn {
+        padding: 6px 10px;
+        height: 34px;
+        width: 36px;
+        justify-content: center;
     }
 
-    .snmp-kpi-grid {
-        grid-template-columns: 1fr;
-    }
-
-    .button-group button,
-    .host-actions button {
-        flex: 1 1 100%;
+    .app-logo {
+        max-height: 38px;
+        width: auto;
     }
 
     .hosts-toolbar {
@@ -4349,17 +4394,196 @@ input[type=number] {
 
     .hosts-toolbar-main {
         width: 100%;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .hosts-toolbar-main .trash-open-btn {
+        flex: 1 1 calc(50% - 6px);
+        justify-content: center;
+        text-align: center;
     }
 
     .hosts-toolbar-actions {
         width: 100%;
         display: flex;
         justify-content: space-between;
+        align-items: center;
         gap: 8px;
     }
 
-    #refreshBtn {
+    .view-mode-toggle {
         flex: 1;
+        justify-content: center;
+    }
+
+    .view-mode-btn {
+        flex: 1;
+        justify-content: center;
+        font-size: 0.8rem;
+        padding: 6px 8px;
+    }
+
+    #refreshBtn {
+        min-width: 40px;
+    }
+
+    .status-chips {
+        display: flex;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        padding-bottom: 4px;
+        gap: 6px;
+    }
+
+    .status-chips::-webkit-scrollbar {
+        height: 3px;
+    }
+
+    .status-chip {
+        flex-shrink: 0;
+        white-space: nowrap;
+    }
+
+    .face-nav {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+    }
+
+    .face-segmented-control {
+        width: 100%;
+        display: flex;
+    }
+
+    .face-pill {
+        flex: 1;
+        text-align: center;
+        padding: 7px 4px;
+        font-size: 0.78rem;
+    }
+
+    .icon-actions {
+        width: 100%;
+        display: flex;
+        justify-content: space-between;
+        gap: 4px;
+    }
+
+    .icon-btn {
+        flex: 1;
+        max-width: none !important;
+        height: 34px !important;
+    }
+
+    .bulk-deactivate-toolbar {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+    }
+
+    .bulk-toolbar-left,
+    .bulk-toolbar-right {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .bulk-toolbar-right button {
+        flex: 1;
+    }
+}
+
+/* 4. Smartphones Compactos (<= 480px) */
+@media (max-width: 480px) {
+    .container {
+        padding: 0 10px;
+    }
+
+    .summary-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 6px;
+    }
+
+    .summary-card {
+        padding: 10px 8px;
+        border-radius: 8px;
+    }
+
+    .summary-card strong {
+        font-size: 1.1rem;
+    }
+
+    .summary-card small {
+        font-size: 0.72rem;
+    }
+
+    .dashboard-hero h1 {
+        font-size: 1.35rem;
+    }
+
+    .dashboard-hero p {
+        font-size: 0.85rem;
+    }
+
+    .panel-section {
+        padding: 12px 10px;
+    }
+
+    .overview-card {
+        padding: 12px 10px;
+    }
+
+    .network-discovery-form {
+        grid-template-columns: 1fr;
+        gap: 8px;
+    }
+
+    .network-discovery-form input {
+        width: 100%;
+        font-size: 16px;
+        margin: 0;
+    }
+
+    .network-discovery-form button {
+        width: 100%;
+        padding: 11px 16px;
+    }
+
+    .network-discovery-actions {
+        flex-direction: column;
+        width: 100%;
+        gap: 8px;
+    }
+
+    .network-discovery-actions button {
+        width: 100%;
+    }
+
+    .card {
+        padding: 12px 10px;
+    }
+
+    .chart-box canvas {
+        height: 185px !important;
+    }
+
+    .login-box {
+        width: min(92vw, 350px);
+        padding: 20px 14px;
+    }
+
+    .modal-content {
+        width: 95vw;
+        padding: 16px 12px;
+    }
+
+    .trash-modal-content {
+        width: 96vw;
+        padding: 14px 10px;
     }
 
     .trash-actions button {
@@ -4369,6 +4593,252 @@ input[type=number] {
     .timeline-item-top {
         flex-direction: column;
         align-items: flex-start;
+    }
+}
+
+/* 5. Telas Ultra-Estreitas (<= 360px, ex.: iPhone SE, Galaxy Fold tela externa) */
+@media (max-width: 360px) {
+    .summary-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .host-meta-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .app-logo {
+        max-height: 32px;
+    }
+
+    .topbar-action-btn {
+        width: 32px;
+        height: 32px;
+        padding: 5px;
+    }
+}
+
+/* ==========================================================================
+   OTIMIZAÇÃO PARA TELAS GRANDES, ULTRAWIDE, 2K, 4K E PAREDES DE NOC
+   ========================================================================== */
+
+/* 6. Telas Ampla Definição / Full HD Generoso (>= 1440px) */
+@media (min-width: 1440px) {
+    .container,
+    .app-topbar-inner {
+        max-width: 1480px;
+    }
+
+    #hosts {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 18px;
+    }
+
+    .skeleton-wrap {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 18px;
+    }
+
+    .summary-grid {
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: 10px;
+    }
+}
+
+/* 7. Telas QHD / 2K e Desktops Full HD 100% de Escala (>= 1720px) */
+@media (min-width: 1720px) {
+    .container,
+    .app-topbar-inner {
+        max-width: 1780px;
+        padding-left: 20px;
+        padding-right: 20px;
+    }
+
+    #hosts {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 18px;
+    }
+
+    .skeleton-wrap {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 18px;
+    }
+
+    .overview-grid {
+        grid-template-columns: 1.6fr 1fr;
+        gap: 18px;
+    }
+
+    .summary-card {
+        padding: 16px 12px;
+    }
+
+    .summary-card strong {
+        font-size: 1.15rem;
+    }
+}
+
+/* 8. Telas Ultrawide e 2K Amplo (>= 2100px) */
+@media (min-width: 2100px) {
+    .container,
+    .app-topbar-inner {
+        max-width: 2180px;
+        padding-left: 24px;
+        padding-right: 24px;
+    }
+
+    #hosts {
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 18px;
+    }
+
+    .skeleton-wrap {
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 18px;
+    }
+
+    .overview-grid {
+        grid-template-columns: 1.5fr 1fr;
+        gap: 22px;
+    }
+
+    .summary-grid {
+        gap: 12px;
+    }
+
+    .summary-card {
+        padding: 16px 14px;
+    }
+
+    .summary-card strong {
+        font-size: 1.2rem;
+    }
+
+    .noc-table {
+        font-size: 0.86rem;
+    }
+
+    .noc-table td {
+        padding: 10px 16px;
+    }
+
+    .noc-table-responsive {
+        max-height: calc(100vh - 280px);
+    }
+}
+
+/* 9. Monitores Ultrawide 3440x1440p e 4K com Escala do SO (>= 2560px) */
+@media (min-width: 2560px) {
+    .container,
+    .app-topbar-inner {
+        max-width: 2680px;
+        padding-left: 28px;
+        padding-right: 28px;
+    }
+
+    #hosts {
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: 20px;
+    }
+
+    .skeleton-wrap {
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: 20px;
+    }
+
+    .overview-grid {
+        grid-template-columns: 1.4fr 1fr;
+        gap: 24px;
+    }
+
+    .summary-grid {
+        gap: 14px;
+    }
+
+    .summary-card {
+        padding: 18px 14px;
+        border-radius: 12px;
+    }
+
+    .summary-card strong {
+        font-size: 1.3rem;
+    }
+
+    .summary-card small {
+        font-size: 0.8rem;
+    }
+
+    .noc-table {
+        font-size: 0.9rem;
+    }
+
+    .noc-table td {
+        padding: 12px 18px;
+    }
+
+    .chart-box canvas {
+        height: 240px !important;
+    }
+}
+
+/* 10. Telas Enormes 4K Nativas (3840x2160), TVs de Parede e NOC Video Walls (>= 3200px) */
+@media (min-width: 3200px) {
+    .container,
+    .app-topbar-inner {
+        max-width: 3400px;
+        padding-left: 36px;
+        padding-right: 36px;
+    }
+
+    #hosts {
+        grid-template-columns: repeat(7, minmax(0, 1fr));
+        gap: 22px;
+    }
+
+    .skeleton-wrap {
+        grid-template-columns: repeat(7, minmax(0, 1fr));
+        gap: 22px;
+    }
+
+    .overview-grid {
+        grid-template-columns: 1.3fr 1fr;
+        gap: 28px;
+    }
+
+    .summary-grid {
+        gap: 16px;
+    }
+
+    .summary-card {
+        padding: 22px 16px;
+        border-radius: 14px;
+    }
+
+    .summary-card strong {
+        font-size: 1.5rem;
+    }
+
+    .summary-card small {
+        font-size: 0.88rem;
+    }
+
+    .dashboard-hero h1 {
+        font-size: 2.2rem;
+    }
+
+    .dashboard-hero p {
+        font-size: 1.1rem;
+    }
+
+    .noc-table {
+        font-size: 0.95rem;
+    }
+
+    .noc-table td {
+        padding: 14px 20px;
+    }
+
+    .chart-box canvas {
+        height: 260px !important;
     }
 }
 
