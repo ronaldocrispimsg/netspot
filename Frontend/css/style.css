@@ -665,26 +665,96 @@ button[disabled],
     background: var(--primary-dark);
 }
 
+.btn-secondary-action,
+#selectAllBulkDeactivateBtn,
+#selectAllDiscoveryBtn,
+#refreshBulkDeactivateBtn,
+#refreshTrashBtn,
 .network-discovery-actions .btn-secondary-action {
-    background: var(--bg-soft, #f1f3f4);
-    color: var(--text-main, #202124);
-    border: 1px solid var(--line, #cbd5e1);
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 7px !important;
+    padding: 7px 14px !important;
+    border: 1px solid var(--line) !important;
+    border-radius: 8px !important;
+    background: var(--bg-panel) !important;
+    color: var(--text-main) !important;
+    font-size: 0.8125rem !important;
+    font-weight: 600 !important;
+    cursor: pointer !important;
+    box-sizing: border-box !important;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05) !important;
+    transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease, box-shadow 0.15s ease, transform 0.08s ease !important;
+    white-space: nowrap !important;
 }
 
+.btn-secondary-action:hover:not(:disabled),
+#selectAllBulkDeactivateBtn:hover:not(:disabled),
+#selectAllDiscoveryBtn:hover:not(:disabled),
+#refreshBulkDeactivateBtn:hover:not(:disabled),
+#refreshTrashBtn:hover:not(:disabled),
 .network-discovery-actions .btn-secondary-action:hover {
-    background: #e2e8f0;
-    color: #0f172a;
+    background: var(--bg-soft) !important;
+    border-color: var(--primary) !important;
+    color: var(--primary) !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.08) !important;
 }
 
+.btn-secondary-action:active:not(:disabled),
+#selectAllBulkDeactivateBtn:active:not(:disabled),
+#selectAllDiscoveryBtn:active:not(:disabled),
+#refreshBulkDeactivateBtn:active:not(:disabled),
+#refreshTrashBtn:active:not(:disabled) {
+    transform: translateY(0) !important;
+}
+
+.btn-secondary-action:disabled,
+#selectAllBulkDeactivateBtn:disabled,
+#selectAllDiscoveryBtn:disabled,
+#refreshBulkDeactivateBtn:disabled,
+#refreshTrashBtn:disabled {
+    opacity: 0.55 !important;
+    cursor: not-allowed !important;
+    pointer-events: none !important;
+    transform: none !important;
+    box-shadow: none !important;
+}
+
+.btn-secondary-action svg,
+#selectAllBulkDeactivateBtn svg,
+#selectAllDiscoveryBtn svg,
+#refreshBulkDeactivateBtn svg,
+#refreshTrashBtn svg {
+    width: 14px !important;
+    height: 14px !important;
+    stroke: currentColor !important;
+    fill: none !important;
+    flex-shrink: 0 !important;
+    pointer-events: none !important;
+}
+
+.dark-theme .btn-secondary-action,
+.dark-theme #selectAllBulkDeactivateBtn,
+.dark-theme #selectAllDiscoveryBtn,
+.dark-theme #refreshBulkDeactivateBtn,
+.dark-theme #refreshTrashBtn,
 .dark-theme .network-discovery-actions .btn-secondary-action {
-    background: #373a43;
-    color: #e2e8f0;
-    border-color: #4b5563;
+    background: rgba(255, 255, 255, 0.05) !important;
+    border-color: var(--line) !important;
+    color: #e2e8f0 !important;
 }
 
+.dark-theme .btn-secondary-action:hover:not(:disabled),
+.dark-theme #selectAllBulkDeactivateBtn:hover:not(:disabled),
+.dark-theme #selectAllDiscoveryBtn:hover:not(:disabled),
+.dark-theme #refreshBulkDeactivateBtn:hover:not(:disabled),
+.dark-theme #refreshTrashBtn:hover:not(:disabled),
 .dark-theme .network-discovery-actions .btn-secondary-action:hover {
-    background: #4b5563;
-    color: #ffffff;
+    background: rgba(255, 255, 255, 0.1) !important;
+    border-color: var(--primary) !important;
+    color: #ffffff !important;
 }
 
 
@@ -3672,15 +3742,29 @@ button.password-toggle-btn {
 }
 
 .trash-empty-btn {
-    padding: 7px 14px;
-    font-size: 0.85rem;
-    font-weight: 600;
-    border-radius: 6px;
-    border: none;
-    cursor: pointer;
-    background: #fee2e2;
-    color: #dc2626;
-    transition: all 0.2s ease;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 7px !important;
+    padding: 7px 14px !important;
+    font-size: 0.8125rem !important;
+    font-weight: 600 !important;
+    border-radius: 8px !important;
+    border: none !important;
+    cursor: pointer !important;
+    background: #fee2e2 !important;
+    color: #dc2626 !important;
+    box-sizing: border-box !important;
+    transition: all 0.2s ease !important;
+}
+
+.trash-empty-btn svg {
+    width: 14px !important;
+    height: 14px !important;
+    stroke: currentColor !important;
+    fill: none !important;
+    flex-shrink: 0 !important;
+    pointer-events: none !important;
 }
 
 .trash-empty-btn:hover:not(:disabled) {

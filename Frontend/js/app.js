@@ -3113,14 +3113,19 @@ function updateBulkDeactivateSelectionUI() {
     }
     if (actionBtn) {
         actionBtn.disabled = selectedCount === 0;
-        actionBtn.textContent = selectedCount > 0
+        const trashIconSvg = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4h6l1 2h4v2H4V6h4l1-2zm-2 6h2v8H7v-8zm4 0h2v8h-2v-8zm4 0h2v8h-2v-8z"/></svg>`;
+        const actionLabel = selectedCount > 0
             ? `Mover selecionados (${selectedCount})`
             : "Mover selecionados para lixeira";
+        actionBtn.innerHTML = `${trashIconSvg}<span>${actionLabel}</span>`;
     }
     if (selectAllBtn) {
         selectAllBtn.disabled = checkboxes.length === 0;
         const allVisibleChecked = checkboxes.length > 0 && checkboxes.every((cb) => cb.checked);
-        selectAllBtn.textContent = allVisibleChecked ? "Desmarcar todos" : "Selecionar todos";
+        const iconSvg = allVisibleChecked
+            ? `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="9" x2="15" y2="15"></line><line x1="15" y1="9" x2="9" y2="15"></line></svg>`
+            : `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><polyline points="9 11 12 14 22 4"></polyline></svg>`;
+        selectAllBtn.innerHTML = `${iconSvg}<span>${allVisibleChecked ? "Desmarcar todos" : "Selecionar todos"}</span>`;
     }
 }
 
@@ -3964,13 +3969,20 @@ if (!isLoginPage) {
         importSelectedBtn.addEventListener("click", importSelectedLanHosts);
     }
     const selectAllDiscoveryBtn = document.getElementById("selectAllDiscoveryBtn");
+    function updateDiscoverySelectAllUI(allChecked) {
+        if (!selectAllDiscoveryBtn) return;
+        const iconSvg = allChecked
+            ? `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="9" x2="15" y2="15"></line><line x1="15" y1="9" x2="9" y2="15"></line></svg>`
+            : `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><polyline points="9 11 12 14 22 4"></polyline></svg>`;
+        selectAllDiscoveryBtn.innerHTML = `${iconSvg}<span>${allChecked ? "Desmarcar todos" : "Selecionar todos"}</span>`;
+    }
     if (selectAllDiscoveryBtn) {
         selectAllDiscoveryBtn.addEventListener("click", () => {
             const checkboxes = Array.from(document.querySelectorAll("#networkDiscoveryList .discover-host-check:not(:disabled)"));
             if (checkboxes.length === 0) return;
             const anyUnchecked = checkboxes.some(cb => !cb.checked);
             checkboxes.forEach(cb => { cb.checked = anyUnchecked; });
-            selectAllDiscoveryBtn.textContent = anyUnchecked ? "Desmarcar todos" : "Selecionar todos";
+            updateDiscoverySelectAllUI(anyUnchecked);
         });
     }
     const discoveryList = document.getElementById("networkDiscoveryList");
@@ -3979,9 +3991,7 @@ if (!isLoginPage) {
             if (e.target.classList.contains("discover-host-check")) {
                 const checkboxes = Array.from(document.querySelectorAll("#networkDiscoveryList .discover-host-check:not(:disabled)"));
                 const allChecked = checkboxes.length > 0 && checkboxes.every(cb => cb.checked);
-                if (selectAllDiscoveryBtn) {
-                    selectAllDiscoveryBtn.textContent = allChecked ? "Desmarcar todos" : "Selecionar todos";
-                }
+                updateDiscoverySelectAllUI(allChecked);
             }
         });
     }
