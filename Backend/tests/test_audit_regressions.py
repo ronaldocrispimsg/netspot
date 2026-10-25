@@ -996,4 +996,143 @@ def test_setup_kathara_routes_validates_ip_and_cidr(monkeypatch):
     assert executed_commands[1] == ["ip", "route", "replace", "100.0.0.0/16", "via", "172.17.0.2"]
 
 
+def test_change_password_sets_locked_until_and_validates_new_password():
+    """Garante que /auth/change-password define locked_until no 5º erro, desbloqueia após expiração e valida a nova senha."""
+    from datetime import datetime, timedelta, timezone
+    import pytest
+    from fastapi import HTTPException
+    from Backend.routes.hosts import change_password
+    from Backend.models import User
+    from Backend.schemas import PasswordChangeRequest
+    from Backend.security import hash_password
+
+    class DummySession:
+        def commit(self):
+            pass
+
+    real_hash = hash_password("SenhaCorreta123")
+    user = User(username="admin", password_hash=real_hash, must_change_password=False, attempts=4, locked=False)
+
+    # 1. Senha nova curta (< 4 chars) -> 400
+    with pytest.raises(HTTPException) as exc_short:
+        change_password(
+            data=PasswordChangeRequest(current_password="SenhaCorreta123", new_password="   "),
+            user=user,
+            db=DummySession(),
+        )
+    assert exc_short.value.status_code == 400
+
+    # 2. Senha nova > 72 bytes -> 400
+    with pytest.raises(HTTPException) as exc_long:
+        change_password(
+            data=PasswordChangeRequest(current_password="SenhaCorreta123", new_password="A" * 75),
+            user=user,
+            db=DummySession(),
+        )
+    assert exc_long.value.status_code == 400
+
+    # 3. 5ª tentativa incorreta -> bloqueia temporariamente COM locked_until preenchido
+    with pytest.raises(HTTPException) as exc_lock:
+        change_password(
+            data=PasswordChangeRequest(current_password="Errada", new_password="NovaSenhaValida123"),
+            user=user,
+            db=DummySession(),
+        )
+    assert exc_lock.value.status_code == 403
+    assert user.locked is True
+    assert user.locked_until is not None
+
+    # 4. Após expirar locked_until, desbloqueia automaticamente e permite alterar a senha
+    user.locked_until = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(seconds=5)
+    res = change_password(
+        data=PasswordChangeRequest(current_password="SenhaCorreta123", new_password="NovaSenhaValida123"),
+        user=user,
+        db=DummySession(),
+    )
+    assert res["message"] == "Senha alterada com sucesso"
+    assert user.locked is False
+    assert user.locked_until is None
+    assert user.attempts == 0
+
+
+def test_bcrypt_password_over_72_bytes_handled_gracefully():
+    """Garante que senhas > 72 bytes não disparam erro 500 não tratado no verify_password."""
+    import pytest
+    from Backend.security import hash_password, verify_password
+
+    valid_hash = hash_password("SenhaNormal123")
+    assert verify_password("X" * 80, valid_hash) is False
+
+    with pytest.raises(ValueError):
+        hash_password("X" * 80)
+
+
+def test_get_current_user_enforces_must_change_password():
+    """Garante que usuários com must_change_password=True só podem acessar rotas de troca de senha."""
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+    import pytest
+    from fastapi import HTTPException
+    from Backend.dependencies import get_current_user
+
+    mock_db = MagicMock()
+    mock_creds = MagicMock()
+    mock_creds.credentials = "fake.jwt.token"
+
+    pending_user = SimpleNamespace(
+        username="admin",
+        locked=False,
+        locked_until=None,
+        attempts=0,
+        must_change_password=True,
+    )
+    mock_db.query.return_value.filter.return_value.first.return_value = pending_user
+
+    with pytest.MonkeyPatch().context() as mp:
+        mp.setattr("Backend.dependencies.decode_token", lambda token: {"sub": "admin"})
+
+        # 1. Tentativa de acessar rota comum (/hosts/list) -> 403
+        req_hosts = SimpleNamespace(url=SimpleNamespace(path="/hosts/list"))
+        with pytest.raises(HTTPException) as exc_blocked:
+            get_current_user(mock_creds, mock_db, req_hosts)
+        assert exc_blocked.value.status_code == 403
+
+        # 2. Acesso à rota de troca obrigatória (/auth/first-password) -> Permitido
+        req_first_pwd = SimpleNamespace(url=SimpleNamespace(path="/auth/first-password"))
+        returned_user = get_current_user(mock_creds, mock_db, req_first_pwd)
+        assert returned_user is pending_user
+
+
+def test_compute_health_zero_latency_not_penalized():
+    """Garante que latência 0.0 ms (sub-milissegundo) não é avaliada como falsy (9999 ms)."""
+    from Backend.metrics import compute_health
+
+    score, severity = compute_health(
+        {"success": True, "latency": 0.0},
+        {"success": True, "latency": 0.0},
+        {"success": True, "latency": 0.0, "status_code": 200},
+    )
+    assert score == 100
+    assert severity == "HEALTHY"
+
+
+def test_anti_flapping_isolates_event_types_and_preserves_recovery():
+    """Garante que rajadas de eventos de falha não suprimem o evento de recuperação (recovery)."""
+    import time
+    from Backend.notifications import is_flapping_suppressed
+
+    now = time.time()
+    host_name = "Host-Flap-Recovery-Test"
+
+    for i in range(4):
+        assert is_flapping_suppressed({"host_name": host_name, "event": "failure_confirmed"}, now + i) is False
+
+    # 5º failure_confirmed é suprimido
+    assert is_flapping_suppressed({"host_name": host_name, "event": "failure_confirmed"}, now + 4) is True
+
+    # Evento recovery no mesmo instante NÃO é suprimido
+    assert is_flapping_suppressed({"host_name": host_name, "event": "recovery"}, now + 4) is False
+
+
+
 

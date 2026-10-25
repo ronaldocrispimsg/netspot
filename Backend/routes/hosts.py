@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta, timezone
+import asyncio
 import ipaddress
 import json
 import re
@@ -11,7 +12,7 @@ import psutil
 from Backend.database import get_db
 from Backend.metrics import total_downtime, total_incidents, availability_last_10_min, compute_health, calculate_availability_from_incidents
 from Backend.models import CheckResult, Host, Alert, Incident, User, SNMPMetric
-from Backend.checker import ping_host, tcp_check, resolve_dns_cached_sync
+from Backend.checker import ping_host, tcp_check, http_check, resolve_dns_cached_sync
 from Backend.notifications import telegram_health_check
 from Backend.services.circuit_breaker import circuit_breaker
 from Backend.snmp_engine import reset_snmp_backoff
@@ -766,6 +767,15 @@ def infer_probable_cause(db: Session, host: Host) -> str:
         host.icmp_blocked_but_service_up = False
         return "Operação normal"
 
+    if (
+        host.status == "UNKNOWN"
+        and getattr(host, "baseline_pending", False)
+        and getattr(host, "last_check", None) is None
+        and has_normal_resources
+    ):
+        host.icmp_blocked_but_service_up = False
+        return "Operação normal"
+
     last_dns = get_last_check(db, host.id, "dns")
     last_ping = get_last_check(db, host.id, "ping")
     last_tcp = get_last_check(db, host.id, "tcp")
@@ -1141,10 +1151,12 @@ def network_import(
             "created": True,
         })
 
-    db.commit()
-    mq_manager.publish_host_checks_sync([
+    db.flush()
+    host_ids_to_check = [
         h.id for h in new_or_reactivated_hosts if getattr(h, "id", None) is not None
-    ])
+    ]
+    db.commit()
+    mq_manager.publish_host_checks_sync(host_ids_to_check)
 
     return {
         "requested": len(requested_hosts),
@@ -1213,18 +1225,27 @@ async def check_host(host_name: str, db: Session = Depends(get_db), user: User =
     ip = ips[0]
     host.last_resolved_ip = ip
 
-    ping_result = await ping_host(ip)
-    tcp_results = []
-    for tcp_port in _host_ports(host):
-        result = await tcp_check(ip, tcp_port)
-        result["port"] = tcp_port
-        tcp_results.append(result)
+    ports_to_check = _host_ports(host)
+
+    async def _probe_tcp(p: int) -> dict:
+        res = await tcp_check(ip, p)
+        res["port"] = p
+        return res
+
+    http_is_active = bool(getattr(host, "http_enabled", True)) and bool(host.http_url)
+    ping_task = ping_host(ip)
+    tcp_task = asyncio.gather(*(_probe_tcp(p) for p in ports_to_check)) if ports_to_check else None
+    http_task = http_check(host.http_url, verify_tls=False) if http_is_active else None
+
+    ping_result = await ping_task
+    tcp_results = list(await tcp_task) if tcp_task is not None else []
+    http_result = await http_task if http_task is not None else None
 
     tcp_result = None
     if tcp_results:
         successes = [r for r in tcp_results if r.get("success")]
         if successes:
-            best = min(successes, key=lambda r: r.get("latency") or float("inf"))
+            best = min(successes, key=lambda r: r.get("latency") if r.get("latency") is not None else float("inf"))
             tcp_result = {"success": True, "latency": best.get("latency"), "error": None}
         else:
             tcp_result = {
@@ -1234,9 +1255,10 @@ async def check_host(host_name: str, db: Session = Depends(get_db), user: User =
             }
 
     icmp_blocked_but_service_up = (
-        not ping_result["success"] and
-        tcp_result is not None and
-        tcp_result.get("success")
+        not ping_result["success"] and (
+            (tcp_result is not None and tcp_result.get("success")) or
+            (http_result is not None and http_result.get("success"))
+        )
     )
 
     host.status_ping = "UP" if ping_result["success"] else "DOWN"
@@ -1255,12 +1277,12 @@ async def check_host(host_name: str, db: Session = Depends(get_db), user: User =
         host.status = "UP"
     elif host.status_ping == "DOWN":
         host.status = "DOWN"
-    elif host.status_tcp == "DOWN":
+    elif host.status_tcp == "DOWN" or (http_result is not None and not http_result.get("success")):
         host.status = "DEGRADED"
     else:
         host.status = "UP"
 
-    score, severity = compute_health(ping_result, tcp_result, None)
+    score, severity = compute_health(ping_result, tcp_result, http_result)
     if host.status == "DOWN":
         score = 0
         severity = "CRITICAL"
@@ -1511,7 +1533,7 @@ def empty_trash(
 
 
 @router.delete("/host/delete/{host_name}")
-def delete_host(host_name: str, db: Session = Depends(get_db), user: str = Depends(get_current_user)):
+def delete_host(host_name: str, db: Session = Depends(get_db), user: User = Depends(get_current_admin)):
     host = db.query(Host).filter(Host.name == host_name).first()
 
     if not host:
@@ -1590,6 +1612,8 @@ def update_host(
     if data.snmp_enabled is not None or getattr(data, "snmp_community", None) is not None:
         _apply_snmp_policy(host, data.snmp_enabled, getattr(data, "snmp_community", None))
 
+    circuit_breaker.clear_host(host.id)
+    reset_snmp_backoff(host.id)
     db.commit()
 
     return {
@@ -1785,6 +1809,9 @@ def first_change_password(data: PasswordChangeRequest, user: User = Depends(get_
     if not data.new_password or len(data.new_password.strip()) < 4:
         raise HTTPException(status_code=400, detail="A nova senha deve conter pelo menos 4 caracteres")
 
+    if len(data.new_password.encode("utf-8")) > 72:
+        raise HTTPException(status_code=400, detail="A nova senha não pode exceder 72 bytes")
+
     user.password_hash = hash_password(data.new_password)
     user.must_change_password = False
     user.attempts = 0
@@ -1801,22 +1828,36 @@ def change_password(data: PasswordChangeRequest, user: User = Depends(get_curren
     if not user:
         raise HTTPException(status_code=404, detail="Usuário não encontrado")
 
-    # Verifica se conta está bloqueada
+    now_utc = datetime.now(timezone.utc).replace(tzinfo=None)
+    # Verifica se conta está bloqueada (com desbloqueio automático após expiração)
     if user.locked:
-        raise HTTPException(status_code=403, detail="Conta bloqueada por muitas tentativas")
+        if user.locked_until and user.locked_until <= now_utc:
+            user.locked = False
+            user.locked_until = None
+            user.attempts = 0
+            db.commit()
+        else:
+            raise HTTPException(status_code=403, detail="Conta bloqueada por muitas tentativas")
 
     # Verifica senha atual
     if not data.current_password:
         raise HTTPException(status_code=400, detail="Senha atual é obrigatória")
 
+    if not data.new_password or len(data.new_password.strip()) < 4:
+        raise HTTPException(status_code=400, detail="A nova senha deve conter pelo menos 4 caracteres")
+
+    if len(data.new_password.encode("utf-8")) > 72:
+        raise HTTPException(status_code=400, detail="A nova senha não pode exceder 72 bytes")
+
     if not verify_password(data.current_password, user.password_hash):
 
-        user.attempts += 1
+        user.attempts = (user.attempts or 0) + 1
 
         if user.attempts >= 5:
             user.locked = True
+            user.locked_until = now_utc + timedelta(minutes=1)
             db.commit()
-            raise HTTPException(status_code=403, detail="Conta bloqueada após 5 tentativas")
+            raise HTTPException(status_code=403, detail="Conta bloqueada após 5 tentativas. Aguarde 1 minuto.")
 
         db.commit()
 
@@ -1825,8 +1866,10 @@ def change_password(data: PasswordChangeRequest, user: User = Depends(get_curren
             detail=f"Senha atual incorreta ({user.attempts}/5)"
         )
 
-    # Senha correta → reseta tentativas
+    # Senha correta → reseta tentativas e bloqueio
     user.attempts = 0
+    user.locked = False
+    user.locked_until = None
     user.password_hash = hash_password(data.new_password)
     user.must_change_password = False
 

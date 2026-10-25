@@ -574,6 +574,7 @@ async def _host_check_async(host_id: int) -> None:
                 db.add(
                     Alert(
                         host_id=host.id,
+                        alert_type="STATUS_CHANGE",
                         old_status=previous_state,
                         new_status=new_status,
                     )
@@ -592,6 +593,7 @@ async def _host_check_async(host_id: int) -> None:
                 db.add(
                     Alert(
                         host_id=host.id,
+                        alert_type="UP_RECOVERED",
                         old_status=old_status or "DOWN",
                         new_status="UP_RECOVERED",
                     )
@@ -809,7 +811,7 @@ async def _host_check_async(host_id: int) -> None:
             auto_commit=False,
         )
 
-        if host.severity in ("WARNING", "DEGRADED", "CRITICAL"):
+        if host.status != "DOWN" and host.severity in ("WARNING", "DEGRADED", "CRITICAL") and preventive_reasons:
             if (
                 not host.last_preventive_alert
                 or datetime.now(timezone.utc).replace(tzinfo=None) - host.last_preventive_alert > timedelta(minutes=30)

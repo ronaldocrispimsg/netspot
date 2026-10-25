@@ -46,7 +46,15 @@ CREATE POLICY incidents_tenant_isolation_policy ON incidents
     USING (tenant_id = NULLIF(current_setting('app.current_tenant_id', true), '')::uuid)
     WITH CHECK (tenant_id = NULLIF(current_setting('app.current_tenant_id', true), '')::uuid);
 
+CREATE POLICY snmp_metrics_tenant_isolation_policy ON snmp_metrics
+    FOR ALL
+    USING (tenant_id = NULLIF(current_setting('app.current_tenant_id', true), '')::uuid)
+    WITH CHECK (tenant_id = NULLIF(current_setting('app.current_tenant_id', true), '')::uuid);
+
 -- 5. Política para superusuário de manutenção (Bypass controlado)
 -- Apenas o usuário mestre do banco de dados (dba/sre) pode ignorar as políticas para rotinas globais:
 ALTER TABLE hosts FORCE ROW LEVEL SECURITY;
 ALTER TABLE alerts FORCE ROW LEVEL SECURITY;
+ALTER TABLE checks FORCE ROW LEVEL SECURITY;
+ALTER TABLE incidents FORCE ROW LEVEL SECURITY;
+ALTER TABLE snmp_metrics FORCE ROW LEVEL SECURITY;

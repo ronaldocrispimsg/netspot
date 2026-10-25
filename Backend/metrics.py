@@ -29,7 +29,7 @@ def compute_health(ping_result, tcp_result, http_result):
     max_score += 45.0
     if ping_effective_success:
         raw_score += 30.0
-        lat = ping_effective_latency or 9999
+        lat = ping_effective_latency if ping_effective_latency is not None else 9999
         if lat < 100:
             raw_score += 15.0
         elif lat < 300:
@@ -48,7 +48,8 @@ def compute_health(ping_result, tcp_result, http_result):
 
         if http_result.get("success"):
             raw_score += 25.0
-            if http_result.get("latency") and http_result["latency"] < 500:
+            http_lat = http_result.get("latency")
+            if http_lat is not None and http_lat < 500:
                 raw_score += 10.0
         elif status_code and 500 <= status_code < 600:
             raw_score -= 20.0

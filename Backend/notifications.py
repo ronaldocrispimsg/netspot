@@ -263,8 +263,10 @@ def is_flapping_suppressed(message, now_ts: float, window_seconds: int = 300, ma
     e suprime disparos repetitivos para evitar fadiga de alertas (Alert Fatigue).
     """
     host_key = None
+    event_key = "default"
     if isinstance(message, dict):
         host_key = message.get("host_name") or message.get("host_id") or message.get("address")
+        event_key = str(message.get("event") or "default").strip().lower()
     elif isinstance(message, str):
         import re
         m = re.search(r"Host:\s*([^\n]+)", message)
@@ -274,19 +276,23 @@ def is_flapping_suppressed(message, now_ts: float, window_seconds: int = 300, ma
     if not host_key:
         return False
 
+    state_key = f"{host_key}:{event_key}"
+
     with _FLAPPING_LOCK:
-        history = _FLAPPING_STATE.get(host_key, [])
+        history = _FLAPPING_STATE.get(state_key, [])
         history = [ts for ts in history if now_ts - ts <= window_seconds]
+        if len(history) >= max_changes:
+            _FLAPPING_STATE[state_key] = history
+            return True
+
         history.append(now_ts)
-        _FLAPPING_STATE[host_key] = history
+        _FLAPPING_STATE[state_key] = history
 
         if len(_FLAPPING_STATE) > 1000:
             stale_keys = [k for k, h in _FLAPPING_STATE.items() if not h or now_ts - h[-1] > window_seconds]
             for k in stale_keys:
                 _FLAPPING_STATE.pop(k, None)
 
-        if len(history) > max_changes:
-            return True
         return False
 
 

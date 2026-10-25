@@ -142,17 +142,7 @@ def reverse_dns(ip: str, timeout: float = 0.8) -> str | None:
             return str(answers[0]).rstrip(".")
     except Exception:
         pass
-
-    try:
-        old_timeout = socket.getdefaulttimeout()
-        socket.setdefaulttimeout(timeout)
-        try:
-            hostname, _, _ = socket.gethostbyaddr(ip)
-            return hostname
-        finally:
-            socket.setdefaulttimeout(old_timeout)
-    except Exception:
-        return None
+    return None
 
 def is_ip(address: str) -> bool:
     try:
