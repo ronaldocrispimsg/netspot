@@ -56,6 +56,7 @@ RabbitMQ/log/
 N8N/data/
 
 # ===== Documentação / TCC & Scripts Auxiliares =====
+*.pdf
 Escrita_TCC/
 RELATORIO-UIUX.md
 docs/RELATORIO-UIUX.md
