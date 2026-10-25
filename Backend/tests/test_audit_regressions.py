@@ -1211,3 +1211,37 @@ def test_phase3_infra_n8n_scripts_and_kathara_regressions():
     assert (root / "Teste - Kathará" / "dns_server2" / "etc" / "bind" / "db.10.0.2").is_file()
 
 
+def test_phase4_documentation_consistency_and_links():
+    """Garante consistência entre README.md, docs/funcionalidades.md, docs/kathara.md e arquitetura.md."""
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    readme_txt = (root / "README.md").read_text(encoding="utf-8")
+    func_txt = (root / "docs" / "funcionalidades.md").read_text(encoding="utf-8")
+    kathara_txt = (root / "docs" / "kathara.md").read_text(encoding="utf-8")
+    arq_txt = (root / "arquitetura.md").read_text(encoding="utf-8")
+
+    # 1. Sem referências antigas a "61 testes", "netspot-postgres" ou "SistemaMonitoramentoDeRede-NOC"
+    for doc_txt in (readme_txt, func_txt, kathara_txt, arq_txt):
+        assert "61/61" not in doc_txt
+        assert "61 testes" not in doc_txt
+        assert "netspot-postgres" not in doc_txt
+        assert "SistemaMonitoramentoDeRede-NOC" not in doc_txt
+
+    # 2. README.md alinhado
+    assert "86/86" in readme_txt
+    assert "netspot-db" in readme_txt
+    assert "NETSPOT_PORT" in readme_txt
+
+    # 3. docs/funcionalidades.md alinhado
+    assert "pool_size=35" in func_txt
+    assert "compute_health" in func_txt
+    assert "Lab-126hosts" in func_txt
+    assert "86 testes automatizados" in func_txt
+
+    # 4. docs/kathara.md alinhado
+    assert "172.17.0.2" in kathara_txt
+    assert "rocommunity netspot default .1" in kathara_txt
+
+
+

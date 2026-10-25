@@ -33,9 +33,9 @@ A topologia emulada reproduz uma infraestrutura corporativa/acadêmica dividida 
 ```text
                                +-----------------------------+
                                |     NetSpot Server (NOC)    |
-                               | (192.168.100.2 / Backend)   |
+                               | (Bridge Docker 172.17.0.x)  |
                                +--------------+--------------+
-                                              |
+                                              | (172.17.0.2)
                                       +-------+-------+
                                       | Roteador Core |
                                       | (router_core) |
@@ -49,21 +49,21 @@ A topologia emulada reproduz uma infraestrutura corporativa/acadêmica dividida 
 +--------+--------+                  +--------+--------+                  +--------+--------+
          |                                    |                                    |
    (15 Clientes)                        (15 Clientes)                        (10 Servidores)
-   - pc1 a pc15                         - pc16 a pc30                        - Web, DNS, DB
+   - pc1 a pc15                         - pc16 a pc30                        - Web, DNS, DB, App
    - Agente SNMP (netspot)              - Agente SNMP (netspot)              - Agente SNMP (netspot)
 ```
 
-### Mapeamento dos 40 Nós Monitorados no `lab.conf`:
-- **Sub-rede Laboratório 1 (`10.0.1.0/24`)**: 15 estações clientes (`pc1` a `pc15`).
-- **Sub-rede Laboratório 2 (`10.0.2.0/24`)**: 15 estações clientes (`pc16` a `pc30`).
-- **Sub-rede Servidores de Aplicação (`10.0.3.0/24`)**: 10 servidores dedicados:
-  - 3 Servidores Web (`web_server1`, `web_server2`, `web_server3`);
-  - 3 Servidores de Banco de Dados (`db_server1`, `db_server2`, `db_server3`);
-  - 2 Servidores DNS BIND9 (`dns_server1`, `dns_server2`);
-  - 2 Servidores de Aplicação (`app_server1`, `app_server2`).
+### Mapeamento dos Nós Monitorados no `lab.conf` (40 Hosts Finais + 4 Roteadores):
+- **Sub-rede Laboratório 1 (`10.0.1.0/24`)**: `router_lab1` (`10.0.1.1`) + 15 estações clientes (`pc1` a `pc15`, `10.0.1.2` a `10.0.1.16`).
+- **Sub-rede Laboratório 2 (`10.0.2.0/24`)**: `router_lab2` (`10.0.2.1`) + 15 estações clientes (`pc16` a `pc30`, `10.0.2.2` a `10.0.2.16`).
+- **Sub-rede Servidores de Aplicação (`10.0.3.0/24`)**: `router_lab3` (`10.0.3.1`) + 10 servidores dedicados:
+  - 3 Servidores Web (`web_server1..3` em `10.0.3.2` a `10.0.3.4`);
+  - 2 Servidores de Aplicação (`app_server1..2` em `10.0.3.5` e `10.0.3.6`);
+  - 2 Servidores DNS BIND9 (`dns_server1..2` em `10.0.3.7` e `10.0.3.8`, com zonas diretas `db.lab.local` e reversas `db.10.0.1`, `db.10.0.2`, `db.10.0.3`);
+  - 3 Servidores de Banco de Dados (`db_server1..3` em `10.0.3.9` a `10.0.3.11`).
 - **Roteadores e Infraestrutura de Enlace**:
-  - `router_core`: Interconexão com o container `netspot-backend` na sub-rede `192.168.100.0/24`.
-  - `router_lab1`, `router_lab2`, `router_lab3`: Roteadores de borda configurados via diretivas `[exec]` no `lab.conf`.
+  - `router_core`: Interconexão em modo `bridged` (`172.17.0.2`) com os containers `netspot-backend` e `netspot-n8n` e enlaces ponto-a-ponto `100.0.1.0/24`, `100.0.2.0/24` e `100.0.3.0/24`.
+  - `router_lab1`, `router_lab2`, `router_lab3`: Roteadores de distribuição configurados via diretivas `[exec]` no `lab.conf`, também inicializando `./setup_snmp_linux.sh`.
 
 ---
 
@@ -74,9 +74,11 @@ Todos os nós do laboratório Kathará executam o daemon `snmpd` configurado com
 O script de inicialização do SNMP (`setup_snmp_linux.sh`) presente nos nós aplica a configuração:
 
 ```bash
-# Community restrita ao NetSpot
-rocommunity netspot 192.168.100.0/24
-rocommunity netspot 10.0.0.0/16
+agentAddress udp:161
+rocommunity netspot default .1
+sysName $(hostname)
+sysLocation NetSpot Lab
+sysContact admin@lab.local
 ```
 
 ---

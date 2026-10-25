@@ -62,7 +62,7 @@ O NetSpot possui um núcleo auto-regenerativo projetado para tolerar falhas temp
 
 ### A) Autocura do PostgreSQL (`Backend/database.py`)
 - **Pool Auto-Regenerativo**: Configurado no SQLAlchemy com `pool_pre_ping=True` (testa a integridade de cada conexão antes de utilizá-la) e `pool_recycle=1800` (recicla conexões TCP ociosas a cada 30 minutos).
-- **Dimensionamento Seguro do Pool**: `pool_size=20`, `max_overflow=10`, `pool_timeout=30`.
+- **Dimensionamento Seguro do Pool**: `pool_size=35`, `max_overflow=30`, `pool_timeout=30` (dimensionado em conjunto com `max_connections=200` no PostgreSQL para suportar 126+ hosts simultâneos).
 - **Loop de Reconexão a Frio (`wait_for_database`)**: Na inicialização do Docker Compose, se o PostgreSQL estiver em processo de boot, o FastAPI tenta reconectar por até 15 vezes com backoff exponencial sem abortar a aplicação.
 
 ### B) Autocura do RabbitMQ (`Backend/mq_manager.py`)
@@ -133,26 +133,26 @@ A heurística opera por caminhos rápidos determinísticos (*Fast-Path*), garant
 
 ## 6. Descoberta Automática de Rede e Gestão de Hosts
 
-- **Varredura de Sub-rede**: Rota `/network/discover` realiza varredura com controle de concorrência em faixas CIDR (suportando até `/20` com 4.096 IPs), identificando nós ativos via ICMP com alta velocidade sem sobrecarga de portas TCP ou travamentos de DNS reverso.
-- **Seleção e Importação em Lote**: Interface com botão interativo para "Selecionar todos / Desmarcar todos", permitindo importar múltiplos hosts simultaneamente.
-- **Lixeira de Hosts com Proteção**: Exclusão de dispositivos direcionada para lixeira lógica, permitindo restauração individual ou esvaziamento em massa protegido por modal de confirmação de segurança.
+- **Varredura de Sub-rede com Calibração Dinâmica (*CIDR-Aware Timing*)**: Rota `/network/discover` realiza varredura Nmap em faixas privadas RFC 1918 (suportando até `/20` com 4.096 IPs), aplicando temporização adaptativa por máscara CIDR, sondagem assíncrona paralela de portas de serviço (`22, 53, 80, 443, 3000, 3306, 5432, 5672, 6379, 8000, 8080, 8443, 9187`) e resolução automática de nomes via DNS reverso (`PTR`) nos servidores DNS locais e SNMP `sysName.0`.
+- **Seleção e Importação em Lote**: Interface com botão interativo para "Selecionar todos / Desmarcar todos", permitindo importar múltiplos hosts simultaneamente (`POST /network/import`) com despacho imediato de checagens via RabbitMQ.
+- **Lixeira de Hosts Unitária e em Lote com Proteção**: Desativação lógica individual (`/hosts/{id}/deactivate`) ou em lote (`POST /hosts/bulk-deactivate`), permitindo restauração individual ou esvaziamento em massa protegido por modal de confirmação administrativa.
 
 ---
 
 ## 7. Métricas NOC, SLA, Jitter e Score de Saúde
 
-- **Health Score Composto (0 a 100%)**: Avaliação calculada pela função `calculate_health_score` em `Backend/metrics.py`, normalizando pesos proporcionais para conectividade física, transporte, aplicação e hardware.
-- **SLA Contínuo (Rolling SLA %)**: Cálculo percentual de disponibilidade em janelas deslizantes de tempo (10 min, 1 hora, 24 horas e 30 dias).
+- **Health Score Composto (0 a 100%)**: Avaliação calculada pela função `compute_health` em `Backend/metrics.py`, normalizando pesos proporcionais para conectividade física (Ping), transporte (TCP), aplicação (HTTP/HTTPS) e hardware.
+- **SLA Contínuo (Rolling SLA % e Interval Merging)**: Cálculo percentual de disponibilidade em janelas deslizantes de amostras (`MIN_SLA_SAMPLES = 5`) e disponibilidade temporal exata via algoritmo de **União de Intervalos de Tempo (*Interval Merging*)** em `calculate_availability_from_incidents`, evitando dupla contagem de downtime em incidentes sobrepostos.
 - **Jitter Estatístico (RFC 3550)**: Média das diferenças absolutas entre tempos de resposta consecutivos, essencial para avaliar a qualidade da rede para tráfego sensível a tempo real (VoIP, streaming e replicação).
-- **Tendência de Latência**: Análise de inclinação matemática (*slope*) classificando a tendência da aplicação em `Estável`, `Degradação` ou `Crítico`.
+- **Tendência de Latência**: Análise de inclinação matemática (*slope*) por Regressão Linear OLS classificando a tendência em `STABLE`, `IMPROVING`, `RISING`, `DEGRADING`, `FAST_DEGRADING` ou `CRITICAL`.
 
 ---
 
 ## 8. Política de Retenção e Limpeza Contínua de Dados
 
-- **Configuração Declarativa via `.env`**: Parâmetro `NETSPOT_RETENTION_DAYS` define o tempo de retenção do histórico (padrão: 7 dias).
-- **Desativação Flexível**: Definir `NETSPOT_RETENTION_DAYS=0` desativa a rotina de purga, preservando as séries históricas indefinidamente.
-- **Execução Automática em Background**: Rotina periódica gerenciada por `Backend/services/retention_service.py` que remove registros legados de checagens, métricas SNMP e histórico de incidentes em lotes, preservando a performance do PostgreSQL.
+- **Configuração Declarativa via `.env`**: Parâmetro `NETSPOT_RETENTION_DAYS` define o tempo de retenção do histórico em dias (ex.: `7` ou `30` dias).
+- **Preservação Integral por Padrão**: No `.env.example`, `NETSPOT_RETENTION_DAYS=0` mantém a rotina de purga desativada por padrão, preservando as séries históricas indefinidamente até que o administrador defina uma janela de expurgo (`> 0`).
+- **Execução Automática em Background**: Rotina periódica gerenciada por `Backend/services/retention_service.py` que remove registros legados de checagens, métricas SNMP, alertas e incidentes encerrados, preservando a performance do PostgreSQL.
 
 ---
 
@@ -160,42 +160,44 @@ A heurística opera por caminhos rápidos determinísticos (*Fast-Path*), garant
 
 - **Ciclo de Vida de Incidentes**: Abertura automática de incidente quando um host transita para `DOWN` ou `DEGRADED`, com registro de causa provável e encerramento com cômputo do tempo total de indisponibilidade quando o serviço se recupera.
 - **Barramento Assíncrono AMQP**: Despacho de envelopes JSON duráveis para o RabbitMQ, desacoplando o coletor local de eventuais lentidões em links externos de internet.
-- **Orquestração com n8n e Telegram**: Workflow visual que consome mensagens da fila, aplica formatação e despacha alertas em tempo real para grupos de suporte técnico.
+- **Orquestração com n8n e Telegram**: Workflow visual que consome mensagens da fila `netspot.notifications`, sanitiza entidades HTML via `esc(v)` e despacha alertas em tempo real para grupos de suporte técnico.
 
 ---
 
 ## 10. Interface Frontend SPA (UX, Ergonomia e Acessibilidade WCAG 2.1 AA)
 
 - **Design System Vanilla Dual**: Folha de estilos centralizada em `Frontend/css/style.css` com suporte a tema claro e escuro, dispensando etapas de compilação ou dependências de Node.js em runtime.
-- **Flip Cards 3D com 3 Faces por Host**:
-  - *Face 1*: Resumo de conectividade, Health Score, tendência de latência e Causa Provável;
-  - *Face 2*: SLA por protocolo (Ping, TCP, HTTP), Jitter e portas abertas;
-  - *Face 3*: Telemetria SNMP de hardware e gráficos de consumo;
-  - Indicadores dinâmicos de face (`1/3`, `2/3`, `3/3`) e tooltips descritivos nas ações de navegação.
+- **Modo Duplo de Visualização (Flip Cards 3D + Tabela NOC de Alta Densidade)**:
+  - *Face 1 (Resumo)*: Conectividade, Health Score, tendência de latência e Causa Provável;
+  - *Face 2 (Rede)*: SLA por protocolo (Ping, TCP, HTTP), Jitter e portas abertas;
+  - *Face 3 (SNMP)*: Telemetria SNMP de hardware (CPU, RAM, Disco) e tráfego RX/TX com transição dinâmica sem exigir F5;
+  - *Seletor Segmentado e Tabela NOC*: Pílulas de acesso direto (`[Resumo] [Rede] [SNMP]`) em 1 clique e alternância instantânea para o modo **Tabela NOC** (`#hostsTableView`) para inspeção compacta de 40 a 126+ hosts.
 - **Acessibilidade Digital (WCAG 2.1 AA)**:
   - Contraste de cores de **5.6:1** em textos secundários, superando a norma de 4.5:1;
   - Navegação universal por teclado com anel visual `:focus-visible`;
-  * **Focus Trap** nos modais (aprisionamento de foco com <kbd>Tab</kbd> e restauração ao fechar com <kbd>Esc</kbd>);
-  * Rótulos semânticos e atributos ARIA em diálogos e campos de formulário.
-- **Operação Offline-First**: Fontes Open Sans e biblioteca Chart.js UMD distribuídas localmente no container Nginx, permitindo operação perfeita em redes sem acesso externo à internet.
+  - **Focus Trap** nos modais (aprisionamento de foco com <kbd>Tab</kbd> e restauração ao fechar com <kbd>Esc</kbd>);
+  - Rótulos semânticos e atributos ARIA em diálogos e campos de formulário.
+- **Operação 100% Offline-First**: Fontes `Open Sans` e `Roboto` (`.woff2`) e biblioteca `Chart.js` UMD distribuídas localmente no container Nginx, sem nenhuma chamada a CDNs externas.
 
 ---
 
-## 11. Ambiente de Laboratório Kathará (40+ Nós)
+## 11. Ambiente de Laboratório Kathará (40 Hosts e 126 Hosts)
 
 - Detalhado em [`kathara.md`](kathara.md).
-- **Topologia Roteada em Larga Escala**: Emulação de 40 dispositivos virtuais distribuídos em 4 sub-redes corporativas:
+- **Topologia Padrão (`Teste - Kathará/lab.conf` — 40 Hosts Monitorados + 4 Roteadores + 3 Switches)**:
   - 30 estações de trabalho (`pc1` a `pc30`);
-  - 10 servidores dedicados (Web, DNS BIND9, Banco de Dados e Aplicações);
-  - 4 roteadores Linux interligados.
+  - 10 servidores dedicados (Web, DNS BIND9 com zonas diretas e reversas `db.10.0.1..3`, Banco de Dados e Aplicações);
+  - 4 roteadores Linux interligados (`router_core`, `router_lab1..3`) com agente SNMP ativo.
+- **Topologia Escalada de Alta Densidade (`Teste - Kathará/Lab-126hosts/lab.conf` — 126 Hosts Monitorados em `10.0.0.0/22`)**:
+  - 92 estações (`pc1` a `pc92`), 31 servidores corporativos e 3 roteadores de distribuição (`10.0.1.1`, `10.0.2.1`, `10.0.3.1`), totalizando **126 ativos simultâneos** com SNMPv2c e DNS `A`/`PTR`.
 - **Injeção Controlada de Falhas**: Simulação de queda de interfaces, perda de pacotes e variação de latência via `tc` (Traffic Control) e sobrecarga de CPU com `stress-ng`.
 
 ---
 
 ## 12. Suíte de Testes Automatizados (Pytest)
 
-A suíte de testes reside em `Backend/tests/` e conta com **61 testes automatizados (100% aprovados)**:
-- `test_alert_logic.py`: Máquina de estados de incidentes, supressão de alarmes falsos de firewall e cooldown anti-spam.
+A suíte de testes reside em `Backend/tests/` e conta com **86 testes automatizados (100% aprovados)**:
+- `test_alert_logic.py` e `alert_logic_checklist.py`: Máquina de estados de incidentes, supressão de alarmes falsos de firewall e cooldown anti-spam.
 - `test_checker.py`: Checadores assíncronos de Ping, TCP, HTTP e DNS.
 - `test_metrics.py`: Algoritmos de Health Score, SLA contínuo, Jitter e tendências de degradação.
 - `test_retention.py`: Regras da política de retenção de dados e expurgo.
@@ -203,7 +205,7 @@ A suíte de testes reside em `Backend/tests/` e conta com **61 testes automatiza
 - `test_api_routes.py`: Endpoints RESTful da API e integração de rotas.
 - `test_models_schemas.py`: Validação de contratos Pydantic e entidades SQLAlchemy.
 - `test_self_healing.py`: Autocura de conexões, Circuit Breaker, DLQ e anti-flapping.
-- `test_audit_regressions.py`: Testes de regressão cobrindo esvaziamento seguro da lixeira, causa provável e rotas administrativas.
+- `test_audit_regressions.py` (42 testes): Testes de regressão cobrindo segurança (RBAC, bcrypt, lockout, XSS), descoberta LAN, paralelismo para 126 hosts, Frontend offline-first, infraestrutura Docker/N8N/Kathará e governança documental.
 
 Comandos para execução:
 ```bash

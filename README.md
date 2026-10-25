@@ -3,7 +3,7 @@
 ![NetSpot Architecture](https://img.shields.io/badge/Architecture-Clean%20Architecture-blue)
 ![Python](https://img.shields.io/badge/Backend-FastAPI%20%7C%20Python%203.11%2F3.12-green)
 ![Docker](https://img.shields.io/badge/Container-Docker%20%26%20Docker%20Compose-blueviolet)
-![Tests](https://img.shields.io/badge/Tests-61%2F61%20Passed%20(100%25)-brightgreen)
+![Tests](https://img.shields.io/badge/Tests-86%2F86%20Passed%20(100%25)-brightgreen)
 ![Accessibility](https://img.shields.io/badge/Accessibility-WCAG%202.1%20AA%20Compliant-success)
 ![License](https://img.shields.io/badge/License-GPL--3.0-orange)
 
@@ -12,8 +12,9 @@
 O sistema combina monitoramento ativo e passivo (**ICMP Ping, Portas TCP, HTTP/HTTPS, DNS e SNMP Multivendor**), heurística especialista de inferência de **Causa Provável**, inteligência de autocura (**Self-Healing & Circuit Breaker**), cálculo estatístico contínuo de **Health Score**, **SLA** e **Jitter** (RFC 3550), além de gestão e despacho assíncrono de notificações via **RabbitMQ, n8n e Telegram**.
 
 > 📄 **Documentação Completa**:
+> - [`arquitetura.md`](arquitetura.md): Anatomia linha por linha de todos os arquivos, rotas, modelos e fluxos do sistema.
 > - [`docs/funcionalidades.md`](docs/funcionalidades.md): Especificação técnica exaustiva de cada módulo e regra de negócio.
-> - [`docs/kathara.md`](docs/kathara.md): Topologia e guia de execução no laboratório experimental emulado Kathará (40+ nós).
+> - [`docs/kathara.md`](docs/kathara.md): Topologia e guia de execução nos laboratórios experimentais emulados Kathará (40 hosts e 126 hosts).
 
 ---
 
@@ -100,7 +101,7 @@ NetSpot/
 │   ├── routes/                 # Endpoints RESTful (/api/hosts, /healthz, etc.)
 │   ├── services/               # Circuit Breaker, Retenção, Notificações e Métricas
 │   ├── snmp/                   # Motor SNMP Multivendor (Discovery, Cache, OID Resolvers)
-│   ├── tests/                  # Suíte de Testes Automatizados (61 testes Pytest)
+│   ├── tests/                  # Suíte de Testes Automatizados (86 testes Pytest + smoke test)
 │   ├── checker.py              # Sondagens assíncronas concorrentes (Ping, TCP, HTTP, DNS)
 │   ├── database.py             # Configuração e pool resiliente do SQLAlchemy
 │   ├── metrics.py              # Modelagem matemática de Health Score, SLA e Jitter
@@ -110,20 +111,22 @@ NetSpot/
 │   └── security.py             # Criptografia, hashing bcrypt e autenticação JWT
 ├── Frontend/                   # Interface SPA servida por Nginx Alpine
 │   ├── css/style.css           # Design System Vanilla CSS (Light & Dark Theme)
-│   ├── js/app.js               # Gerenciador de estado, animações 3D e renderização SPA
-│   ├── js/incidents.js         # Lógica da tela de incidentes e exportação
-│   ├── fonts/                  # Fontes Open Sans locais (Offline-First)
-│   ├── dashboard.html          # Dashboard principal com Cards 3D
+│   ├── js/app.js               # Gerenciador de estado, Cards 3D, Tabela NOC e renderização SPA
+│   ├── js/incidents.js         # Lógica da tela de incidentes e filtragem
+│   ├── fonts/                  # Fontes Open Sans e Roboto locais (Offline-First)
+│   ├── dashboard.html          # Dashboard principal com Cards 3D e Tabela NOC
 │   ├── incidents.html          # Painel histórico de alertas e incidentes
 │   ├── login.html              # Tela de autenticação com suporte a troca de tema
 │   └── nginx.conf              # Configuração Nginx com headers de segurança HTTP
 ├── Database/                   # Volume persistente do PostgreSQL
+├── docs/                       # Documentação técnica (funcionalidades.md, kathara.md)
 ├── Escrita_TCC/                # Documentação Acadêmica e Monografia
 │   └── Escrita_latex/          # Fonte LaTeX oficial do TCC (TCC - NetSpot.tex)
 ├── N8N/workflows/              # Workflows de orquestração de notificações (Telegram)
 ├── RabbitMQ/                   # Mensageria e filas de eventos
-├── Teste - Kathará/            # Laboratório de simulação de rede (40+ nós)
+├── Teste - Kathará/            # Laboratórios de emulação de rede (40 hosts e Lab-126hosts)
 ├── scripts/snmp/               # Automação de setup de agentes SNMP (Linux e Windows)
+├── arquitetura.md              # Documentação arquitetural linha por linha do repositório
 ├── docker-compose.yml          # Orquestração dos 5 containers do sistema
 ├── .env.example                # Template sanitizado de variáveis de ambiente
 ├── pyproject.toml              # Metadados e dependências do projeto Python
@@ -153,6 +156,7 @@ Edite o `.env` definindo as credenciais desejadas:
 * **Mensageria**: `RABBITMQ_USER` e `RABBITMQ_PASSWORD`.
 * **Automação N8N**: `N8N_BASIC_AUTH_USER` e `N8N_BASIC_AUTH_PASSWORD`.
 * **Telegram**: `NETSPOT_TELEGRAM_BOT_TOKEN` e `NETSPOT_TELEGRAM_CHAT_ID`.
+* **Parâmetros Operacionais**: `NETSPOT_PORT` (porta HTTP do Frontend, padrão `8080`), `NETSPOT_MONITOR_INTERVAL_SECONDS` (padrão `10`) e `NETSPOT_RETENTION_DAYS` (padrão `0`).
 
 ### 2. Inicializar o Ambiente em Containers
 
@@ -163,7 +167,7 @@ docker compose up -d --build
 ```
 
 O Docker Compose iniciará automaticamente os 5 serviços interligados:
-1. `netspot-postgres`: Banco relacional (PostgreSQL 15 em `localhost:5432`)
+1. `netspot-db`: Banco relacional (PostgreSQL 15 em `localhost:5432`)
 2. `netspot-backend`: API assíncrona (FastAPI em `localhost:8000`)
 3. `netspot-frontend`: Interface web SPA (Nginx em `localhost:8080`)
 4. `netspot-rabbitmq`: Painel de mensageria (RabbitMQ em `localhost:15672`)
@@ -185,7 +189,7 @@ O Docker Compose iniciará automaticamente os 5 serviços interligados:
 
 ## 🧪 Suíte de Testes Automatizados (Pytest)
 
-A suíte de testes cobre integralmente checagens de rede, métricas de SLA, inferência de causa provável, expurgo de retenção, módulo SNMP multivendor, tolerância a falhas e rotas autenticadas da API (**61/61 testes aprovados**).
+A suíte de testes cobre integralmente checagens de rede, métricas de SLA, inferência de causa provável, expurgo de retenção, módulo SNMP multivendor, tolerância a falhas, segurança do Frontend e rotas autenticadas da API (**86/86 testes aprovados**).
 
 Para executar os testes no container backend:
 
