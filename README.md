@@ -1,6 +1,7 @@
 # NetSpot - Sistema Inteligente de Monitoramento de Rede (NOC Lite)
 
 ![NetSpot Architecture](https://img.shields.io/badge/Architecture-Clean%20Architecture-blue)
+![Release](https://img.shields.io/badge/Release-v1.1.0-blue)
 ![Python](https://img.shields.io/badge/Backend-FastAPI%20%7C%20Python%203.11%2F3.12-green)
 ![Docker](https://img.shields.io/badge/Container-Docker%20%26%20Docker%20Compose-blueviolet)
 ![Tests](https://img.shields.io/badge/Tests-86%2F86%20Passed%20(100%25)-brightgreen)
@@ -15,6 +16,7 @@ O sistema combina monitoramento ativo e passivo (**ICMP Ping, Portas TCP, HTTP/H
 > - [`arquitetura.md`](arquitetura.md): Anatomia linha por linha de todos os arquivos, rotas, modelos e fluxos do sistema.
 > - [`docs/funcionalidades.md`](docs/funcionalidades.md): Especificação técnica exaustiva de cada módulo e regra de negócio.
 > - [`docs/kathara.md`](docs/kathara.md): Topologia e guia de execução nos laboratórios experimentais emulados Kathará (40 hosts e 126 hosts).
+> - [`docs/RELEASE_NOTES_v1.1.0.md`](docs/RELEASE_NOTES_v1.1.0.md): Histórico e notas da versão estável v1.1.0 consolidada.
 
 ---
 
