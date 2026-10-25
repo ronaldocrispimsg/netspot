@@ -1,17 +1,50 @@
 #!/usr/bin/env python3
 """
 Script de backup do histórico de conversas do Antigravity para o repositório NetSpot.
-Copia os logs brutos da sessão atual para .agents/historico_chat/ (ignorado pelo .gitignore).
+Copia os logs brutos de todas as sessões ativas para .agents/historico_chat/ (ignorado pelo .gitignore),
+mantendo cada conversa preservada em sua própria subpasta e o arquivo mais recente na raiz de historico_chat.
 """
 
 import glob
+import json
 import os
 import shutil
 import sys
+from datetime import datetime, timezone
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEST_DIR = os.path.join(BASE_DIR, ".agents", "historico_chat")
 BRAIN_DIR = os.path.expanduser("~/.gemini/antigravity/brain")
+
+
+def get_all_user_conversation_dirs():
+    """Localiza todos os diretórios de conversas principais com interações USER_EXPLICIT."""
+    pattern = os.path.join(BRAIN_DIR, "*", ".system_generated", "logs", "transcript.jsonl")
+    candidates = glob.glob(pattern)
+    if not candidates:
+        return []
+
+    valid_dirs = []
+    for transcript_path in candidates:
+        try:
+            with open(transcript_path, "r", encoding="utf-8", errors="ignore") as f:
+                head = f.read(65536)
+                if '"USER_EXPLICIT"' in head:
+                    conv_dir = os.path.dirname(os.path.dirname(os.path.dirname(transcript_path)))
+                    logs_dir = os.path.dirname(transcript_path)
+                    mtime = os.path.getmtime(transcript_path)
+                    valid_dirs.append({
+                        "conv_id": os.path.basename(conv_dir),
+                        "logs_dir": logs_dir,
+                        "mtime": mtime,
+                        "transcript_path": transcript_path
+                    })
+        except OSError:
+            continue
+
+    # Ordena da mais recente para a mais antiga
+    valid_dirs.sort(key=lambda x: x["mtime"], reverse=True)
+    return valid_dirs
 
 
 def resolve_source_dir() -> str:
@@ -19,49 +52,65 @@ def resolve_source_dir() -> str:
     explicit_dir = sys.argv[1] if len(sys.argv) > 1 else os.environ.get("ANTIGRAVITY_LOG_DIR")
     if explicit_dir:
         return explicit_dir
+    user_convs = get_all_user_conversation_dirs()
+    if user_convs:
+        return user_convs[0]["logs_dir"]
+    return ""
 
-    pattern = os.path.join(BRAIN_DIR, "*", ".system_generated", "logs", "transcript.jsonl")
-    candidates = glob.glob(pattern)
-    if not candidates:
-        return ""
-
-    # Prioriza conversas principais (que contêm interações diretas USER_EXPLICIT) sobre subagentes
-    user_conversations = []
-    for path in candidates:
-        try:
-            with open(path, "r", encoding="utf-8", errors="ignore") as f:
-                head = f.read(65536)
-                if '"USER_EXPLICIT"' in head:
-                    user_conversations.append(path)
-        except OSError:
-            continue
-
-    pool = user_conversations if user_conversations else candidates
-    latest_transcript = max(pool, key=os.path.getmtime)
-    return os.path.dirname(latest_transcript)
 
 
 def sync_chat_backup():
     os.makedirs(DEST_DIR, exist_ok=True)
-    source_dir = resolve_source_dir()
-    if not source_dir or not os.path.exists(source_dir):
-        print(f"[ERRO] Diretório de origem não encontrado em: {BRAIN_DIR}", file=sys.stderr)
+    user_convs = get_all_user_conversation_dirs()
+
+    if not user_convs:
+        print(f"[AVISO] Nenhuma conversa com interações de usuário encontrada em {BRAIN_DIR}")
         return False
 
-    copied = 0
-    for fname in ["transcript.jsonl", "transcript_full.jsonl"]:
-        src_path = os.path.join(source_dir, fname)
-        dst_path = os.path.join(DEST_DIR, fname)
-        if os.path.isfile(src_path):
-            shutil.copy2(src_path, dst_path)
-            size_kb = os.path.getsize(dst_path) / 1024
-            print(f"[OK] Backup sincronizado: {fname} ({size_kb:.1f} KB) <- {source_dir}")
-            copied += 1
+    synced_count = 0
+    sessions_manifest = []
 
-    return copied > 0
+    for idx, conv in enumerate(user_convs):
+        conv_id = conv["conv_id"]
+        logs_dir = conv["logs_dir"]
+        target_conv_dir = os.path.join(DEST_DIR, conv_id)
+        os.makedirs(target_conv_dir, exist_ok=True)
+
+        is_latest = (idx == 0)
+        copied_files = []
+
+        for fname in ["transcript.jsonl", "transcript_full.jsonl"]:
+            src_path = os.path.join(logs_dir, fname)
+            if os.path.isfile(src_path):
+                # 1. Copia para a subpasta isolada da conversa
+                dst_conv = os.path.join(target_conv_dir, fname)
+                shutil.copy2(src_path, dst_conv)
+                copied_files.append(fname)
+
+                # 2. Se for a sessão mais recente, copia também para a raiz de historico_chat (compatibilidade)
+                if is_latest:
+                    dst_root = os.path.join(DEST_DIR, fname)
+                    shutil.copy2(src_path, dst_root)
+
+        mod_time_str = datetime.fromtimestamp(conv["mtime"], tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+        sessions_manifest.append({
+            "conv_id": conv_id,
+            "last_modified": mod_time_str,
+            "is_active_session": is_latest,
+            "files": copied_files
+        })
+        synced_count += 1
+        print(f"[OK] Sessão sincronizada: {conv_id} ({mod_time_str}) -> .agents/historico_chat/{conv_id}/")
+
+    # Salva manifesto de sessões
+    manifest_path = os.path.join(DEST_DIR, "manifesto_sessoes.json")
+    with open(manifest_path, "w", encoding="utf-8") as f:
+        json.dump(sessions_manifest, f, indent=2, ensure_ascii=False)
+
+    print(f"[SUCESSO] Total de {synced_count} sessões salvas em .agents/historico_chat/")
+    return True
 
 
 if __name__ == "__main__":
     success = sync_chat_backup()
     sys.exit(0 if success else 1)
-
