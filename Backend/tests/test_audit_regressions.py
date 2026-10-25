@@ -1162,3 +1162,52 @@ def test_phase2_frontend_security_and_offline_regressions():
     # 4. Timeout do Nginx >= 130s para suportar varredura Nmap /20 (120s)
     assert "proxy_read_timeout 130s;" in nginx_conf
 
+
+def test_phase3_infra_n8n_scripts_and_kathara_regressions():
+    """Garante alinhamento de docker-compose, .env.example, sanitização HTML no N8N, backup dinâmico e DNS/SNMP do Kathará."""
+    import json
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    compose_txt = (root / "docker-compose.yml").read_text(encoding="utf-8")
+    env_example = (root / ".env.example").read_text(encoding="utf-8")
+    n8n_raw = (root / "N8N" / "workflows" / "netspot_notifications_workflow.json").read_text(encoding="utf-8")
+    backup_py = (root / "scripts" / "backup_chat.py").read_text(encoding="utf-8")
+    lab_conf = (root / "Teste - Kathará" / "lab.conf").read_text(encoding="utf-8")
+    db_lab_1 = (root / "Teste - Kathará" / "dns_server1" / "etc" / "bind" / "db.lab.local").read_text(encoding="utf-8")
+    db_lab_2 = (root / "Teste - Kathará" / "dns_server2" / "etc" / "bind" / "db.lab.local").read_text(encoding="utf-8")
+
+    # 1. docker-compose.yml e .env.example
+    assert "${NETSPOT_PORT:-8080}:80" in compose_txt
+    assert "rabbitmq-diagnostics" in compose_txt
+    assert "http://127.0.0.1:5678/healthz" in compose_txt
+    assert "NETSPOT_PORT=8080" in env_example
+
+    # 2. N8N workflow válido e com sanitização HTML (esc)
+    n8n_data = json.loads(n8n_raw)
+    code_nodes = [n for n in n8n_data.get("nodes", []) if n.get("name") == "Format HTML Message"]
+    assert len(code_nodes) == 1
+    js_code = code_nodes[0]["parameters"]["jsCode"]
+    assert "function esc(v)" in js_code
+    assert "${esc(content.host_name)}" in js_code
+    assert '${esc(content.reason || "Sem descrição de erro")}' in js_code
+
+    # 3. scripts/backup_chat.py dinâmico (sem UUID fixo)
+    assert "def resolve_source_dir()" in backup_py
+    assert "5a945ec5-d10f-4239-822b-a2a7c22db31c" not in backup_py
+
+    # 4. Kathará 40-hosts: SNMP nos roteadores e DNS completo
+    for router_name in ("router_core", "router_lab1", "router_lab2", "router_lab3"):
+        assert f"{router_name}[exec]=./setup_snmp_linux.sh" in lab_conf
+    for zone_txt in (db_lab_1, db_lab_2):
+        assert "router-lab1 IN  A       10.0.1.1" in zone_txt
+        assert "pc15    IN      A       10.0.1.16" in zone_txt
+        assert "pc30    IN      A       10.0.2.16" in zone_txt
+        assert "app1    IN      A       10.0.3.5" in zone_txt
+        assert "db3     IN      A       10.0.3.11" in zone_txt
+    assert (root / "Teste - Kathará" / "dns_server1" / "etc" / "bind" / "db.10.0.1").is_file()
+    assert (root / "Teste - Kathará" / "dns_server1" / "etc" / "bind" / "db.10.0.2").is_file()
+    assert (root / "Teste - Kathará" / "dns_server2" / "etc" / "bind" / "db.10.0.1").is_file()
+    assert (root / "Teste - Kathará" / "dns_server2" / "etc" / "bind" / "db.10.0.2").is_file()
+
+

@@ -34,6 +34,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
     env_file:
       - .env
     environment:
@@ -57,7 +59,7 @@ services:
       dockerfile: Dockerfile
     container_name: netspot-frontend
     ports:
-      - "8080:80"
+      - "${NETSPOT_PORT:-8080}:80"
     volumes:
       - ./Frontend:/usr/share/nginx/html
     depends_on:
@@ -76,6 +78,11 @@ services:
     volumes:
       - ./RabbitMQ/data:/var/lib/rabbitmq
       - ./RabbitMQ/log:/var/log/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     restart: always
 
   n8n:
@@ -88,7 +95,10 @@ services:
       - NET_ADMIN
       - NET_RAW
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
     env_file:
       - .env
     volumes:
@@ -103,6 +113,11 @@ services:
       - DB_POSTGRESDB_DATABASE=${POSTGRES_DB:-netspot}
       - DB_POSTGRESDB_USER=${POSTGRES_USER:-netspot}
       - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:5678/healthz || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
     restart: always
 
 
