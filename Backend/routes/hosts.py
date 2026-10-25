@@ -178,6 +178,29 @@ def _interface_ignored(interface_name: str) -> bool:
 
 def _run_nmap_discovery(subnet: str) -> str:
     try:
+        # Calibração dinâmica consciente do tamanho da sub-rede (CIDR-Aware Timing):
+        # 1. Redes de pequeno e médio porte (até /22 ou 1.024 endereços, caso de 99% das LANs e do Kathará):
+        #    Prioriza 100% de assertividade no 1º ciclo, mitigando a latência de resolução ARP a frio
+        #    (cold ARP cache) e prevenindo o descarte prematuro por estouro de fila do kernel (unres_qlen).
+        # 2. Redes massivas (/21 e /20, 2.048 a 4.096 IPs):
+        #    Prioriza throughput e velocidade para assegurar conclusão bem abaixo do timeout de 120s da API.
+        try:
+            net = ipaddress.ip_network(subnet, strict=False)
+            num_ips = net.num_addresses
+        except Exception:
+            num_ips = 256
+
+        if num_ips <= 1024:
+            min_rate = "150"
+            initial_rtt = "300ms"
+            max_rtt = "800ms"
+            max_retries = "2"
+        else:
+            min_rate = "350"
+            initial_rtt = "200ms"
+            max_rtt = "500ms"
+            max_retries = "1"
+
         # Varredura ágil e pura de conectividade ICMP (Echo Request -PE), desativando probes de portas TCP
         # e desativando resolução reversa de DNS (-n) para garantir máxima velocidade e estabilidade
         # sem travamentos por portas fechadas ou DNS indisponível, suportando faixas de até /20 (4.096 IPs).
@@ -188,11 +211,13 @@ def _run_nmap_discovery(subnet: str) -> str:
             "-n",
             "-T4",
             "--min-rate",
-            "300",
+            min_rate,
+            "--initial-rtt-timeout",
+            initial_rtt,
             "--max-rtt-timeout",
-            "200ms",
+            max_rtt,
             "--max-retries",
-            "1",
+            max_retries,
             subnet,
             "-oX",
             "-",

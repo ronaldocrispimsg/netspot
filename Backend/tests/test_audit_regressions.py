@@ -396,16 +396,28 @@ def test_run_nmap_discovery_fast_icmp_parameters(monkeypatch):
 
     monkeypatch.setattr("Backend.routes.hosts.subprocess.run", fake_subprocess_run)
 
+    # 1. Teste para rede massiva /20 (4.096 IPs) -> Throughput agressivo
     res = _run_nmap_discovery("192.168.16.0/20")
     assert res == "<nmaprun></nmaprun>"
     assert "-sn" in captured_cmd
     assert "-PE" in captured_cmd
     assert "-n" in captured_cmd
     assert "--min-rate" in captured_cmd
+    assert "350" in captured_cmd
+    assert "200ms" in captured_cmd
+    assert "500ms" in captured_cmd
     assert captured_timeout == 120
     # Probes de portas TCP e dns-servers devem estar desligados para velocidade e estabilidade
     assert not any("-PS" in arg for arg in captured_cmd)
     assert not any("--dns-servers" in arg for arg in captured_cmd)
+
+    # 2. Teste para rede típica /24 (256 IPs) -> Calibração anti-perda por ARP a frio
+    _run_nmap_discovery("10.0.1.0/24")
+    assert "150" in captured_cmd
+    assert "300ms" in captured_cmd
+    assert "800ms" in captured_cmd
+    assert "2" in captured_cmd
+
 
 
 def test_deactivate_host_and_fallback_by_name():
