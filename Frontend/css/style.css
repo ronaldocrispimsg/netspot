@@ -5200,9 +5200,21 @@ input[type=number] {
     font-size: 0.76rem !important;
 }
 .dark-theme .host-meta-item strong,
-.dark-theme .snmp-kpi-value,
+.dark-theme .snmp-kpi-value:not(.metric-ok):not(.metric-warn):not(.metric-critical),
 .dark-theme .snmp-traffic-value {
     color: #ffffff !important;
+    font-weight: 700 !important;
+}
+.dark-theme .snmp-kpi-value.metric-ok {
+    color: #81c995 !important;
+    font-weight: 700 !important;
+}
+.dark-theme .snmp-kpi-value.metric-warn {
+    color: #fde293 !important;
+    font-weight: 700 !important;
+}
+.dark-theme .snmp-kpi-value.metric-critical {
+    color: #f28b82 !important;
     font-weight: 700 !important;
 }
 .dark-theme .metrics-title,
@@ -5217,7 +5229,7 @@ input[type=number] {
 .dark-theme .network-split small,
 .dark-theme .host-checks-section small,
 .dark-theme .tcp-ports-section small,
-.dark-theme .snmp-section small {
+.dark-theme .snmp-section small:not(.snmp-kpi-value) {
     color: #94a3b8 !important;
 }
 .dark-theme .host-summary-list small b,
@@ -5546,7 +5558,7 @@ textarea::placeholder {
     opacity: 0.9;
 }
 
-:not(.dark-theme) .theme-switch-icon-sun {
+html:not(.dark-theme) .theme-switch-icon-sun {
     opacity: 0.9;
 }
 

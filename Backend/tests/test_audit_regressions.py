@@ -1134,5 +1134,31 @@ def test_anti_flapping_isolates_event_types_and_preserves_recovery():
     assert is_flapping_suppressed({"host_name": host_name, "event": "recovery"}, now + 4) is False
 
 
+def test_phase2_frontend_security_and_offline_regressions():
+    """Garante que o Frontend mantém blindagem XSS em onclick inline, fontes locais e timeout Nginx."""
+    from pathlib import Path
 
+    root = Path(__file__).resolve().parents[2]
+    app_js = (root / "Frontend" / "js" / "app.js").read_text(encoding="utf-8")
+    nginx_conf = (root / "Frontend" / "nginx.conf").read_text(encoding="utf-8")
+    dashboard_html = (root / "Frontend" / "dashboard.html").read_text(encoding="utf-8")
+    login_html = (root / "Frontend" / "login.html").read_text(encoding="utf-8")
+    incidents_html = (root / "Frontend" / "incidents.html").read_text(encoding="utf-8")
+
+    # 1. Nenhum onclick inline com JSON.stringify sem escapeJsSingleQuotedAttr
+    assert "escapeJsSingleQuotedAttr" in app_js
+    assert "JSON.stringify(h.name)" not in app_js
+    assert "JSON.stringify(h.address)" not in app_js
+    assert "JSON.stringify(String(host.name))" not in app_js
+
+    # 2. Nenhuma dependência externa de Google Fonts nos HTMLs
+    for html_content in (dashboard_html, login_html, incidents_html):
+        assert "fonts.googleapis.com" not in html_content
+        assert "fonts.gstatic.com" not in html_content
+
+    # 3. Preload dinâmico de subnet habilitado (sem value fixo no HTML)
+    assert 'id="discoverSubnet" value=' not in dashboard_html
+
+    # 4. Timeout do Nginx >= 130s para suportar varredura Nmap /20 (120s)
+    assert "proxy_read_timeout 130s;" in nginx_conf
 

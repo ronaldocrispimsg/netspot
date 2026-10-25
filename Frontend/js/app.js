@@ -75,8 +75,15 @@ function rememberSeenAlert(alertKey) {
     }
 }
 
-if (Notification.permission !== "granted") {
-    Notification.requestPermission();
+if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "default") {
+    try {
+        const permPromise = Notification.requestPermission();
+        if (permPromise && typeof permPromise.catch === "function") {
+            permPromise.catch(() => {});
+        }
+    } catch (_) {
+        // Ignora bloqueio de Notification API em contextos sem suporte (ex.: Safari iOS / WebViews)
+    }
 }
 
 const token = localStorage.getItem("token");
@@ -93,7 +100,14 @@ function ensureToastContainer() {
     return container;
 }
 
+const VALID_TOAST_TYPES = new Set(["success", "error", "warning", "info"]);
+
 function showToast(type, message, duration = 3200) {
+    if (!VALID_TOAST_TYPES.has(type) && VALID_TOAST_TYPES.has(message)) {
+        const tmp = type;
+        type = message;
+        message = tmp;
+    }
     const container = ensureToastContainer();
     const toast = document.createElement("div");
     toast.className = `toast toast-${type || "info"}`;
@@ -107,6 +121,22 @@ function showToast(type, message, duration = 3200) {
         toast.classList.add("hide");
         setTimeout(() => toast.remove(), 240);
     }, duration);
+}
+
+function getButtonLabel(btn, fallback = "") {
+    if (!btn) return fallback;
+    const span = btn.querySelector("span");
+    return span ? span.textContent : btn.textContent;
+}
+
+function setButtonLabel(btn, text) {
+    if (!btn) return;
+    const span = btn.querySelector("span");
+    if (span) {
+        span.textContent = text;
+    } else {
+        btn.textContent = text;
+    }
 }
 
 function setInlineState(element, message, type = "info") {
@@ -254,11 +284,11 @@ if (loginForm) {
         const userVal = document.getElementById("username").value;
         const passVal = document.getElementById("password").value;
         const submitBtn = loginForm.querySelector('button[type="submit"]');
-        const originalBtnText = submitBtn ? submitBtn.textContent : "Entrar";
+        const originalBtnText = getButtonLabel(submitBtn, "Entrar");
 
         if (submitBtn) {
             submitBtn.disabled = true;
-            submitBtn.textContent = "Entrando...";
+            setButtonLabel(submitBtn, "Entrando...");
             submitBtn.classList.add("is-loading");
         }
 
@@ -299,7 +329,7 @@ if (loginForm) {
         } finally {
             if (submitBtn) {
                 submitBtn.disabled = false;
-                submitBtn.textContent = originalBtnText;
+                setButtonLabel(submitBtn, originalBtnText);
                 submitBtn.classList.remove("is-loading");
             }
         }
@@ -606,6 +636,15 @@ if (hostForm) {
 
 let discoveredLanHosts = [];
 
+function updateDiscoverySelectAllUI(allChecked) {
+    const selectAllBtn = document.getElementById("selectAllDiscoveryBtn");
+    if (!selectAllBtn) return;
+    const iconSvg = allChecked
+        ? `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="9" x2="15" y2="15"></line><line x1="15" y1="9" x2="9" y2="15"></line></svg>`
+        : `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><polyline points="9 11 12 14 22 4"></polyline></svg>`;
+    selectAllBtn.innerHTML = `${iconSvg}<span>${allChecked ? "Desmarcar todos" : "Selecionar todos"}</span>`;
+}
+
 function renderDiscoveredLanHosts() {
     const listBox = document.getElementById("networkDiscoveryList");
     const infoBox = document.getElementById("networkDiscoveryInfo");
@@ -623,7 +662,7 @@ function renderDiscoveredLanHosts() {
     infoBox.textContent = `${discoveredLanHosts.length} host(s) encontrado(s) • ${selectableCount} disponível(is) para importação`;
     if (selectAllBtn) {
         selectAllBtn.style.display = selectableCount > 0 ? "inline-flex" : "none";
-        selectAllBtn.textContent = "Desmarcar todos";
+        updateDiscoverySelectAllUI(selectableCount > 0);
     }
     listBox.innerHTML = discoveredLanHosts.map((host) => {
         const disabled = host.already_exists ? "disabled" : "";
@@ -662,8 +701,9 @@ async function discoverNetworkHosts() {
         return;
     }
 
+    const originalDiscoverText = getButtonLabel(discoverBtn, "Descobrir rede");
     discoverBtn.disabled = true;
-    discoverBtn.textContent = "Descobrindo...";
+    setButtonLabel(discoverBtn, "Descobrindo...");
     if (resultBox) setInlineState(resultBox, "Executando descoberta...", "info");
 
     try {
@@ -691,7 +731,7 @@ async function discoverNetworkHosts() {
         showToast("error", "Falha ao executar descoberta de rede.");
     } finally {
         discoverBtn.disabled = false;
-        discoverBtn.textContent = "Descobrir rede";
+        setButtonLabel(discoverBtn, originalDiscoverText);
     }
 }
 
@@ -719,15 +759,23 @@ async function preloadDiscoverySubnet() {
         const res = await fetchWithAuth(`${API}/network/default-subnet`);
         if (!res || !res.ok) {
             console.warn("Não foi possível detectar subnet automática.");
+            if (!String(subnetInput.value || "").trim()) {
+                subnetInput.value = "192.168.1.0/24";
+            }
             return;
         }
         const data = await res.json();
         const subnet = String(data?.subnet || "").trim();
         if (isValidIpv4Cidr(subnet) && !String(subnetInput.value || "").trim()) {
             subnetInput.value = subnet;
+        } else if (!String(subnetInput.value || "").trim()) {
+            subnetInput.value = "192.168.1.0/24";
         }
     } catch (err) {
         console.warn("Falha no preload da subnet automática:", err);
+        if (!String(subnetInput.value || "").trim()) {
+            subnetInput.value = "192.168.1.0/24";
+        }
     }
 }
 
@@ -758,10 +806,11 @@ async function importSelectedLanHosts() {
     }
 
     const importBtn = document.getElementById("importSelectedBtn");
+    const originalImportText = getButtonLabel(importBtn, "Adicionar selecionados");
     const resultBox = document.getElementById("networkImportResult");
     if (importBtn) {
         importBtn.disabled = true;
-        importBtn.textContent = "Importando...";
+        setButtonLabel(importBtn, "Importando...");
     }
 
     try {
@@ -807,7 +856,7 @@ async function importSelectedLanHosts() {
     } finally {
         if (importBtn) {
             importBtn.disabled = false;
-            importBtn.textContent = "Adicionar selecionados";
+            setButtonLabel(importBtn, originalImportText);
         }
     }
 }
@@ -834,49 +883,8 @@ function buildResolvedIpSummaryLine(h) {
     return `<small><b>IP resolvido (DNS):</b> ${escapeHtml(resolvedIp)}${escapeHtml(ttlSuffix)}</small>`;
 }
 
-function buildHostCardHTML(h) {
-    const hostPorts = parseHostPorts(h);
-    const hostAddressLabel = formatHostAddressLabel(h);
-    const resolvedIpLineHtml = buildResolvedIpSummaryLine(h);
-    const tcpPortsLabel = hostPorts.length ? hostPorts.join(", ") : "Nenhuma";
-    const httpEnabled = !!h.http_enabled;
-    const webCheckBadge = httpEnabled
-        ? `<span class="web-check-badge web-check-on">Ativo</span>`
-        : `<span class="web-check-badge web-check-off">Inativo</span>`;
-    const httpProtocolLabel = httpEnabled
-        ? (h.http_protocol ? String(h.http_protocol).toUpperCase() : "Aguardando")
-        : "-";
-    const monitorFlag = hostMonitorFlag(h);
-    const causeClass = probableCauseClass(h);
-    const incidentBadgeHtml = h.has_open_incident
-        ? `<span class="incident-badge" title="Existe incidente aberto para este host">INCIDENTE ABERTO</span>`
-        : "";
-
-    let statusColor = "bg-secondary";
-    if (h.status === "UP") statusColor = "bg-success";
-    else if (h.status === "DOWN") statusColor = "bg-danger";
-    else if (h.status === "DEGRADED") statusColor = "bg-warning";
-    
-    let sevClass = "sev-unknown";
-    if (h.severity === "HEALTHY") sevClass = "sev-healthy";
-    else if (h.severity === "WARNING") sevClass = "sev-warning";
-    else if (h.severity === "DEGRADED") sevClass = "sev-degraded";
-    else if (h.severity === "CRITICAL") sevClass = "sev-critical";
-    const severityIndicatorHtml = h.icmp_blocked_but_service_up
-        ? ""
-        : `<span class="severity-indicator ${sevClass}">✚</span>`;
-
-    const availability10m = h.availability_10m != null
-        ? h.availability_10m.toFixed(2)
-        : "N/A";
-    const totalTrafficBps = Number(h.network_traffic) || 0;
-    const downloadTrafficBps = Number(h.network_in_bps) || 0;
-    const uploadTrafficBps = Number(h.network_out_bps) || 0;
-    const maxTrafficBps = Math.max(totalTrafficBps, downloadTrafficBps, uploadTrafficBps, 1);
-    const totalTrafficBar = calcRelativeBarWidth(totalTrafficBps, maxTrafficBps);
-    const downloadTrafficBar = calcRelativeBarWidth(downloadTrafficBps, maxTrafficBps);
-    const uploadTrafficBar = calcRelativeBarWidth(uploadTrafficBps, maxTrafficBps);
-    const snmpConfigured = [
+function isSnmpConfigured(h) {
+    return [
         h.cpu_usage,
         h.ram_usage,
         h.disk_usage,
@@ -884,10 +892,18 @@ function buildHostCardHTML(h) {
         h.network_in_bps,
         h.network_out_bps
     ].some((value) => value !== null && value !== undefined);
-    const snmpStatusHtml = !snmpConfigured
-        ? `<small class="snmp-tag snmp-tag-off snmp-empty-message">SNMP: não configurado</small>`
-        : "";
-    const snmpSectionHtml = snmpConfigured ? `
+}
+
+function buildSnmpSectionMarkup(h) {
+    const totalTrafficBps = Number(h.network_traffic) || 0;
+    const downloadTrafficBps = Number(h.network_in_bps) || 0;
+    const uploadTrafficBps = Number(h.network_out_bps) || 0;
+    const maxTrafficBps = Math.max(totalTrafficBps, downloadTrafficBps, uploadTrafficBps, 1);
+    const totalTrafficBar = calcRelativeBarWidth(totalTrafficBps, maxTrafficBps);
+    const downloadTrafficBar = calcRelativeBarWidth(downloadTrafficBps, maxTrafficBps);
+    const uploadTrafficBar = calcRelativeBarWidth(uploadTrafficBps, maxTrafficBps);
+
+    return `
                 <div class="metrics-section snmp-section">
                     <div class="snmp-header">
                         <div class="snmp-title">SNMP</div>
@@ -934,11 +950,53 @@ function buildHostCardHTML(h) {
                         </div>
                     </div>
                 </div>
-    ` : "";
+    `;
+}
+
+function buildHostCardHTML(h) {
+    const hostPorts = parseHostPorts(h);
+    const hostAddressLabel = formatHostAddressLabel(h);
+    const resolvedIpLineHtml = buildResolvedIpSummaryLine(h);
+    const tcpPortsLabel = hostPorts.length ? hostPorts.join(", ") : "Nenhuma";
+    const httpEnabled = !!h.http_enabled;
+    const webCheckBadge = httpEnabled
+        ? `<span class="web-check-badge web-check-on">Ativo</span>`
+        : `<span class="web-check-badge web-check-off">Inativo</span>`;
+    const httpProtocolLabel = httpEnabled
+        ? (h.http_protocol ? String(h.http_protocol).toUpperCase() : "Aguardando")
+        : "-";
+    const monitorFlag = hostMonitorFlag(h);
+    const causeClass = probableCauseClass(h);
+    const incidentBadgeHtml = h.has_open_incident
+        ? `<span class="incident-badge" title="Existe incidente aberto para este host">INCIDENTE ABERTO</span>`
+        : "";
+
+    let statusColor = "bg-secondary";
+    if (h.status === "UP") statusColor = "bg-success";
+    else if (h.status === "DOWN") statusColor = "bg-danger";
+    else if (h.status === "DEGRADED") statusColor = "bg-warning";
+    
+    let sevClass = "sev-unknown";
+    if (h.severity === "HEALTHY") sevClass = "sev-healthy";
+    else if (h.severity === "WARNING") sevClass = "sev-warning";
+    else if (h.severity === "DEGRADED") sevClass = "sev-degraded";
+    else if (h.severity === "CRITICAL") sevClass = "sev-critical";
+    const severityIndicatorHtml = h.icmp_blocked_but_service_up
+        ? ""
+        : `<span class="severity-indicator ${sevClass}">✚</span>`;
+
+    const availability10m = h.availability_10m != null
+        ? h.availability_10m.toFixed(2)
+        : "N/A";
+    const snmpConfigured = isSnmpConfigured(h);
+    const snmpStatusHtml = !snmpConfigured
+        ? `<small class="snmp-tag snmp-tag-off snmp-empty-message">SNMP: não configurado</small>`
+        : "";
+    const snmpSectionHtml = snmpConfigured ? buildSnmpSectionMarkup(h) : "";
     const snmpChartBoxHtml = snmpConfigured ? `
-        <div id="snmp-chart-box-${h.name}" class="chart-box hidden" style="margin-top: 10px;">
+        <div id="snmp-chart-box-${escapeHtml(h.name)}" class="chart-box hidden" style="margin-top: 10px;">
             <div class="chart-title">Histórico SNMP</div>
-            <canvas id="snmp-chart-${h.name}" height="120"></canvas>
+            <canvas id="snmp-chart-${escapeHtml(h.name)}" height="120"></canvas>
         </div>
     ` : "";
 
@@ -956,7 +1014,7 @@ function buildHostCardHTML(h) {
                             type="button"
                             title="Copiar endereço (${escapeHtml(h.address)})"
                             aria-label="Copiar endereço (${escapeHtml(h.address)})"
-                            onclick='copyHostAddress(${JSON.stringify(h.address)}, this, event)'
+                            onclick='copyHostAddress(${escapeJsSingleQuotedAttr(h.address)}, this, event)'
                         >
                             <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                 <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
@@ -973,7 +1031,7 @@ function buildHostCardHTML(h) {
                         type="button"
                         title="Excluir host"
                         aria-label="Excluir host"
-                        onclick='softDeleteHost(${h.id}, ${JSON.stringify(h.name)})'
+                        onclick='softDeleteHost(${Number(h.id)}, ${escapeJsSingleQuotedAttr(h.name)})'
                     >✕</button>
                 </div>
             </div>
@@ -988,17 +1046,17 @@ function buildHostCardHTML(h) {
 
         <div class="face-nav">
             <div class="face-segmented-control" role="tablist" aria-label="Faces do card de monitoramento">
-                <button type="button" class="face-pill active" data-face-num="1" role="tab" aria-selected="true" title="Face 1: Resumo do host" onclick='setHostFace(${JSON.stringify(h.name)}, 1)'>Resumo</button>
-                <button type="button" class="face-pill" data-face-num="2" role="tab" aria-selected="false" title="Face 2: Métricas de rede e SLA" onclick='setHostFace(${JSON.stringify(h.name)}, 2)'>Rede</button>
-                <button type="button" class="face-pill" data-face-num="3" role="tab" aria-selected="false" title="Face 3: Hardware e telemetria SNMP" onclick='setHostFace(${JSON.stringify(h.name)}, 3)'>SNMP</button>
+                <button type="button" class="face-pill active" data-face-num="1" role="tab" aria-selected="true" title="Face 1: Resumo do host" onclick='setHostFace(${escapeJsSingleQuotedAttr(h.name)}, 1)'>Resumo</button>
+                <button type="button" class="face-pill" data-face-num="2" role="tab" aria-selected="false" title="Face 2: Métricas de rede e SLA" onclick='setHostFace(${escapeJsSingleQuotedAttr(h.name)}, 2)'>Rede</button>
+                <button type="button" class="face-pill" data-face-num="3" role="tab" aria-selected="false" title="Face 3: Hardware e telemetria SNMP" onclick='setHostFace(${escapeJsSingleQuotedAttr(h.name)}, 3)'>SNMP</button>
             </div>
             <div class="icon-actions">
-                <button class="icon-btn" type="button" title="Histórico recente" aria-label="Histórico recente" onclick='toggleHistory(${JSON.stringify(h.name)})'>${iconSvg("history")}</button>
-                <button class="icon-btn" type="button" title="Gráfico de latência" aria-label="Gráfico de latência" onclick='toggleLatencyChart(${JSON.stringify(h.name)})'>${iconSvg("latency")}</button>
-                ${snmpConfigured ? `<button class="icon-btn" type="button" title="Gráfico SNMP" aria-label="Gráfico SNMP" onclick='toggleSnmpChart(${JSON.stringify(h.name)})'>${iconSvg("snmp")}</button>` : ""}
-                <button class="icon-btn" type="button" title="Disponibilidade por tipo" aria-label="Disponibilidade por tipo" onclick='toggleAvailabilityChartType(${JSON.stringify(h.name)})'>${iconSvg("availability_type")}</button>
-                <button class="icon-btn" type="button" title="Disponibilidade geral" aria-label="Disponibilidade geral" onclick='toggleAvailabilityChart(${JSON.stringify(h.name)})'>${iconSvg("availability")}</button>
-                <button class="icon-btn" type="button" title="Editar host" aria-label="Editar host" onclick='openEditModal(${JSON.stringify(h.name)})'>${iconSvg("edit")}</button>
+                <button class="icon-btn" type="button" title="Histórico recente" aria-label="Histórico recente" onclick='toggleHistory(${escapeJsSingleQuotedAttr(h.name)})'>${iconSvg("history")}</button>
+                <button class="icon-btn" type="button" title="Gráfico de latência" aria-label="Gráfico de latência" onclick='toggleLatencyChart(${escapeJsSingleQuotedAttr(h.name)})'>${iconSvg("latency")}</button>
+                ${snmpConfigured ? `<button class="icon-btn" type="button" title="Gráfico SNMP" aria-label="Gráfico SNMP" onclick='toggleSnmpChart(${escapeJsSingleQuotedAttr(h.name)})'>${iconSvg("snmp")}</button>` : ""}
+                <button class="icon-btn" type="button" title="Disponibilidade por tipo" aria-label="Disponibilidade por tipo" onclick='toggleAvailabilityChartType(${escapeJsSingleQuotedAttr(h.name)})'>${iconSvg("availability_type")}</button>
+                <button class="icon-btn" type="button" title="Disponibilidade geral" aria-label="Disponibilidade geral" onclick='toggleAvailabilityChart(${escapeJsSingleQuotedAttr(h.name)})'>${iconSvg("availability")}</button>
+                <button class="icon-btn" type="button" title="Editar host" aria-label="Editar host" onclick='openEditModal(${escapeJsSingleQuotedAttr(h.name)})'>${iconSvg("edit")}</button>
             </div>
         </div>
 
@@ -1040,13 +1098,13 @@ function buildHostCardHTML(h) {
                     </div>
                     <div class="host-checks-section">
                         <div class="metrics-title">Últimos checks</div>
-                        <div id="result-${h.name}" class="host-last-checks">
+                        <div id="result-${escapeHtml(h.name)}" class="host-last-checks">
                             <i>Atualizando...</i>
                         </div>
                     </div>
                     <div class="tcp-ports-section">
                         <div class="metrics-title">Portas TCP monitoradas</div>
-                        <div id="tcp-ports-status-${h.name}" class="tcp-ports-status">
+                        <div id="tcp-ports-status-${escapeHtml(h.name)}" class="tcp-ports-status">
                             <small class="tcp-ports-empty">Atualizando...</small>
                         </div>
                     </div>
@@ -1068,20 +1126,20 @@ function buildHostCardHTML(h) {
             </div>
         </div>
 
-        <div id="chart-container-${h.name}" class="chart-box hidden" style="margin-top: 10px;">
+        <div id="chart-container-${escapeHtml(h.name)}" class="chart-box hidden" style="margin-top: 10px;">
             <div class="chart-title">Latência dos checks</div>
-            <canvas id="chart-${h.name}" height="120"></canvas>
+            <canvas id="chart-${escapeHtml(h.name)}" height="120"></canvas>
         </div>
         ${snmpChartBoxHtml}
-        <div id="availability-chart-type-box-${h.name}" class="chart-box hidden">
+        <div id="availability-chart-type-box-${escapeHtml(h.name)}" class="chart-box hidden">
             <div class="chart-title">Disponibilidade por tipo</div>
-            <canvas id="availability-chart-type-${h.name}" height="120"></canvas>
+            <canvas id="availability-chart-type-${escapeHtml(h.name)}" height="120"></canvas>
         </div>
-        <div id="availability-chart-box-${h.name}" class="chart-box hidden">
+        <div id="availability-chart-box-${escapeHtml(h.name)}" class="chart-box hidden">
             <div class="chart-title">Disponibilidade geral</div>
-            <canvas id="availability-chart-${h.name}" height="120"></canvas>
+            <canvas id="availability-chart-${escapeHtml(h.name)}" height="120"></canvas>
         </div>
-        <div id="history-${h.name}" class="history-box hidden"></div>
+        <div id="history-${escapeHtml(h.name)}" class="history-box hidden"></div>
     `;
 }
 
@@ -1212,6 +1270,49 @@ function updateHostCardInPlace(card, h) {
     }
 
     // 8. Métricas SNMP na Face 3 (KPIs de CPU, RAM, Disco e Tráfego)
+    const snmpConfigured = isSnmpConfigured(h);
+    let snmpKpiGrid = card.querySelector(".snmp-kpi-grid");
+
+    if (snmpConfigured && !snmpKpiGrid) {
+        const snmpCol = card.querySelector(".host-col-snmp");
+        if (snmpCol) {
+            snmpCol.innerHTML = buildSnmpSectionMarkup(h);
+        }
+        const iconActions = card.querySelector(".icon-actions");
+        if (iconActions && !iconActions.querySelector('button[title="Gráfico SNMP"]')) {
+            const snmpBtn = document.createElement("button");
+            snmpBtn.className = "icon-btn";
+            snmpBtn.type = "button";
+            snmpBtn.title = "Gráfico SNMP";
+            snmpBtn.setAttribute("aria-label", "Gráfico SNMP");
+            snmpBtn.onclick = () => toggleSnmpChart(h.name);
+            snmpBtn.innerHTML = iconSvg("snmp");
+            const latBtn = iconActions.querySelector('button[title="Gráfico de latência"]');
+            if (latBtn && latBtn.nextSibling) {
+                iconActions.insertBefore(snmpBtn, latBtn.nextSibling);
+            } else {
+                iconActions.appendChild(snmpBtn);
+            }
+        }
+        if (!document.getElementById(`snmp-chart-box-${h.name}`)) {
+            const chartBox = document.createElement("div");
+            chartBox.id = `snmp-chart-box-${h.name}`;
+            chartBox.className = "chart-box hidden";
+            chartBox.style.marginTop = "10px";
+            chartBox.innerHTML = `
+                <div class="chart-title">Histórico SNMP</div>
+                <canvas id="snmp-chart-${escapeHtml(h.name)}" height="120"></canvas>
+            `;
+            const latBox = document.getElementById(`chart-container-${h.name}`);
+            if (latBox && latBox.parentNode) {
+                latBox.parentNode.insertBefore(chartBox, latBox.nextSibling);
+            } else {
+                card.appendChild(chartBox);
+            }
+        }
+        return;
+    }
+
     const totalTrafficBps = Number(h.network_traffic) || 0;
     const downloadTrafficBps = Number(h.network_in_bps) || 0;
     const uploadTrafficBps = Number(h.network_out_bps) || 0;
@@ -1220,7 +1321,6 @@ function updateHostCardInPlace(card, h) {
     const downloadTrafficBar = calcRelativeBarWidth(downloadTrafficBps, maxTrafficBps);
     const uploadTrafficBar = calcRelativeBarWidth(uploadTrafficBps, maxTrafficBps);
 
-    const snmpKpiGrid = card.querySelector(".snmp-kpi-grid");
     if (snmpKpiGrid) {
         const kpiCards = snmpKpiGrid.querySelectorAll(".snmp-kpi-card");
         if (kpiCards.length >= 3) {
@@ -1349,7 +1449,7 @@ function focusHostCard(hostName) {
 function buildNocTableRowHTML(h) {
     const visualState = hostVisualState(h);
     const causeClass = probableCauseClass(h);
-    const hostAddressLabel = h.resolved_ip ? `${h.address} → ${h.resolved_ip}` : h.address;
+    const hostAddressLabel = formatHostAddressLabel(h);
 
     let statusDot = "bg-secondary";
     if (h.status === "UP") statusDot = "bg-success";
@@ -1430,7 +1530,7 @@ function buildNocTableRowHTML(h) {
                 type="button"
                 title="Copiar endereço (${escapeHtml(h.address)})"
                 aria-label="Copiar endereço (${escapeHtml(h.address)})"
-                onclick='copyHostAddress(${JSON.stringify(h.address)}, this, event)'
+                onclick='copyHostAddress(${escapeJsSingleQuotedAttr(h.address)}, this, event)'
               >
                 <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
@@ -1465,13 +1565,13 @@ function buildNocTableRowHTML(h) {
         </td>
         <td class="noc-col-actions">
           <div class="noc-actions-cell">
-            <button class="noc-action-btn" type="button" title="Focar no Card 3D" aria-label="Focar no Card 3D" onclick='focusHostCard(${JSON.stringify(h.name)})'>
+            <button class="noc-action-btn" type="button" title="Focar no Card 3D" aria-label="Focar no Card 3D" onclick='focusHostCard(${escapeJsSingleQuotedAttr(h.name)})'>
               <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
             </button>
-            <button class="noc-action-btn" type="button" title="Editar host" aria-label="Editar host" onclick='openEditModal(${JSON.stringify(h.name)})'>
+            <button class="noc-action-btn" type="button" title="Editar host" aria-label="Editar host" onclick='openEditModal(${escapeJsSingleQuotedAttr(h.name)})'>
               ${iconSvg("edit")}
             </button>
-            <button class="noc-action-btn noc-btn-danger" type="button" title="Mover para lixeira" aria-label="Mover para lixeira" onclick='softDeleteHost(${h.id}, ${JSON.stringify(h.name)})'>
+            <button class="noc-action-btn noc-btn-danger" type="button" title="Mover para lixeira" aria-label="Mover para lixeira" onclick='softDeleteHost(${Number(h.id)}, ${escapeJsSingleQuotedAttr(h.name)})'>
               ${iconSvg("trash")}
             </button>
           </div>
@@ -1642,7 +1742,9 @@ async function loadHosts() {
                 h.tcp_https_port_ok,
                 h.status_ping,
                 h.latency_ping,
-                !!h.icmp_blocked_but_service_up
+                !!h.icmp_blocked_but_service_up,
+                h.status_tcp,
+                h.latency_tcp
             );
 
             // Atualiza gráficos ativos sem piscar
@@ -1729,7 +1831,9 @@ async function loadLastResult(
     tcpHttpsPortOk = null,
     statusPing = null,
     latencyPing = null,
-    icmpBlocked = false
+    icmpBlocked = false,
+    statusTcp = null,
+    latencyTcp = null
 ) {
     const box = document.getElementById("result-" + name);
     if (!box) return;
@@ -1737,28 +1841,70 @@ async function loadLastResult(
     let lastPing = null;
     let lastHttp = null;
 
-    if (Array.isArray(expectedPorts) && expectedPorts.length > 0) {
-        const res = await fetchWithAuth(`${API}/host/history/${name}`);
-        if (!res || !res.ok) return;
-        const data = await res.json();
-        renderTcpPortsStatus(name, data.checks, expectedPorts);
-        lastPing = data.checks.find(c => c.type === "ping");
-        lastHttp = httpEnabled ? data.checks.find(c => c.type === "http") : null;
+    if (statusPing === "UP" || statusPing === "DOWN") {
+        lastPing = {
+            success: statusPing === "UP",
+            latency: latencyPing,
+            error: statusPing === "DOWN" ? "timeout" : null,
+        };
+    }
+    if (httpEnabled) {
+        lastHttp = {
+            success: httpLatency !== null && httpLatency !== undefined,
+            latency: httpLatency,
+        };
+    }
+
+    const normalizedPorts = Array.isArray(expectedPorts)
+        ? Array.from(new Set(expectedPorts.map((p) => Number(p)).filter((p) => Number.isInteger(p))))
+        : [];
+
+    if (normalizedPorts.length > 0) {
+        const canSynthesizeSingle =
+            normalizedPorts.length === 1 && (statusTcp === "UP" || statusTcp === "DOWN");
+        const canSynthesizeWebPorts =
+            normalizedPorts.every(
+                (p) =>
+                    (p === 80 && tcpHttpPortOk !== null && tcpHttpPortOk !== undefined) ||
+                    (p === 443 && tcpHttpsPortOk !== null && tcpHttpsPortOk !== undefined)
+            );
+
+        if (canSynthesizeSingle) {
+            const syntheticChecks = [{
+                type: "tcp",
+                tcp_port: normalizedPorts[0],
+                success: statusTcp === "UP",
+                latency: latencyTcp,
+                error: statusTcp === "DOWN" ? "timeout" : null,
+            }];
+            renderTcpPortsStatus(name, syntheticChecks, normalizedPorts);
+        } else if (canSynthesizeWebPorts) {
+            const syntheticChecks = normalizedPorts.map((p) => {
+                const ok = p === 80 ? !!tcpHttpPortOk : !!tcpHttpsPortOk;
+                const lat = p === 80 ? tcpHttpPortLatency : tcpHttpsPortLatency;
+                return {
+                    type: "tcp",
+                    tcp_port: p,
+                    success: ok,
+                    latency: lat,
+                    error: ok ? null : "timeout",
+                };
+            });
+            renderTcpPortsStatus(name, syntheticChecks, normalizedPorts);
+        } else {
+            const res = await fetchWithAuth(`${API}/host/history/${encodeURIComponent(name)}`);
+            if (!res || !res.ok) return;
+            const data = await res.json();
+            renderTcpPortsStatus(name, data.checks, normalizedPorts);
+            if (!lastPing) {
+                lastPing = data.checks.find(c => c.type === "ping");
+            }
+            if (httpEnabled && !lastHttp) {
+                lastHttp = data.checks.find(c => c.type === "http");
+            }
+        }
     } else {
         renderTcpPortsStatus(name, [], []);
-        if (statusPing === "UP" || statusPing === "DOWN") {
-            lastPing = {
-                success: statusPing === "UP",
-                latency: latencyPing,
-                error: statusPing === "DOWN" ? "timeout" : null,
-            };
-        }
-        if (httpEnabled) {
-            lastHttp = {
-                success: httpLatency !== null && httpLatency !== undefined,
-                latency: httpLatency,
-            };
-        }
     }
 
     const pingLikelyFirewallBlocked =
@@ -1790,11 +1936,11 @@ async function loadLastResult(
     box.innerHTML = `
         <div>
             <span class="status-indicator ${pingDot}"></span>
-            Ping: ${pingLatencyText}
+            Ping: ${escapeHtml(pingLatencyText)}
         </div>
         <div>
             <span class="status-indicator ${webDot}"></span>
-            ${httpEnabled ? protocolLabel : "Web"}: ${httpEnabled ? protocolValue : "Inativo"}
+            ${escapeHtml(httpEnabled ? protocolLabel : "Web")}: ${escapeHtml(httpEnabled ? protocolValue : "Inativo")}
         </div>
     `;
 }
@@ -1807,7 +1953,7 @@ async function loadHistory(name, isRefresh = false) {
     }
 
     try {
-        const res = await fetchWithAuth(`${API}/host/history/${name}`);
+        const res = await fetchWithAuth(`${API}/host/history/${encodeURIComponent(name)}`);
 
         if (!res || !res.ok) return;
 
@@ -1825,7 +1971,7 @@ async function loadHistory(name, isRefresh = false) {
             const statusText = c.success ? "OK" : "FAIL";
             const typeLabel = c.type === "tcp" && c.tcp_port
                 ? `TCP ${c.tcp_port}`
-                : c.type.toUpperCase();
+                : String(c.type || "").toUpperCase();
             const detailParts = [];
             if (c.status_code) detailParts.push(`HTTP ${c.status_code}`);
             if (c.error) detailParts.push(c.error);
@@ -1834,12 +1980,12 @@ async function loadHistory(name, isRefresh = false) {
             return `
                 <div class="history-line ${statusClass}">
                     <div class="history-line-top">
-                        <span class="type-badge">${typeLabel}</span>
+                        <span class="type-badge">${escapeHtml(typeLabel)}</span>
                         <span class="history-status">${statusText}</span>
                         <small class="history-time">${formatApiTime(c.timestamp)}</small>
                     </div>
                     <div class="history-line-bottom">
-                        <span class="history-detail">${detailText}</span>
+                        <span class="history-detail">${escapeHtml(detailText)}</span>
                     </div>
                 </div>
             `;
@@ -1993,6 +2139,10 @@ function escapeHtml(str) {
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#039;");
+}
+
+function escapeJsSingleQuotedAttr(val) {
+    return escapeHtml(JSON.stringify(val));
 }
 
 // Score de saúde + indicador + barra de progresso colorida pela severidade.
@@ -2294,10 +2444,10 @@ async function submitModalEdit() {
 
     const saveBtn = document.querySelector("#editModal .modal-actions button.modal-btn-primary")
         || document.querySelector("#editModal .modal-actions button:first-child");
-    const originalText = saveBtn ? saveBtn.textContent : "Salvar";
+    const originalText = getButtonLabel(saveBtn, "Salvar");
     if (saveBtn) {
         saveBtn.disabled = true;
-        saveBtn.textContent = "Salvando...";
+        setButtonLabel(saveBtn, "Salvando...");
     }
 
     const oldHostName = currentEditHost;
@@ -2339,14 +2489,14 @@ async function submitModalEdit() {
     } finally {
         if (saveBtn) {
             saveBtn.disabled = false;
-            saveBtn.textContent = originalText;
+            setButtonLabel(saveBtn, originalText);
         }
     }
 }
 
 async function loadLatencyChart(name) {
     const chartKey = `latency-${name}`;
-    const res = await fetchWithAuth(`${API}/host/history/${name}`);
+    const res = await fetchWithAuth(`${API}/host/history/${encodeURIComponent(name)}`);
     
     if (!res || !res.ok) return;
 
@@ -2445,7 +2595,7 @@ async function loadLatencyChart(name) {
 async function loadSnmpChart(name) {
     const chartKey = `snmp-${name}`;
 
-    const res = await fetchWithAuth(`${API}/metrics/snmp/${name}`);
+    const res = await fetchWithAuth(`${API}/metrics/snmp/${encodeURIComponent(name)}`);
     if (!res || !res.ok) return;
 
     const data = await res.json();
@@ -2556,7 +2706,7 @@ async function loadSnmpChart(name) {
 
 async function loadAvailabilityChartType(name) {
 
-    const res = await fetchWithAuth(`${API}/hosts/metrics/availability/type/${name}`);
+    const res = await fetchWithAuth(`${API}/hosts/metrics/availability/type/${encodeURIComponent(name)}`);
     if (!res || !res.ok) return;
 
     const data = await res.json();
@@ -2800,9 +2950,9 @@ async function copyHostAddress(address, btnEl, event) {
                 btnEl.innerHTML = originalSvg;
             }, 1400);
         }
-        showToast(`Endereço "${address}" copiado!`, "success");
+        showToast("success", `Endereço "${address}" copiado!`);
     } catch (err) {
-        showToast(`Não foi possível copiar: ${err}`, "error");
+        showToast("error", `Não foi possível copiar: ${err}`);
     }
 }
 
@@ -2902,13 +3052,13 @@ function showAlertCard(alert) {
 
     card.innerHTML = `
         <div class="alert-header">
-            <strong>${alert.host_name}</strong>
+            <strong>${escapeHtml(alert.host_name)}</strong>
         </div>
         <div class="alert-subtitle">
-            ${showRawTransition ? rawTransitionText : transitionText}
+            ${escapeHtml(showRawTransition ? rawTransitionText : transitionText)}
         </div>
         <div class="alert-subtitle">
-            ${alert.host_address}${alert.host_port ? `:${alert.host_port}` : ""} | ${alertTypeLabel(alert.alert_type ?? "STATUS_CHANGE")}
+            ${escapeHtml(alert.host_address)}${alert.host_port ? `:${escapeHtml(alert.host_port)}` : ""} | ${escapeHtml(alertTypeLabel(alert.alert_type ?? "STATUS_CHANGE"))}
         </div>
         <div class="alert-subtitle">
             ${formatApiDateTime(alert.timestamp)}
@@ -3131,8 +3281,8 @@ async function loadTrashHosts() {
                     <small>Desativado em: ${formatApiDateTime(host.deleted_at)}</small>
                 </div>
                 <div class="trash-actions">
-                    <button onclick='restoreHost(${Number(host.id)}, ${JSON.stringify(String(host.name))})'>Restaurar</button>
-                    <button class="danger-btn" onclick='hardDeleteHost(${Number(host.id)}, ${JSON.stringify(String(host.name))})'>Excluir permanentemente</button>
+                    <button onclick='restoreHost(${Number(host.id)}, ${escapeJsSingleQuotedAttr(String(host.name))})'>Restaurar</button>
+                    <button class="danger-btn" onclick='hardDeleteHost(${Number(host.id)}, ${escapeJsSingleQuotedAttr(String(host.name))})'>Excluir permanentemente</button>
                 </div>
             </div>
         `).join("");
@@ -3237,7 +3387,7 @@ function renderBulkDeactivateHostsList() {
                     <button
                         type="button"
                         class="danger-btn"
-                        onclick='event.preventDefault(); event.stopPropagation(); softDeleteHost(${Number(host.id)}, ${JSON.stringify(String(host.name))})'
+                        onclick='event.preventDefault(); event.stopPropagation(); softDeleteHost(${Number(host.id)}, ${escapeJsSingleQuotedAttr(String(host.name))})'
                     >Mover 1 para lixeira</button>
                 </div>
             </label>
@@ -3284,7 +3434,7 @@ async function bulkDeactivateSelectedHosts() {
     const actionBtn = document.getElementById("bulkDeactivateSelectedBtn");
     if (actionBtn) {
         actionBtn.disabled = true;
-        actionBtn.textContent = "Movendo...";
+        setButtonLabel(actionBtn, "Movendo...");
     }
 
     // Remoção visual imediata no Dashboard e proteção contra race condition de polling
@@ -3419,10 +3569,10 @@ function closeConfirmEmptyTrashModal() {
 
 async function confirmEmptyTrash() {
     const confirmBtn = document.getElementById("confirmEmptyTrashBtn");
-    const originalText = confirmBtn ? confirmBtn.textContent : "Sim, Excluir Todos";
+    const originalText = getButtonLabel(confirmBtn, "Sim, Excluir Todos");
     if (confirmBtn) {
         confirmBtn.disabled = true;
-        confirmBtn.textContent = "Excluindo...";
+        setButtonLabel(confirmBtn, "Excluindo...");
     }
 
     try {
@@ -3447,7 +3597,7 @@ async function confirmEmptyTrash() {
     } finally {
         if (confirmBtn) {
             confirmBtn.disabled = false;
-            confirmBtn.textContent = originalText;
+            setButtonLabel(confirmBtn, originalText);
         }
     }
 }
@@ -3552,7 +3702,7 @@ async function loadAvailability(name) {
     if (!ctx) return;
 
     try {
-        const response = await fetchWithAuth(`${API}/hosts/metrics/availability/host/${name}`);
+        const response = await fetchWithAuth(`${API}/hosts/metrics/availability/host/${encodeURIComponent(name)}`);
         
         if (!response || !response.ok) return;
 
@@ -3739,7 +3889,7 @@ function handleSummaryCardClick(filterKey) {
     filterHosts();
 
     const labelMap = { "all": "Todos", "bg-success": "Online", "bg-warning": "Degradados", "bg-danger": "Offline" };
-    showToast(`Filtro: ${labelMap[select.value] || select.value}`, "info");
+    showToast("info", `Filtro: ${labelMap[select.value] || select.value}`);
 }
 
 function syncSummaryCardHighlight() {
@@ -3916,7 +4066,7 @@ function clearHostFilters() {
     syncStatusChips();
     syncSummaryCardHighlight();
     filterHosts();
-    showToast("Filtros limpos", "info");
+    showToast("info", "Filtros limpos");
 }
 
 // ======================
@@ -4015,13 +4165,6 @@ if (!isLoginPage) {
         importSelectedBtn.addEventListener("click", importSelectedLanHosts);
     }
     const selectAllDiscoveryBtn = document.getElementById("selectAllDiscoveryBtn");
-    function updateDiscoverySelectAllUI(allChecked) {
-        if (!selectAllDiscoveryBtn) return;
-        const iconSvg = allChecked
-            ? `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="9" x2="15" y2="15"></line><line x1="15" y1="9" x2="9" y2="15"></line></svg>`
-            : `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><polyline points="9 11 12 14 22 4"></polyline></svg>`;
-        selectAllDiscoveryBtn.innerHTML = `${iconSvg}<span>${allChecked ? "Desmarcar todos" : "Selecionar todos"}</span>`;
-    }
     if (selectAllDiscoveryBtn) {
         selectAllDiscoveryBtn.addEventListener("click", () => {
             const checkboxes = Array.from(document.querySelectorAll("#networkDiscoveryList .discover-host-check:not(:disabled)"));
@@ -4224,30 +4367,21 @@ if (logoutBtn) {
         Object.values(charts).forEach(chart => {
             if (!chart) return;
             
-            // Scales Y
-            if (chart.options.scales?.y) {
-                if (chart.options.scales.y.title) {
-                    chart.options.scales.y.title.color = titleColor;
+            // Scales (suporta eixo único y e múltiplos eixos como y_percent e y_bps)
+            const scales = chart.options.scales || {};
+            Object.entries(scales).forEach(([scaleKey, scaleObj]) => {
+                if (!scaleObj) return;
+                if (scaleKey !== "x" && scaleObj.title) {
+                    scaleObj.title.color = titleColor;
                 }
-                if (chart.options.scales.y.grid) {
-                    chart.options.scales.y.grid.color = gridColor;
-                    chart.options.scales.y.grid.borderColor = gridColor;
+                if (scaleObj.grid) {
+                    scaleObj.grid.color = gridColor;
+                    scaleObj.grid.borderColor = gridColor;
                 }
-                if (chart.options.scales.y.ticks) {
-                    chart.options.scales.y.ticks.color = textColor;
+                if (scaleObj.ticks) {
+                    scaleObj.ticks.color = textColor;
                 }
-            }
-            
-            // Scales X
-            if (chart.options.scales?.x) {
-                if (chart.options.scales.x.grid) {
-                    chart.options.scales.x.grid.color = gridColor;
-                    chart.options.scales.x.grid.borderColor = gridColor;
-                }
-                if (chart.options.scales.x.ticks) {
-                    chart.options.scales.x.ticks.color = textColor;
-                }
-            }
+            });
             
             // Legend
             if (chart.options.plugins?.legend?.labels) {
