@@ -418,3 +418,4 @@ print(f"Salvo: {dash_path}")
 with open(inc_path, "w", encoding="utf-8") as f:
     f.write(incidents_html)
 print(f"Salvo: {inc_path}")
+

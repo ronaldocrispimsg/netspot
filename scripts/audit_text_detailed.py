@@ -33,7 +33,11 @@ for i, sample in straight_quotes[:8]:
     print(f"    Linha {i}: {sample[:90]}")
 
 # 3. Lista de Siglas vs Siglas Usadas
-siglas_decl = set(re.findall(r"\\item\[([A-Za-z0-9\+\-]+)\]", text))
+tbl_m = re.search(r"\\begin\{longtable\}.*?(.*?)\\end\{longtable\}", text, re.DOTALL)
+if tbl_m:
+    siglas_decl = set(re.findall(r"^([A-Za-z0-9\+\-]+)\s*&", tbl_m.group(1), re.MULTILINE))
+else:
+    siglas_decl = set()
 print(f"\n[3] Total de siglas formalizadas na Lista de Siglas: {len(siglas_decl)}")
 
 body_lines = lines[240:]
