@@ -14,6 +14,7 @@ O sistema combina monitoramento ativo e passivo (**ICMP Ping, Portas TCP, HTTP/H
 
 > 📄 **Documentação Completa**:
 > - [`arquitetura.md`](arquitetura.md): Anatomia linha por linha de todos os arquivos, rotas, modelos e fluxos do sistema.
+> - [`docs/analise_projeto_netspot_wazlawick.html`](docs/analise_projeto_netspot_wazlawick.html): Documento de Análise e Projeto de Sistemas Orientados a Objetos do NetSpot (Método Wazlawick).
 > - [`docs/funcionalidades.md`](docs/funcionalidades.md): Especificação técnica exaustiva de cada módulo e regra de negócio.
 > - [`docs/kathara.md`](docs/kathara.md): Topologia e guia de execução nos laboratórios experimentais emulados Kathará (40 hosts e 126 hosts).
 > - [`docs/RELEASE_NOTES_v1.1.0.md`](docs/RELEASE_NOTES_v1.1.0.md): Histórico e notas da versão estável v1.1.0 consolidada.

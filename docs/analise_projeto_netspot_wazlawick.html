@@ -1,0 +1,984 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Documento de Análise e Projeto de Sistemas Orientados a Objetos — NetSpot (Método Wazlawick)</title>
+  <style>
+    :root {
+      --bg-primary: #0f172a;
+      --bg-secondary: #1e293b;
+      --bg-tertiary: #334155;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --accent: #38bdf8;
+      --accent-hover: #0ea5e9;
+      --border: #334155;
+      --card-bg: #1e293b;
+      --code-bg: #090d16;
+      --success: #34d399;
+      --warning: #fbbf24;
+      --danger: #f87171;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    }
+
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg-primary: #f8fafc;
+        --bg-secondary: #ffffff;
+        --bg-tertiary: #f1f5f9;
+        --text-main: #0f172a;
+        --text-muted: #64748b;
+        --accent: #0284c7;
+        --accent-hover: #0369a1;
+        --border: #e2e8f0;
+        --card-bg: #ffffff;
+        --code-bg: #f8fafc;
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background-color: var(--bg-primary);
+      color: var(--text-main);
+      line-height: 1.6;
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* Sidebar Navigation */
+    aside.sidebar {
+      width: 320px;
+      background-color: var(--bg-secondary);
+      border-right: 1px solid var(--border);
+      position: fixed;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      overflow-y: auto;
+      padding: 1.5rem 1rem;
+      z-index: 10;
+    }
+
+    .sidebar-header {
+      padding-bottom: 1rem;
+      margin-bottom: 1rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .sidebar-header h2 {
+      font-size: 1.15rem;
+      color: var(--accent);
+      font-weight: 700;
+      line-height: 1.3;
+    }
+
+    .sidebar-header p {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-top: 0.3rem;
+    }
+
+    nav.toc ul {
+      list-style: none;
+    }
+
+    nav.toc li {
+      margin-bottom: 0.35rem;
+    }
+
+    nav.toc a {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 0.86rem;
+      display: block;
+      padding: 0.35rem 0.6rem;
+      border-radius: 6px;
+      transition: all 0.15s ease-in-out;
+    }
+
+    nav.toc a:hover {
+      background-color: var(--bg-tertiary);
+      color: var(--text-main);
+    }
+
+    nav.toc a.active {
+      background-color: var(--accent);
+      color: #ffffff;
+      font-weight: 600;
+    }
+
+    /* Main Content Area */
+    main.content {
+      margin-left: 320px;
+      flex: 1;
+      max-width: 1040px;
+      padding: 2.5rem 3.5rem;
+    }
+
+    header.doc-header {
+      margin-bottom: 2.5rem;
+      padding-bottom: 1.5rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    header.doc-header h1 {
+      font-size: 2.2rem;
+      font-weight: 800;
+      color: var(--text-main);
+      margin-bottom: 0.5rem;
+      letter-spacing: -0.02em;
+    }
+
+    header.doc-header .badge {
+      display: inline-block;
+      background-color: var(--bg-tertiary);
+      color: var(--accent);
+      padding: 0.25rem 0.65rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.8rem;
+    }
+
+    header.doc-header p.subtitle {
+      font-size: 1.05rem;
+      color: var(--text-muted);
+    }
+
+    section {
+      margin-bottom: 3.5rem;
+      scroll-margin-top: 2rem;
+    }
+
+    h2 {
+      font-size: 1.55rem;
+      font-weight: 700;
+      color: var(--text-main);
+      border-bottom: 2px solid var(--accent);
+      padding-bottom: 0.4rem;
+      margin-bottom: 1.2rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    h3 {
+      font-size: 1.2rem;
+      font-weight: 600;
+      color: var(--accent);
+      margin-top: 1.5rem;
+      margin-bottom: 0.6rem;
+    }
+
+    h4 {
+      font-size: 1.02rem;
+      font-weight: 600;
+      color: var(--text-main);
+      margin-top: 1.1rem;
+      margin-bottom: 0.4rem;
+    }
+
+    p {
+      margin-bottom: 1rem;
+      font-size: 0.98rem;
+    }
+
+    ul, ol {
+      margin-bottom: 1.2rem;
+      padding-left: 1.4rem;
+    }
+
+    li {
+      margin-bottom: 0.4rem;
+    }
+
+    .card {
+      background-color: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.2rem 1.4rem;
+      margin-bottom: 1.5rem;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    }
+
+    .callout {
+      border-left: 4px solid var(--accent);
+      background-color: var(--bg-secondary);
+      padding: 1rem 1.2rem;
+      margin: 1.2rem 0;
+      border-radius: 0 8px 8px 0;
+    }
+
+    .callout.warning {
+      border-left-color: var(--warning);
+    }
+
+    .callout.success {
+      border-left-color: var(--success);
+    }
+
+    .callout-title {
+      font-weight: 700;
+      font-size: 0.95rem;
+      margin-bottom: 0.4rem;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1.2rem 0;
+      font-size: 0.92rem;
+    }
+
+    th, td {
+      border: 1px solid var(--border);
+      padding: 0.65rem 0.9rem;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background-color: var(--bg-tertiary);
+      font-weight: 600;
+      color: var(--text-main);
+    }
+
+    tr:nth-child(even) {
+      background-color: rgba(255, 255, 255, 0.02);
+    }
+
+    pre, code {
+      font-family: var(--font-mono);
+      font-size: 0.88rem;
+    }
+
+    code.inline-code {
+      background-color: var(--bg-tertiary);
+      color: var(--accent);
+      padding: 0.15rem 0.35rem;
+      border-radius: 4px;
+    }
+
+    pre {
+      background-color: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem 1.2rem;
+      overflow-x: auto;
+      margin: 1rem 0;
+      color: #e2e8f0;
+      line-height: 1.5;
+    }
+
+    .diagram-box {
+      background-color: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.2rem;
+      font-family: var(--font-mono);
+      font-size: 0.83rem;
+      white-space: pre;
+      overflow-x: auto;
+      color: #38bdf8;
+      margin: 1.2rem 0;
+      line-height: 1.45;
+    }
+
+    footer.doc-footer {
+      border-top: 1px solid var(--border);
+      padding-top: 1.5rem;
+      margin-top: 3.5rem;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      text-align: center;
+    }
+
+    @media (max-width: 900px) {
+      body {
+        flex-direction: column;
+      }
+      aside.sidebar {
+        position: relative;
+        width: 100%;
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+      }
+      main.content {
+        margin-left: 0;
+        padding: 1.5rem;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Sidebar / Table of Contents -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <span class="badge">Artefato TCC / Engenharia</span>
+      <h2>NetSpot — Modelagem OO</h2>
+      <p>Análise e Projeto Orientados a Objetos conforme Raul Sidnei Wazlawick</p>
+    </div>
+    <nav class="toc">
+      <ul>
+        <li><a href="#fase1-visao">1. Concepção: Visão Geral e Negócio</a></li>
+        <li><a href="#fase1-requisitos">2. Engenharia de Requisitos FURPS+</a></li>
+        <li><a href="#fase1-casos-uso">3. Casos de Uso de Alto Nível</a></li>
+        <li><a href="#fase2-casos-expandidos">4. Casos de Uso Expandidos</a></li>
+        <li><a href="#fase2-dss">5. Diagramas de Sequência de Sistema</a></li>
+        <li><a href="#fase2-modelo-conceitual">6. Modelo Conceitual de Domínio</a></li>
+        <li><a href="#fase2-contratos-ocl">7. Contratos de Operação e Consulta OCL</a></li>
+        <li><a href="#fase2-grasp">8. Atribuição de Responsabilidades (GRASP)</a></li>
+        <li><a href="#fase2-dcp">9. Diagrama de Classes de Projeto (DCP)</a></li>
+        <li><a href="#fase2-webml">10. Projeto de Interface WebML (Flip Cards 3D)</a></li>
+        <li><a href="#fase3-orm">11. Mapeamento Objeto-Relacional (PostgreSQL)</a></li>
+        <li><a href="#fase3-testes">12. Qualidade, Autocura e Testes Automatizados</a></li>
+        <li><a href="#banca-conformidade">13. Quadro de Conformidade para a Banca</a></li>
+      </ul>
+    </nav>
+  </aside>
+
+  <!-- Main Content Area -->
+  <main class="content">
+
+    <header class="doc-header">
+      <div class="badge">NetSpot (NOC Lite) — Documento Oficial de Engenharia OO</div>
+      <h1>Análise e Projeto de Sistemas Orientados a Objetos</h1>
+      <p class="subtitle">Modelagem rigorosa do sistema NetSpot estruturada segundo os 12 capítulos do método do Prof. Raul Sidnei Wazlawick (UFSC / Série SBC / Elsevier).</p>
+    </header>
+
+    <!-- 1. Visão Geral -->
+    <section id="fase1-visao">
+      <h2>1. Concepção: Visão Geral do Sistema e Processos de Negócio</h2>
+      
+      <p>Em conformidade com o <strong>Capítulo 2 de Wazlawick</strong>, a fase de concepção do NetSpot estabelece o <strong>Sumário Executivo</strong> e modela os processos de negócio antes de qualquer especificação técnica de telas.</p>
+
+      <div class="card">
+        <h3>Sumário Executivo do NetSpot (Visão Geral do Sistema)</h3>
+        <p><strong>Problema e Oportunidade</strong>: Pequenas e médias empresas (PMEs), campi universitários e salas de controle enfrentam sobrecarga computacional e complexidade de licenciamento de ferramentas corporativas (Zabbix, Nagios). Equipamentos críticos e servidores caem sem alerta preventivo ou geram tempestades de notificações falsas provocadas por bloqueio de ICMP em firewalls corporativos.</p>
+        <p><strong>A Solução NetSpot</strong>: Sistema de Network Operations Center (NOC Lite) multiplataforma que executa monitoramento proativo contínuo (ICMP, TCP, HTTP e telemetria SNMP multivendor), calcula a saúde composta do nó (Health Score 0–100%), deduz a causa provável de falhas por heurística determinística e despacha notificações para o Telegram via mensageria assíncrona (RabbitMQ + n8n) com proteção anti-flapping e circuito de autocura (Self-Healing).</p>
+        <p><strong>Comprar vs Construir</strong>: Soluções comerciais exigem infraestrutura dedicada de hardware, agentes instalados em cada estação e custos por nó. O NetSpot adota arquitetura sem agentes (agentless) utilizando protocolos abertos padronizados (RFC 792 ICMP, RFC 1157 SNMP, RFC 3550 Jitter).</p>
+      </div>
+
+      <h3>Modelagem do Processo de Monitoramento (Diagrama de Atividades com Raias)</h3>
+      <p>O diagrama abaixo reflete a dinâmica de negócio do NetSpot com raias de responsabilidade, decisões lógicas (branch/merge) e paralelismo real (fork/join):</p>
+
+      <div class="diagram-box">
++--------------------+---------------------+---------------------+----------------------+
+| Operador NOC       | Motor NetSpot       | Ativo de Rede (Host)| Broker / Notificador |
++--------------------+---------------------+---------------------+----------------------+
+|                    |                     |                     |                      |
+| (•) Início Ciclo   |                     |                     |                      |
+|         │          |                     |                     |                      |
+|         ▼          |                     |                     |                      |
+| [Solicita Monitor] |                     |                     |                      |
+|         │          |                     |                     |                      |
+|         └─────────►| [Ler Hosts Ativos]  |                     |                      |
+|                    |         │           |                     |                      |
+|                    |     ════╪════ (Fork)|                     |                      |
+|                    |    ┌────┴────┐      |                     |                      |
+|                    |    ▼         ▼      |                     |                      |
+|                    | [Ping]    [TCP/Web] |                     |                      |
+|                    |    │         │      |                     |                      |
+|                    |    └────┬────┘      |                     |                      |
+|                    |     ════╪════ (Join)|                     |                      |
+|                    |         │           |                     |                      |
+|                    |         ├──────────►| [Processa Sondas]   |                      |
+|                    |         │           |         │           |                      |
+|                    |         │◄──────────┼─────────┘           |                      |
+|                    |         ▼           |                     |                      |
+|                    |  &lt;Status Saudável?&gt; |                     |                      |
+|                    |    /        \       |                     |                      |
+|                    | [Sim]      [Não]    |                     |                      |
+|                    |   │          │      |                     |                      |
+|                    | [Atualiza] [Calcula |                     |                      |
+|                    | [Health]   [Causa]  |                     |                      |
+|                    |   │          │      |                     |                      |
+|                    |   │          ├───────────────────────────►| [Publica Alerta AMQP]|
+|                    |   │          │      |                     |         │            |
+|                    |   │          │      |                     |         ▼            |
+|                    |   │          │      |                     | [Envia Telegram n8n] |
+|                    |   ▼          ▼      |                     |                      |
+|                    |    &lt;Fim de Ciclo&gt;   |                     |                      |
+|                    |         (⨂)         |                     |                      |
++--------------------+---------------------+---------------------+----------------------+
+      </div>
+    </section>
+
+    <!-- 2. Requisitos FURPS+ -->
+    <section id="fase1-requisitos">
+      <h2>2. Engenharia de Requisitos do NetSpot (Taxonomia FURPS+)</h2>
+
+      <p>Em conformidade com o <strong>Capítulo 3 de Wazlawick</strong>, os requisitos do NetSpot são categorizados sob o modelo FURPS+, garantindo critérios de aceitação auditáveis e eliminando termos subjetivos:</p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Categoria</th>
+            <th>Especificação Técnica do Requisito no NetSpot</th>
+            <th>Critério de Aceitação / Verificação</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>RF01</strong></td>
+            <td><strong>Funcionalidade</strong></td>
+            <td>O sistema deve sondar conectividade através de ICMP Ping, portas TCP configuráveis e status HTTP/HTTPS (200 OK).</td>
+            <td>Módulo <code>Backend/checker.py</code> executando coletas simultâneas em &lt; 400ms por host.</td>
+          </tr>
+          <tr>
+            <td><strong>RF02</strong></td>
+            <td><strong>Funcionalidade</strong></td>
+            <td>Coleta de telemetria de hardware (CPU %, RAM %, Disco % e tráfego de interface RX/TX) via SNMP v1/v2c.</td>
+            <td><code>snmp_engine.py</code> com MIBs normalizadas para Linux (UCD), Windows (Host Resources) e roteadores.</td>
+          </tr>
+          <tr>
+            <td><strong>RF03</strong></td>
+            <td><strong>Funcionalidade</strong></td>
+            <td>Inferência automática de Causa Provável correlacionando as camadas do modelo OSI (Firewall, Saturação, Jitter, DNS).</td>
+            <td>Função <code>infer_probable_cause</code> retornando diagnóstico imediato com fast-path para nós <code>UNKNOWN</code>.</td>
+          </tr>
+          <tr>
+            <td><strong>RF04</strong></td>
+            <td><strong>Funcionalidade</strong></td>
+            <td>Despacho assíncrono de notificações de queda e recuperação de serviços para o Telegram via barramento durável.</td>
+            <td>Broker RabbitMQ com exchange <code>netspot.alerts</code> e fluxo n8n com template HTML sanitizado.</td>
+          </tr>
+          <tr>
+            <td><strong>RNF01</strong></td>
+            <td><strong>Usabilidade</strong></td>
+            <td>Interface SPA com visualização em Flip Cards 3D (3 faces) e conformidade de acessibilidade digital WCAG 2.1 AA.</td>
+            <td>Taxa de contraste mínima de 5.6:1, anel visível de foco e focus trap ativo em todos os modais.</td>
+          </tr>
+          <tr>
+            <td><strong>RNF02</strong></td>
+            <td><strong>Confiabilidade</strong></td>
+            <td>Autocura e resiliência contra tempestades de pacotes (Circuit Breaker) e mensagens corrompidas (Dead Letter Queue).</td>
+            <td>Estados <code>CLOSED</code>, <code>OPEN</code>, <code>HALF_OPEN</code> em <code>circuit_breaker.py</code> e fila <code>netspot.dlq</code>.</td>
+          </tr>
+          <tr>
+            <td><strong>RNF03</strong></td>
+            <td><strong>Desempenho</strong></td>
+            <td>Capacidade de monitorar até 126 hosts simultâneos respeitando o orçamento temporal do ciclo de 10 segundos.</td>
+            <td>Paralelismo intra-host via <code>asyncio.gather</code> e inter-host via RabbitMQ com <code>prefetch_count=32</code>.</td>
+          </tr>
+          <tr>
+            <td><strong>RNF04</strong></td>
+            <td><strong>Suportabilidade</strong></td>
+            <td>Configuração zero-hardcode através de variáveis de ambiente (.env) e suíte automatizada de testes sem regressões.</td>
+            <td>86 testes automatizados no Pytest aprovados em ~7.2 segundos cobrindo regras críticas.</td>
+          </tr>
+          <tr>
+            <td><strong>+REST</strong></td>
+            <td><strong>Restrições</strong></td>
+            <td>Operação 100% offline-first sem fontes remotas de CDNs, containers isolados Docker e Licença GPL-3.0.</td>
+            <td>Fontes WOFF2 locais embutidas, compose com 5 containers integrados e arquivo <code>LICENSE</code>.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- 3. Casos de Uso Alto Nível -->
+    <section id="fase1-casos-uso">
+      <h2>3. Casos de Uso de Alto Nível</h2>
+
+      <p>Conforme o <strong>Capítulo 4 de Wazlawick</strong>, os casos de uso de alto nível definem os limites do sistema computacional em relação aos atores externos, focando em processos de negócio completos:</p>
+
+      <div class="card">
+        <h3>Catálogo de Casos de Uso de Alto Nível do NetSpot:</h3>
+        <ul>
+          <li><strong>UC01 — Monitorar Ativos de Rede Continuamente</strong>: Ator: <em>Temporizador/Sistema</em>. Objetivo: Executar rondas periódicas de sondagem nos hosts cadastrados, computar o Health Score, atualizar o inventário e despachar alertas na ocorrência de incidentes.</li>
+          <li><strong>UC02 — Cadastrar e Provisionar Dispositivo</strong>: Ator: <em>Operador de Rede</em>. Objetivo: Incluir um novo nó no inventário com IP/FQDN, portas de serviço e parâmetros SNMP, validando a conectividade preliminar imediata.</li>
+          <li><strong>UC03 — Analisar Incidentes e Diagnosticar Falhas</strong>: Ator: <em>Operador de Rede</em>. Objetivo: Consultar a linha do tempo de incidentes ativos e resolvidos, avaliando a causa provável sugerida pelo sistema.</li>
+          <li><strong>UC04 — Descobrir Dispositivos na Rede Local</strong>: Ator: <em>Operador de Rede</em>. Objetivo: Disparar varredura controlada via Nmap com calibração dinâmica por sub-rede (*CIDR-Aware Timing*) para importação de hosts.</li>
+          <li><strong>UC05 — Gerenciar Autenticação e Credenciais</strong>: Ator: <em>Operador de Rede</em>. Objetivo: Realizar login via token JWT, obrigar troca de senha no primeiro acesso e aplicar bloqueio temporal contra força bruta.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- 4. Casos de Uso Expandidos -->
+    <section id="fase2-casos-expandidos">
+      <h2>4. Casos de Uso Expandidos (Fase de Elaboração)</h2>
+
+      <p>Em conformidade com o <strong>Capítulo 5 de Wazlawick</strong>, os casos de uso críticos são expandidos detalhando a interação temporal, sem entrar em detalhes prematuros de implementação:</p>
+
+      <div class="card">
+        <h3>UC01 Expandido: Monitorar Ativo e Notificar Incidente</h3>
+        <p><strong>Ator Primário</strong>: Temporizador do Sistema (Scheduler assíncrono).</p>
+        <p><strong>Atores Secundários</strong>: Dispositivo Alvo (Host monitorado), Broker RabbitMQ, Bot Telegram n8n.</p>
+        <p><strong>Pré-condições</strong>: O host deve estar cadastrado no banco de dados e marcado como ativo (não excluído na lixeira).</p>
+        
+        <h4>Fluxo Principal (Caminho Feliz):</h4>
+        <ol>
+          <li>O Scheduler aciona o ciclo e recupera os parâmetros do host;</li>
+          <li>O sistema despacha sondagens simultâneas de ICMP Ping, portas TCP cadastradas e teste HTTP;</li>
+          <li>O dispositivo responde a todas as sondagens dentro da janela de timeout (2.0s);</li>
+          <li>Se SNMP estiver habilitado e o circuito não estiver aberto, o sistema coleta OIDs de CPU, RAM e Disco;</li>
+          <li>O sistema calcula o <code>HealthScore</code> ponderado (0–100%) e atualiza a série temporal de histórico;</li>
+          <li>O sistema conclui a rodada mantendo o status do nó como <code>UP</code> e zera o contador de falhas consecutivas.</li>
+        </ol>
+
+        <h4>Fluxos Alternativos e de Exceção:</h4>
+        <ul>
+          <li><strong>3a. ICMP Bloqueado mas Serviços TCP/Web Ativos</strong>:
+            <ol>
+              <li>O sistema identifica que o ping falhou mas as portas 80/443 responderam;</li>
+              <li>Aplica a heurística <code>service_up_without_icmp</code>;</li>
+              <li>O status geral permanece <code>UP</code>, ativando a anotação preventiva de <em>Firewall Corporativo</em>;</li>
+              <li>Nenhum alarme de queda é emitido.</li>
+            </ol>
+          </li>
+          <li><strong>3b. Falha Consecutiva Total (Dispositivo DOWN)</strong>:
+            <ol>
+              <li>Todas as sondagens físicas falham sucessivamente atingindo o limiar de histerese;</li>
+              <li>O sistema aciona <code>infer_probable_cause</code> e identifica a causa raiz (ex.: perda de rota ou link rompido);</li>
+              <li>Abre um registro formal na tabela de <code>Incident</code> com timestamp de início;</li>
+              <li>O <code>HostCircuitBreaker</code> transiciona para o estado <code>OPEN</code>, suspendendo sondagens ruidosas;</li>
+              <li>O sistema publica mensagem na exchange RabbitMQ sob a chave composta <code>{host}:down</code>;</li>
+              <li>O workflow n8n despacha notificação formatada em HTML seguro para o canal Telegram dos operadores.</li>
+            </ol>
+          </li>
+          <li><strong>3c. Recuperação de Dispositivo (RECOVERY)</strong>:
+            <ol>
+              <li>Após o backoff exponencial, o Circuit Breaker testa o nó em <code>HALF_OPEN</code> e obtém sucesso;</li>
+              <li>O incidente ativo é finalizado preenchendo <code>resolved_at</code> e calculando o tempo total de indisponibilidade (*Interval Merging*);</li>
+              <li>Despacha notificação com chave <code>{host}:recovery</code> garantindo que a supressão anti-flapping não retenha o restabelecimento.</li>
+            </ol>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- 5. DSS -->
+    <section id="fase2-dss">
+      <h2>5. Diagramas de Sequência de Sistema (DSS)</h2>
+
+      <p>Em conformidade com o <strong>Capítulo 6 de Wazlawick</strong>, o DSS trata o NetSpot como uma caixa-preta rotulada como <code>:Sistema</code> para descobrir as **Operações de Sistema** (modificadoras de estado) e **Consultas de Sistema** (leitura pura):</p>
+
+      <div class="diagram-box">
+DSS 01: Verificação Imediata e Consulta de Métricas de Host
+
+Operador NOC                                        :Sistema (NetSpot Backend)
+     │                                                          │
+     │── 1. verificarConectividadeManual(hostId) ──────────────►│ (Operação de Sistema)
+     │                                                          │
+     │   [Sondagens paralelas: ICMP + TCP + HTTP em voo]        │
+     │                                                          │
+     │◄─ 2. retornoOperacional: {status, rtt, healthScore} ────│ (Confirmação)
+     │                                                          │
+     │── 3. consultarTelemetriaHardware(hostId) ───────────────►│ (Consulta de Sistema)
+     │                                                          │
+     │◄─ 4. metricas: Tuple(cpu, ram, disco, rxBps, txBps) ────│ (Retorno Tupla OCL)
+     │                                                          │
+      </div>
+    </section>
+
+    <!-- 6. Modelo Conceitual -->
+    <section id="fase2-modelo-conceitual">
+      <h2>6. Modelo Conceitual de Domínio do NetSpot</h2>
+
+      <p>Em estrita obediência ao <strong>Capítulo 7 de Wazlawick</strong>, o Modelo Conceitual reflete o <em>espaço do problema</em> e <strong>não possui métodos, visibilidade ou classes técnicas de software</strong>:</p>
+
+      <div class="diagram-box">
++------------------------+          1..* +------------------------+
+|          Host          |───────────────|      CheckResult       |
++------------------------+               +------------------------+
+| nome: String           |               | executadoEm: DateTime  |
+| ipAddress: String      |               | rttMs: Real            |
+| portasTcp: String      |               | icmpUp: Boolean        |
+| snmpHabilitado: Boolean|               | tcpUp: Boolean         |
+| statusAtual: Status    |               | httpUp: Boolean        |
+| /healthScore: Integer  |               | /jitterMs: Real        |
++------------------------+               +------------------------+
+           │ 1                                       │ 1
+           │                                         │
+           │ 0..*                                    │ 0..*
++------------------------+               +------------------------+
+|       SNMPMetric       |               |        Incident        |
++------------------------+               +------------------------+
+| coletadoEm: DateTime   |               | iniciadoEm: DateTime   |
+| cpuPercent: Real       |               | finalizadoEm: DateTime |
+| ramPercent: Real       |               | causaProvavel: String  |
+| diskPercent: Real      |               | resolvido: Boolean     |
+| rxBytesSec: Real       |               +------------------------+
+| txBytesSec: Real       |                           │ 1
++------------------------+                           │ 0..*
+                                         +------------------------+
+                                         |         Alert          |
+                                         +------------------------+
+                                         | enviadoEm: DateTime    |
+                                         | tipoEvento: String     |
+                                         | canal: String          |
+                                         +------------------------+
+      </div>
+
+      <div class="card">
+        <h3>Transições de Estado de Domínio no NetSpot:</h3>
+        <ul>
+          <li><strong>Transição Estável</strong>: Alternância de <code>Host.ativo</code> entre <code>true</code> e <code>false</code> (quando movido para a lixeira lógica sem destruir dados históricos);</li>
+          <li><strong>Transição Monotônica</strong>: O objeto <code>Incident</code> nasce com <code>iniciadoEm</code> e <code>causaProvavel</code>; ao ser solucionado, adquire monotonicamente <code>finalizadoEm</code> e o cálculo de tempo decorrido, sem retroceder;</li>
+          <li><strong>Transição Cíclica</strong>: O ciclo operacional do <code>Host.statusAtual</code> alternando ciclicamente entre os estados <code>UP ⇄ DOWN ⇄ DEGRADED ⇄ RECOVERY</code>.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- 7. Contratos OCL -->
+    <section id="fase2-contratos-ocl">
+      <h2>7. Contratos de Operação e Consulta em OCL</h2>
+
+      <p>Em conformidade com o <strong>Capítulo 8 de Wazlawick</strong>, as operações de sistema são formalizadas matematicamente com pré-condições e pós-condições em <strong>Object Constraint Language (OCL)</strong>:</p>
+
+      <h3>7.1. Contrato de Registro de Sondagem Operacional</h3>
+      <pre><code>Context NetSpotSystem::registrarSondagem(hostId: Integer, rtt: Real, icmpOk: Boolean, tcpOk: Boolean): CheckResult
+pre:
+    hostId <> null and
+    Host.allInstances()->exists(h | h.id = hostId and h.ativo = true) and
+    rtt >= 0.0
+
+post:
+    -- 1. Instância Criada
+    CheckResult.allInstances()->exists(cr |
+        cr.executadoEm = now() and
+        cr.rttMs = rtt and
+        cr.icmpUp = icmpOk and
+        cr.tcpUp = tcpOk and
+
+        -- 2. Atributos Modificados
+        let h = Host.allInstances()->any(h | h.id = hostId) in
+        h.ultimoRtt = rtt and
+        h.statusAtual = if (icmpOk or tcpOk) then #UP else #DOWN endif and
+
+        -- 3. Associação Estabelecida
+        cr.host = h and
+        result = cr
+    )</code></pre>
+
+      <h3>7.2. Contrato de Abertura de Incidente com Causa Provável</h3>
+      <pre><code>Context NetSpotSystem::abrirIncidente(hostId: Integer, causa: String): Incident
+pre:
+    Host.allInstances()->exists(h | h.id = hostId and h.statusAtual = #DOWN) and
+    Incident.allInstances()->forAll(inc | inc.host.id = hostId implies inc.resolvido = true)
+
+post:
+    Incident.allInstances()->exists(inc |
+        inc.iniciadoEm = now() and
+        inc.causaProvavel = causa and
+        inc.resolvido = false and
+        inc.finalizadoEm = null and
+
+        let h = Host.allInstances()->any(h | h.id = hostId) in
+        inc.host = h and
+        result = inc
+    )</code></pre>
+    </section>
+
+    <!-- 8. GRASP -->
+    <section id="fase2-grasp">
+      <h2>8. Atribuição de Responsabilidades com Padrões GRASP</h2>
+
+      <p>Em conformidade com o <strong>Capítulo 9 de Wazlawick</strong>, a arquitetura do NetSpot distribui suas responsabilidades através dos 9 padrões fundamentais de Craig Larman e Wazlawick:</p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Padrão GRASP</th>
+            <th>Princípio Teórico</th>
+            <th>Mapeamento Concreto no Código do NetSpot</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Especialista na Informação</strong></td>
+            <td>Atribua a responsabilidade à classe que detém os dados necessários.</td>
+            <td>O módulo <code>metrics.py</code> concentra as fórmulas de <code>compute_health</code>, SLA e Jitter pois possui as amostras de RTT e histórico de incidentes.</td>
+          </tr>
+          <tr>
+            <td><strong>Criador (Creator)</strong></td>
+            <td>Classe B instancia A se B agrega, grava ou usa A de perto.</td>
+            <td><code>scheduler.py</code> instancia <code>CheckResult</code> e <code>SNMPMetric</code> após recolher as respostas dos sockets de rede.</td>
+          </tr>
+          <tr>
+            <td><strong>Controlador (Controller)</strong></td>
+            <td>Primeiro objeto que recebe a mensagem do usuário na fronteira do sistema.</td>
+            <td>Os roteadores FastAPI em <code>Backend/routes/hosts.py</code> recebem as requisições HTTP, delegando a execução para serviços de domínio.</td>
+          </tr>
+          <tr>
+            <td><strong>Baixo Acoplamento</strong></td>
+            <td>Minimizar dependências entre módulos para evitar efeito cascata de mudanças.</td>
+            <td>O coletor de métricas não conhece a API do Telegram; ele apenas deposita alertas no RabbitMQ desacoplado.</td>
+          </tr>
+          <tr>
+            <td><strong>Alta Coesão</strong></td>
+            <td>Classes com responsabilidade delimitada e focada.</td>
+            <td><code>circuit_breaker.py</code> gerencia estritamente estados de suspensão; <code>retention_service.py</code> executa apenas expurgo de banco.</td>
+          </tr>
+          <tr>
+            <td><strong>Polimorfismo</strong></td>
+            <td>Tratar variações de comportamento via interfaces comuns em vez de <code>if-else</code>.</td>
+            <td>O motor SNMP resolve OIDs de processador e memória polimorficamente conforme o SO detectado (Linux, Windows, Cisco).</td>
+          </tr>
+          <tr>
+            <td><strong>Invenção Pura</strong></td>
+            <td>Criar classes conceituais artificiais de suporte quando o domínio puro não for coeso.</td>
+            <td>Classes de infraestrutura como <code>MQManager</code>, <code>HostCircuitBreaker</code> e <code>RetentionService</code>.</td>
+          </tr>
+          <tr>
+            <td><strong>Indireção</strong></td>
+            <td>Inserir mediador para desacoplar partes interdependentes.</td>
+            <td>O barramento AMQP com exchange <code>netspot.alerts</code> intermediando o backend e o executor n8n.</td>
+          </tr>
+          <tr>
+            <td><strong>Variações Protegidas</strong></td>
+            <td>Isolar pontos suscetíveis a instabilidades ou mudanças externas.</td>
+            <td>Sanitização de comandos no Nmap e timeout isolado de 0.8s no resolver DNS thread-safe prevenindo travamentos globais.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- 9. DCP -->
+    <section id="fase2-dcp">
+      <h2>9. Diagrama de Classes de Projeto (DCP)</h2>
+
+      <p>O <strong>Diagrama de Classes de Projeto (DCP)</strong> pertence ao <em>espaço da solução</em>, contendo visibilidade, métodos derivados dos diagramas de interação, tipos concretos de Python e navegabilidade:</p>
+
+      <div class="diagram-box">
++-------------------------------------------------------------+
+|                            Host                             |
++-------------------------------------------------------------+
+| - id: int                                                   |
+| - name: str                                                 |
+| - ip_address: str                                           |
+| - tcp_ports: str                                            |
+| - snmp_enabled: bool                                        |
+| - status: str                                               |
+| - is_active: bool                                           |
++-------------------------------------------------------------+
+| + calculate_availability(start: datetime, end: datetime): float|
+| + update_status(new_status: str): void                      |
++-------------------------------------------------------------+
+                               │ 1
+                               │
+            ┌──────────────────┼──────────────────┐
+            │ 1..*             │ 0..*             │ 0..*
+            ▼                  ▼                  ▼
++---------------------+ +-----------------+ +-----------------+
+|     CheckResult     | |   SNMPMetric    | |    Incident     |
++---------------------+ +-----------------+ +-----------------+
+| - id: int           | | - id: int       | | - id: int       |
+| - rtt_ms: float     | | - cpu_pct: float| | - cause: str    |
+| - icmp_up: bool     | | - ram_pct: float| | - started_at: dt|
+| - tcp_up: bool      | | - disk_pct: flt | | - resolved_at:dt|
+| - http_up: bool     | | - rx_bps: float | +-----------------+
++---------------------+ +-----------------+
+      </div>
+    </section>
+
+    <!-- 10. WebML -->
+    <section id="fase2-webml">
+      <h2>10. Projeto da Interface com o Usuário e Modelagem WebML</h2>
+
+      <p>Em conformidade com o <strong>Capítulo 10 de Wazlawick</strong>, a interface SPA é modelada segundo os conceitos da <strong>Web Modeling Language (WebML)</strong>, combinando Modelo Estrutural com Modelo de Hipertexto:</p>
+
+      <div class="card">
+        <h3>Arquitetura dos Flip Cards 3D (Unidades de Dados Especializadas):</h3>
+        <ul>
+          <li><strong>Face 1 (Operacional / Conectividade)</strong>: Exibe RTT imediato, Health Score circular (0–100%), tendência preditiva OLS e tag da Heurística de Causa Provável;</li>
+          <li><strong>Face 2 (Qualidade de Rede / Métricas de Transporte)</strong>: Exibe disponibilidade percentual de SLA por protocolo (ICMP, TCP, HTTP), contadores de Jitter e matriz de portas abertas;</li>
+          <li><strong>Face 3 (Hardware / Telemetria SNMP)</strong>: Renderiza dinamicamente gauges SVG de CPU %, RAM %, Disco % e taxas de tráfego de rede RX/TX sem recarregamento da página (F5);</li>
+          <li><strong>Modo Tabela NOC (Unidade de Índice de Alta Densidade)</strong>: Modo alternativo compacto otimizado para supervisão de 126 dispositivos em telas de monitoramento 24/7.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- 11. ORM -->
+    <section id="fase3-orm">
+      <h2>11. Persistência de Dados e Mapeamento Objeto-Relacional (PostgreSQL)</h2>
+
+      <p>Conforme o <strong>Capítulo 11 de Wazlawick</strong>, o mapeamento entre o modelo orientado a objetos e o banco relacional PostgreSQL resolve a incompatibilidade de impedância sem comprometer o desempenho:</p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Entidade OO (Python)</th>
+            <th>Tabela Relacional (PostgreSQL)</th>
+            <th>Chaves e Relacionamentos</th>
+            <th>Políticas de Segurança e Índices</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>Host</code></td>
+            <td><code>hosts</code></td>
+            <td><code>PRIMARY KEY (id)</code>, <code>UNIQUE(name)</code></td>
+            <td><code>FORCE ROW LEVEL SECURITY</code>, Índice B-Tree em <code>is_active</code>.</td>
+          </tr>
+          <tr>
+            <td><code>CheckResult</code></td>
+            <td><code>checks</code></td>
+            <td><code>FOREIGN KEY (host_id) REFERENCES hosts(id) ON DELETE CASCADE</code></td>
+            <td>Índice composto <code>(host_id, timestamp DESC)</code> para consultas rápidas.</td>
+          </tr>
+          <tr>
+            <td><code>SNMPMetric</code></td>
+            <td><code>snmp_metrics</code></td>
+            <td><code>FOREIGN KEY (host_id) REFERENCES hosts(id) ON DELETE CASCADE</code></td>
+            <td>Índice B-Tree em <code>timestamp</code> com expurgo em 7 dias via retenção.</td>
+          </tr>
+          <tr>
+            <td><code>Incident</code></td>
+            <td><code>incidents</code></td>
+            <td><code>FOREIGN KEY (host_id) REFERENCES hosts(id)</code></td>
+            <td>Auditoria de causa provável e união de intervalos temporais (*Interval Merging*).</td>
+          </tr>
+          <tr>
+            <td><code>User</code></td>
+            <td><code>users</code></td>
+            <td><code>PRIMARY KEY (id)</code>, <code>UNIQUE(username)</code></td>
+            <td>Bcrypt com limite 72b, <code>must_change_password</code> e <code>locked_until</code>.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- 12. Qualidade e Testes -->
+    <section id="fase3-testes">
+      <h2>12. Qualidade de Software, Autocura e Testes Automatizados</h2>
+
+      <p>Em conformidade com o <strong>Capítulo 12 de Wazlawick</strong>, os contratos e o DCP alimentam diretamente a suíte de testes de software orientados a objetos:</p>
+
+      <div class="card">
+        <h3>Evidências Experimentais e Suíte de 86 Testes no Pytest:</h3>
+        <ul>
+          <li><strong>Validação de Contratos OCL</strong>: Cada pré e pós-condição formalizada no Capítulo 8 é auditada por asserções estritas no arquivo <code>Backend/tests/test_audit_regressions.py</code> (42 testes de regressão);</li>
+          <li><strong>Testes de Concorrência e Carga</strong>: Validação empírica do monitoramento de 126 hosts simultâneos completado em ~1.2s (orçamento de 10s);</li>
+          <li><strong>Autocura (Self-Healing)</strong>: Testes em <code>test_self_healing.py</code> simulando desconexões a frio do PostgreSQL e transições do Circuit Breaker;</li>
+          <li><strong>Checklist Standalone</strong>: Script <code>Backend/tests/alert_logic_checklist.py</code> com 7/7 aprovações nas heurísticas de alerta.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- 13. Banca -->
+    <section id="banca-conformidade">
+      <h2>13. Quadro de Conformidade Metodológica para a Banca de TCC</h2>
+
+      <p>Este resumo consolida as evidências formais exigidas por avaliadores de bancas examinadoras de Sistemas de Informação (IFNMG):</p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Capítulo de Wazlawick</th>
+            <th>Artefato Formal Exigido</th>
+            <th>Implementação Concreta no NetSpot</th>
+            <th>Status de Auditoria</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Cap. 1 e 2</td>
+            <td>Visão Geral e Diagrama de Atividades</td>
+            <td>Sumário executivo do NOC Lite e Diagrama de Atividades com raias operacionais e nós fork/join.</td>
+            <td>✅ Conforme</td>
+          </tr>
+          <tr>
+            <td>Cap. 3</td>
+            <td>Requisitos FURPS+</td>
+            <td>Catálogo completo (RF01–RF04, RNF01–RNF04 e restrições legais/técnicas).</td>
+            <td>✅ Conforme</td>
+          </tr>
+          <tr>
+            <td>Cap. 4 e 5</td>
+            <td>Casos de Uso Alto Nível e Expandidos</td>
+            <td>UC01 a UC05 com fluxos principais, alternativos e de exceção sem atomização de cliques.</td>
+            <td>✅ Conforme</td>
+          </tr>
+          <tr>
+            <td>Cap. 6</td>
+            <td>Diagrama de Sequência de Sistema (DSS)</td>
+            <td>Caixa-preta <code>:Sistema</code> mapeando operações de estado e consultas de telemetria.</td>
+            <td>✅ Conforme</td>
+          </tr>
+          <tr>
+            <td>Cap. 7</td>
+            <td>Modelo Conceitual de Domínio</td>
+            <td>Classes conceituais puras, multiplicidades, associações derivadas e transições monotônicas.</td>
+            <td>✅ Conforme</td>
+          </tr>
+          <tr>
+            <td>Cap. 8</td>
+            <td>Contratos de Operação em OCL</td>
+            <td>Pré e pós-condições matemáticas inequívocas para criação, alteração e vínculos de instâncias.</td>
+            <td>✅ Conforme</td>
+          </tr>
+          <tr>
+            <td>Cap. 9</td>
+            <td>Padrões GRASP e DCP</td>
+            <td>Atribuição metódica (Especialista, Criador, Controlador, Invenção Pura) e DCP completo.</td>
+            <td>✅ Conforme</td>
+          </tr>
+          <tr>
+            <td>Cap. 10</td>
+            <td>Projeto de Interface WebML</td>
+            <td>Unidades de dados (Flip Cards 3D), unidades de índice (Tabela NOC) e navegação WCAG 2.1 AA.</td>
+            <td>✅ Conforme</td>
+          </tr>
+          <tr>
+            <td>Cap. 11</td>
+            <td>Persistência e Mapeamento ORM</td>
+            <td>Tabelas relacionais PostgreSQL, chaves estrangeiras, índices e segurança RLS.</td>
+            <td>✅ Conforme</td>
+          </tr>
+          <tr>
+            <td>Cap. 12</td>
+            <td>Geração de Código e Testes</td>
+            <td>Código modular limpo e 86 testes automatizados no Pytest com 100% de aprovação.</td>
+            <td>✅ Conforme</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <footer class="doc-footer">
+      <p>Documento de Análise e Projeto de Sistemas Orientados a Objetos do <strong>NetSpot (NOC Lite)</strong>.</p>
+      <p>Desenvolvedor: <strong>Ronaldo Crispim</strong> | Orientação: <strong>Sistemas de Informação — IFNMG Januária (2026)</strong>.</p>
+      <p>Fundamentação Teórica: <em>WAZLAWICK, Raul Sidnei. Análise e Projeto de Sistemas de Informação Orientados a Objetos. 2ª ed. Elsevier / SBC, 2011.</em></p>
+    </footer>
+
+  </main>
+
+  <script>
+    const links = document.querySelectorAll('nav.toc a');
+    window.addEventListener('scroll', () => {
+      let current = '';
+      const sections = document.querySelectorAll('section');
+      sections.forEach(section => {
+        const sectionTop = section.offsetTop;
+        if (pageYOffset >= sectionTop - 120) {
+          current = section.getAttribute('id');
+        }
+      });
+
+      links.forEach(link => {
+        link.classList.remove('active');
+        if (link.getAttribute('href') === `#${current}`) {
+          link.classList.add('active');
+        }
+      });
+    });
+  </script>
+</body>
+</html>
