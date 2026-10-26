@@ -102,12 +102,32 @@ def sync_chat_backup():
         synced_count += 1
         print(f"[OK] Sessão sincronizada: {conv_id} ({mod_time_str}) -> .agents/historico_chat/{conv_id}/")
 
+    # Catalogar também sessões históricas arquivadas em DEST_DIR que não estavam na lista ativa
+    synced_ids = {c["conv_id"] for c in sessions_manifest}
+    for item in os.listdir(DEST_DIR):
+        item_path = os.path.join(DEST_DIR, item)
+        if os.path.isdir(item_path) and item not in synced_ids:
+            archived_transcript = os.path.join(item_path, "transcript.jsonl")
+            if os.path.isfile(archived_transcript):
+                archived_files = [f for f in ["transcript.jsonl", "transcript_full.jsonl"] if os.path.isfile(os.path.join(item_path, f))]
+                mtime = os.path.getmtime(archived_transcript)
+                mod_time_str = datetime.fromtimestamp(mtime, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+                sessions_manifest.append({
+                    "conv_id": item,
+                    "last_modified": mod_time_str,
+                    "is_active_session": False,
+                    "files": archived_files
+                })
+
+    # Ordena o manifesto do mais recente para o mais antigo
+    sessions_manifest.sort(key=lambda x: x["last_modified"], reverse=True)
+
     # Salva manifesto de sessões
     manifest_path = os.path.join(DEST_DIR, "manifesto_sessoes.json")
     with open(manifest_path, "w", encoding="utf-8") as f:
         json.dump(sessions_manifest, f, indent=2, ensure_ascii=False)
 
-    print(f"[SUCESSO] Total de {synced_count} sessões salvas em .agents/historico_chat/")
+    print(f"[SUCESSO] Total de {len(sessions_manifest)} sessões registradas no manifesto ({synced_count} sincronizadas agora)")
     return True
 
 
