@@ -497,3 +497,4 @@ draw_dashed_arrow((1930, 450), (1280, 450), "<<monitors>>")
 # Salvar imagem
 img.save(IMG_PATH, "JPEG", quality=95, optimize=True)
 print(f"✅ Sucesso: Diagrama de Classes UML gerado em '{IMG_PATH}' ({WIDTH}x{HEIGHT} px, 300 DPI)!")
+

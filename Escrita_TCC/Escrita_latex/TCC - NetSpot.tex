@@ -231,14 +231,18 @@ With the growing expansion of connectivity, ensuring the availability and perfor
 AMQP & Advanced Message Queuing Protocol \\
 API & Application Programming Interface \\
 ARP & Address Resolution Protocol \\
+ASGI & Asynchronous Server Gateway Interface \\
+BNDES & Banco Nacional de Desenvolvimento Econômico e Social \\
 Bps & Bytes per Second \\
 CIDR & Classless Inter-Domain Routing \\
 CPU & Central Processing Unit \\
 CSS & Cascading Style Sheets \\
 DCP & Diagrama de Classes de Projeto \\
+DHCP & Dynamic Host Configuration Protocol \\
 DLQ & Dead Letter Queue \\
 DLX & Dead Letter Exchange \\
 DNS & Domain Name System \\
+DOM & Document Object Model \\
 DSS & Diagrama de Sequência de Sistema \\
 DTO & Data Transfer Object \\
 EDA & Event-Driven Architecture \\
@@ -252,31 +256,45 @@ IFNMG & Instituto Federal do Norte de Minas Gerais \\
 IoT & Internet of Things \\
 IP & Internet Protocol \\
 ISO & International Organization for Standardization \\
+ITIL & Information Technology Infrastructure Library \\
 JS & JavaScript \\
 JWT & JSON Web Token \\
+KPI & Key Performance Indicator \\
 LAN & Local Area Network \\
 MIB & Management Information Base \\
+MTTR & Mean Time to Repair (Tempo Médio de Reparo) \\
+NAT & Network Address Translation \\
 NOC & Network Operations Center \\
 OCL & Object Constraint Language \\
 OID & Object Identifier \\
 OLS & Ordinary Least Squares \\
 ORM & Object-Relational Mapping \\
 OSI & Open Systems Interconnection \\
+OWASP & Open Web Application Security Project \\
 PDU & Protocol Data Unit \\
 QoS & Quality of Service \\
 RAM & Random Access Memory \\
+REST & Representational State Transfer \\
 RFC & Request for Comments \\
 RLS & Row Level Security \\
+SGBD & Sistema Gerenciador de Banco de Dados \\
 SLA & Service Level Agreement \\
 SNMP & Simple Network Management Protocol \\
+SOLID & Princípios de Design Orientado a Objetos (SRP, OCP, LSP, ISP, DIP) \\
 SPA & Single Page Application \\
+SVG & Scalable Vector Graphics \\
 TCP & Transmission Control Protocol \\
+TI & Tecnologia da Informação \\
 TIC & Tecnologia da Informação e Comunicação \\
 UDP & User Datagram Protocol \\
 UI & User Interface \\
+UML & Unified Modeling Language \\
+UTC & Coordinated Universal Time (Tempo Universal Coordenado) \\
+UUID & Universally Unique Identifier \\
 UX & User Experience \\
 WCAG & Web Content Accessibility Guidelines \\
 W3C & World Wide Web Consortium \\
+XSS & Cross-Site Scripting \\
 \end{longtable}
 \clearpage
 
@@ -293,7 +311,7 @@ Nesse cenário, problemas relacionados ao congestionamento, latência, perda de 
 
 Diante desse contexto, este trabalho aborda a seguinte questão central de pesquisa: \textbf{Como identificar falhas e degradações de desempenho em dispositivos conectados antes que elas afetem a disponibilidade dos serviços, mantendo um baixo custo computacional e operacional?}
 
-A hipótese que norteou o desenvolvimento deste estudo é que a implementação de um sistema de monitoramento pautado em uma Arquitetura Orientada a Eventos (EDA) assíncrona, combinada com mecanismos inteligentes de autocura (\textit{Self-Healing}) e desativação temporária de \textit{polling} (\textit{Circuit Breaker}),do qual permite detectar anomalias e orquestrar alertas preventivos de forma antecipada, reduzindo drasticamente o \textit{overhead} computacional em comparação às abordagens tradicionais de \textit{polling} síncrono e relacional.
+A hipótese que norteou o desenvolvimento deste estudo é que a implementação de um sistema de monitoramento pautado em uma Arquitetura Orientada a Eventos (EDA) assíncrona, combinada com mecanismos inteligentes de autocura (\textit{Self-Healing}) e desativação temporária de \textit{polling} (\textit{Circuit Breaker}), permite detectar anomalias e emitir alertas preventivos antecipadamente, reduzindo drasticamente o \textit{overhead} computacional em comparação às abordagens tradicionais de \textit{polling} síncrono e relacional.
 
 Para responder a este problema e validar a hipótese proposta, foi desenvolvido o \textbf{NetSpot (NOC Lite)}, um sistema completo de observabilidade de redes, cuja arquitetura, componentes e resultados experimentais são apresentados e analisados ao longo deste trabalho.
 
@@ -308,13 +326,13 @@ Desenvolver e validar o \textbf{NetSpot}, um sistema de monitoramento de redes d
 \item Desenvolver algoritmos estatísticos de monitoramento NOC para cálculo contínuo de \textit{Health Score} (0 a 100\%), disponibilidade geral, variação de latência (\textit{Jitter}) e classificação de tendência de estabilidade.
 \item Criar um fluxo de automação no N8N integrado à API do Telegram para disparo de alertas preventivos estilizados com de-duplicação e controle de fadiga de alertas.
 \item Projetar uma interface de usuário \textit{Single Page Application} (SPA) em HTML5/CSS/JavaScript com tema \textit{Dark and White}, layout em \textit{grid} de 3 colunas e atualização otimizada da interface.
-\item Validar o sistema em ambientes reais nas instalações do IFNMG e de laboratório de larga escala no framework Kathará (40 nós monitorados distribuídos em topologia roteada) também submetendo o código a uma suíte de 61 testes automatizados via Pytest.
+\item Validar o sistema em ambientes reais nas instalações do IFNMG e de laboratório de larga escala no framework Kathará (topologia padrão com 40 nós e cenário de estresse com 126 nós monitorados distribuídos em topologia roteada) também submetendo o código a uma suíte de 86 testes automatizados via Pytest.
 \end{itemize}
 
 \subsection{JUSTIFICATIVA}
 A motivação deste trabalho fundamenta-se na necessidade de uma solução que priorize a simplicidade de uso, a praticidade operacional e a rápida implantação, contrapondo-se à elevada complexidade de parametrização e manutenção associada às plataformas tradicionais de monitoramento corporativo em instituições públicas de ensino e em organizações de pequeno e médio porte.
 
-Para contextualizar a relevância desta pesquisa, faz-se imperativo definir tecnicamente o que caracteriza o porte empresarial no cenário nacional. Segundo os critérios estabelecidos pelo Instituto Brasileiro de Geografia e Estatística \cite{ibge2023classificacao} e pelo Serviço Brasileiro de Apoio às Micro e Pequenas Empresas \cite{sebrae2023anuario}, conjugados aos parâmetros financeiros da Lei Complementar nº 123/2006 \cite{brasil2006lei123} (Estatuto Nacional da Microempresa e Empresa de Pequeno Porte) e do Banco Nacional de Desenvolvimento Econômico e Social (BNDES), as organizações classificam-se em:
+A relevância desta pesquisa fundamenta-se na caracterização técnica do porte empresarial no cenário nacional. Segundo os critérios estabelecidos pelo Instituto Brasileiro de Geografia e Estatística \cite{ibge2023classificacao} e pelo Serviço Brasileiro de Apoio às Micro e Pequenas Empresas \cite{sebrae2023anuario}, conjugados aos parâmetros financeiros da Lei Complementar nº 123/2006 \cite{brasil2006lei123} (Estatuto Nacional da Microempresa e Empresa de Pequeno Porte) e do Banco Nacional de Desenvolvimento Econômico e Social (BNDES), as organizações classificam-se em:
 
 \begin{itemize}[leftmargin=1.25cm]
 \item \textbf{Micro e Pequenas Empresas (MPEs)}: Compreendem entidades com até 9 colaboradores (micro) e de 10 a 49 colaboradores (pequena) no setor de comércio e serviços, ou até 19 e de 20 a 99 empregados no setor industrial. Sob a métrica financeira, caracterizam-se por auferir receita operacional bruta anual de até R\$ 360.000,00 (microempresa) e de R\$ 360.000,01 até R\$ 4.800.000,00 (pequeno porte). Em termos de Tecnologia da Informação e Comunicação (TIC), essas organizações operam com infraestruturas bastante modestas, compostas por um único servidor de uso compartilhado ou pequenas instâncias virtuais, switches não gerenciáveis e roteadores residenciais ou de borda unificada, não dispondo de equipes de NOC dedicadas nem de margem orçamentária para imobilizar hardware de alto custo exclusivamente para tarefas de gerência.
@@ -322,7 +340,7 @@ Para contextualizar a relevância desta pesquisa, faz-se imperativo definir tecn
 \item \textbf{Grandes Empresas}: Caracterizam-se por contar com mais de 100 colaboradores no comércio/serviços (ou 500+ no segmento fabril) e faturamento anual superior a R\$ 300 milhões. Dispõem de datacenters redundantes, topologias de alta complexidade com equipamentos de comutação de alta velocidade, centros de operações de rede (NOC) funcionando em regime 24/7 e orçamentos substanciais para contratação de consultorias especializadas e administração de plataformas corporativas de grande escala.
 \end{itemize}
 
-Nesse contexto, constata-se uma demanda concreta por soluções especializadas no estilo NOC Lite — ferramentas leves, objetivas e intuitivas — que priorizem a praticidade imediata de implantação (\textit{turn-key}), a observabilidade proativa em tempo real e a facilidade de uso, sem impor custos financeiros de licenciamento ou sobrecarga severa de hardware. O NetSpot preenche essa lacuna ao adotar uma arquitetura orientada a eventos assíncrona, desacoplada e conteinerizada, garantindo que o consumo de CPU do servidor de monitoramento permaneça abaixo de 10\% e a ocupação de memória sob 600 MB, proporcionando uma alternativa de engenharia prática, robusta e acessível para administradores de rede de instituições de ensino e empresas de pequeno e médio porte.
+Nesse contexto, constata-se uma demanda concreta por soluções especializadas no estilo NOC Lite — ferramentas leves, objetivas e intuitivas — que priorizem a praticidade imediata de implantação (\textit{turn-key}), a observabilidade proativa em tempo real e a facilidade de uso, sem impor custos financeiros de licenciamento ou sobrecarga severa de hardware. O NetSpot preenche essa lacuna ao adotar uma arquitetura orientada a eventos assíncrona, desacoplada e conteinerizada, garantindo que o consumo de CPU do servidor de monitoramento permaneça abaixo de 10\% e a ocupação de memória sob 600 MB, proporcionando uma alternativa de engenharia prática, resiliente e acessível para administradores de rede de instituições de ensino e empresas de pequeno e médio porte.
 
 \section{REFERENCIAL TEÓRICO}
 Esta seção apresenta os fundamentos teóricos que sustentam o projeto do NetSpot, abordando arquitetura de redes, o modelo de gerenciamento FCAPS, a especificação do protocolo SNMP e os trabalhos correlatos na literatura.
@@ -885,14 +903,14 @@ O sistema incorpora um motor nativo de varredura assíncrona de sub-redes locais
 \begin{itemize}[leftmargin=1.25cm]
 \item \textbf{Varredura CIDR}: O operador informa uma faixa de endereçamento (ex.: \texttt{192.168.1.0/24}). O backend valida a segurança da requisição, aceitando máscaras de até \texttt{/20} (limite máximo de 4.096 endereços simultâneos para evitar sobrecarga de hardware);
 \item \textbf{Descoberta e Seleção}: Uma requisição de sondagem varre os endereços ativos. Os nós responsivos são exibidos em uma lista com caixas de seleção (\textit{checkboxes});
-\item \textbf{Importação em Lote Inteligente}: O acionamento do botão "Adicionar selecionados" dispara o endpoint \texttt{/network/import}, que cadastra os equipamentos no banco de dados habilitando automaticamente o monitoramento SNMP e ICMP. Caso o dispositivo já tenha constado anteriormente no sistema em estado inativo, o motor reativa o ativo preservando a integridade histórica.
+\item \textbf{Importação em Lote Inteligente}: O acionamento do botão \textit{Adicionar selecionados} dispara o endpoint \texttt{/network/import}, que cadastra os equipamentos no banco de dados habilitando automaticamente o monitoramento SNMP e ICMP. Caso o dispositivo já tenha constado anteriormente no sistema em estado inativo, o motor reativa o ativo preservando a integridade histórica.
 \end{itemize}
 
 \subsubsection{Barra de Filtragem e Busca Instantânea}
 Para permitir localização imediata de ativos em redes com dezenas de nós, o painel dispõe de:
 \begin{itemize}[leftmargin=1.25cm]
 \item \textbf{Busca Textual}: Campo reativo que filtra os cartões de host em tempo real conforme a digitação do operador, aceitando correspondências parciais por nome do equipamento ou endereço IP;
-\item \textbf{Filtro por Estado Operacional}: Seletor \textit{dropdown} que segrega os ativos nas categorias "Todos os Status", "Online" (verde), "Offline" (vermelho) e "Degradado" (amarelo).
+\item \textbf{Filtro por Estado Operacional}: Seletor \textit{dropdown} que segrega os ativos nas categorias \textit{Todos os Status}, \textit{Online} (verde), \textit{Offline} (vermelho) e \textit{Degradado} (amarelo).
 \end{itemize}
 
 \subsubsection{Arquitetura de Flip Cards 3D (3 Faces por Card de Host)}
@@ -935,7 +953,7 @@ Com o propósito de atender às diretrizes internacionais de acessibilidade na w
 \item \textbf{Confinamento de Foco em Diálogos Modais (\textit{Focus Trap})}: Os modais de edição, cadastro, histórico, descoberta e lixeira implementam interceptação programática do foco por JavaScript. Ao abrir uma janela sobreposta, o foco é transferido automaticamente ao primeiro elemento acionável e mantido em laço fechado durante a navegação pela tecla \texttt{Tab}, prevenindo dispersão para elementos ocultos ao fundo. O fechamento é suportado universalmente pela tecla \texttt{Escape}, restaurando o foco ao botão de origem;
 \item \textbf{Semântica ARIA e Rótulos Descritivos}: A árvore de acessibilidade é enriquecida com atributos WAI-ARIA (\texttt{aria-label}, \texttt{aria-hidden}, \texttt{role="dialog"} e \texttt{aria-live}), garantindo que leitores de tela interpretem adequadamente transições de status, botões de ícone puro e gráficos vetoriais;
 \item \textbf{Ergonomia dos Cartões 3D e Indicadores de Estado}: Cada cartão de host dispõe de um indicador numérico sutil de face ativa (\texttt{1/3}, \texttt{2/3} e \texttt{3/3}), acompanhado de dicas de contexto (\textit{tooltips}) e botões de paginação dedicados, eliminando a ambiguidade visual durante rotações tridimensionais;
-\item \textbf{Ações em Massa e Proteção contra Exclusão Involuntária}: O módulo de Descoberta de Rede disponibiliza botões ergonômicos de seleção e desmarcação global ("Selecionar Todos" e "Desmarcar Todos"), enquanto a lixeira de ativos conta com diálogo secundário de confirmação de segurança antes da execução do expurgo definitivo, prevenindo perda acidental de dados.
+\item \textbf{Ações em Massa e Proteção contra Exclusão Involuntária}: O módulo de Descoberta de Rede disponibiliza botões ergonômicos de seleção e desmarcação global (\textit{Selecionar Todos} e \textit{Desmarcar Todos}), enquanto a lixeira de ativos conta com diálogo secundário de confirmação de segurança antes da execução do expurgo definitivo, prevenindo perda acidental de dados.
 \end{itemize}
 
 \subsubsection{Central de Gestão de Incidentes (\texttt{incidents.html})}
@@ -1029,7 +1047,7 @@ Essa contingência da infraestrutura real fundamentou e justificou plenamente a 
 
 O ambiente físico de experimentação compreendeu computadores de mesa do laboratório conectados à rede local institucional, operando em arquitetura heterogênea sob os sistemas operacionais Ubuntu Linux 22.04 LTS e Microsoft Windows 10/11 Pro. Foram devidamente parametrizados os serviços de agente SNMP nativos em cada ecossistema: o pacote \texttt{snmpd} (\textit{Net-SNMP}) no Linux e o recurso nativo de SNMP do Windows vinculado à comunidade de leitura padronizada \texttt{netspot}.
 
-O NetSpot executou com sucesso a rotina de varredura automática de rede (\texttt{LAN Discovery}) sobre a sub-rede dos laboratórios de ensino superior, detectando os nós físicos e integrando-os de forma imediata ao painel SPA. Durante os testes práticos de desconexão física de cabos de rede (simulando perda de portadora física) e derrubada controlada de instâncias locais de serviços web, o sistema identificou os incidentes em tempo real, rebaixou o \textit{Health Score} instantaneamente para níveis críticos e encaminhou os alertas estruturados para o canal do Telegram via N8N, atestando a robustez e a aplicabilidade da ferramenta em infraestruturas reais de ensino.
+O NetSpot executou com sucesso a rotina de varredura automática de rede (\texttt{LAN Discovery}) sobre a sub-rede dos laboratórios de ensino superior, detectando os nós físicos e integrando-os de forma imediata ao painel SPA. Durante os testes práticos de desconexão física de cabos de rede (simulando perda de portadora física) e derrubada controlada de instâncias locais de serviços web, o sistema identificou os incidentes em tempo real, rebaixou o \textit{Health Score} instantaneamente para níveis críticos e encaminhou os alertas estruturados para o canal do Telegram via N8N, atestando a tolerância a falhas e a aplicabilidade da ferramenta em infraestruturas reais de ensino.
 
 \subsection{SUÍTE DE TESTES AUTOMATIZADOS (PYTEST)}
 A integridade das regras de negócio, a consistência dos algoritmos matemáticos e a segurança dos microsserviços foram formalmente validadas através de uma suíte composta por 86 testes automatizados desenvolvidos com a biblioteca Pytest (\texttt{Backend/tests/}), cobrindo tanto testes de unidade analíticos quanto testes de integração assíncronos e auditoria estrita de regressões de segurança. Os resultados estão sintetizados na Tabela \ref{tab:resumo_testes}:
@@ -1099,7 +1117,7 @@ O desenvolvimento e a validação do \textbf{NetSpot (NOC Lite)} demonstraram a 
 
 A fundamentação da modelagem orientada a objetos na metodologia de \citeonline{wazlawick2011analise}, articulada à Arquitetura Orientada a Eventos (EDA), ao motor assíncrono em Python (3.11/3.12), ao barramento RabbitMQ com tolerância a falhas via \textit{Dead Letter Queue} e aos mecanismos de resiliência (\textit{Circuit Breaker}, autocura de pools, \textit{Anti-Flapping} composto e \textit{Graceful Shutdown}), comprovou ser altamente eficiente para eliminar gargalos de I/O, prevenir tempestades de pacotes e garantir zero perda de eventos. A modelagem orientada a objetos das entidades de domínio e classes de serviço, associada à rica interface web SPA com design \textit{Dark and White}, cartões 3D com 3 faces de telemetria, modo Tabela NOC de alta densidade e conformidade de acessibilidade digital (WCAG 2.1 AA), conferiu ao operador uma experiência de uso ágil e ergonômica, dispensando parametrizações complexas.
 
-A eficácia do sistema foi validada empiricamente através de dois cenários de larga escala simulados no Kathará (topologia padrão com 40 nós roteados e topologia escalada de estresse com 126 nós monitorados em alta densidade sob rede \texttt{10.0.0.0/22}), complementada pela implantação prática em estações físicas de trabalho reais no Laboratório 2 do IFNMG -- Campus Januária e pela suíte de 86 testes automatizados (100\% de aprovação via Pytest). Em todos os cenários avaliados, o consumo de recursos manteve-se estritamente abaixo do teto de 12\% de CPU e menos de 600 MB de RAM, consolidando o NetSpot como uma ferramenta NOC Lite prática, robusta e acessível para instituições públicas e organizações de pequeno e médio porte.
+A eficácia do sistema foi validada empiricamente através de dois cenários de larga escala simulados no Kathará (topologia padrão com 40 nós roteados e topologia escalada de estresse com 126 nós monitorados em alta densidade sob rede \texttt{10.0.0.0/22}), complementada pela implantação prática em estações físicas de trabalho reais no Laboratório 2 do IFNMG -- Campus Januária e pela suíte de 86 testes automatizados (100\% de aprovação via Pytest). Em todos os cenários avaliados, o consumo de recursos manteve-se estritamente abaixo do teto de 12\% de CPU e menos de 600 MB de RAM, consolidando o NetSpot como uma ferramenta NOC Lite prática, resiliente e acessível para instituições públicas e organizações de pequeno e médio porte.
 
 Como perspectivas de trabalhos futuros decorrentes das limitações conhecidas do escopo atual, propõe-se:
 \begin{enumerate}[leftmargin=1.25cm]
