@@ -924,6 +924,16 @@ A visualização principal dos dispositivos organiza-se em um \textit{grid} resp
 
 O topo de cada cartão disponibiliza uma barra de ações rápidas com ícones SVG vetoriais para visualização do histórico de checagens, abertura de gráficos de latência, abertura de gráficos SNMP, gráficos de disponibilidade por tipo, edição cadastral e exclusão.
 
+A Figura~\ref{fig:painel_dashboard} apresenta a interface operacional do NetSpot em modo escuro (\textit{Dark Theme}), evidenciando a barra superior com os indicadores executivos de saúde da rede e a disposição dos cartões multifuncionais nas suas respectivas faces de telemetria.
+
+\begin{figure}[H]
+\centering
+\caption{Painel de monitoramento do NetSpot em modo escuro com indicadores de desempenho e cartões multifuncionais}
+\label{fig:painel_dashboard}
+\includegraphics[width=0.98\textwidth]{painel_dashboard.png}
+\fonte{Autoria própria (2026).}
+\end{figure}
+
 \subsubsection{Engenharia de Performance: Atualização Cirúrgica do DOM, Remoção Otimista e Polling Adaptativo}
 A aplicação emprega técnicas avançadas de engenharia de software para conciliar atualizações em tempo real com máxima economia de recursos no cliente e no servidor:
 \begin{itemize}[leftmargin=1.25cm]
@@ -965,6 +975,16 @@ A plataforma possui uma página dedicada à operação formal de incidentes do N
 \item Duração total da indisponibilidade em minutos/segundos para análise de MTTR;
 \item Emissão de notificações sonoras e visuais nativas do navegador através da Web Notifications API (\texttt{Notification.permission}).
 \end{itemize}
+
+A Figura~\ref{fig:painel_incidentes} ilustra a interface dedicada da Central de Incidentes do NetSpot, exibindo o sumário de confiabilidade (MTTR e alertas), os chips de filtragem de estado e a listagem sequencial de falhas ativas e resolvidas com o diagnóstico de causa provável.
+
+\begin{figure}[H]
+\centering
+\caption{Central de gestão de incidentes do NetSpot com linha do tempo de eventos operacionais e diagnóstico heurístico}
+\label{fig:painel_incidentes}
+\includegraphics[width=0.98\textwidth]{painel_incidentes.png}
+\fonte{Autoria própria (2026).}
+\end{figure}
 
 \subsubsection{Camada de Segurança, Sessão, Autenticação JWT e Hardening Web}
 O acesso ao sistema é protegido por autenticação baseada em JSON Web Tokens (JWT). As rotas da SPA verificam a existência do token no \texttt{localStorage} antes da renderização de qualquer componente, redirecionando usuários não autenticados para a tela de login (\texttt{login.html}). Todas as chamadas de API são envelopadas pela função utilitária \texttt{fetchWithAuth()}, que injeta o cabeçalho \texttt{Authorization: Bearer <token>} e intercepta erros \texttt{401 Unauthorized}, disparando avisos \textit{Toast} e encerrando a sessão com segurança. No primeiro acesso de um operador com credenciais padrão, o sistema aciona compulsoriamente o modal de troca de senha (\texttt{changePwdModal}) antes de liberar o acesso às funções de monitoramento.
