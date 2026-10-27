@@ -196,9 +196,9 @@ Ao Instituto Federal do Norte de Minas Gerais (IFNMG), essencial no meu processo
 \begin{flushright}
 \begin{minipage}{0.52\textwidth}
 \begin{flushright}
-“Educação não transforma o mundo.\\
+``Educação não transforma o mundo.\\
 Educação muda as pessoas.\\
-Pessoas mudam o mundo.”\\[0.8em]
+Pessoas mudam o mundo.''\\[0.8em]
 (Paulo Freire)
 \end{flushright}
 \end{minipage}
@@ -644,7 +644,7 @@ Para facilitar o entendimento conceitual, o protocolo pode ser compreendido atra
   \item \texttt{host\_name / ip\_address}: Identificação cadastral e endereço de rede do equipamento examinado;
   \item \texttt{health\_score}: Índice estatístico de integridade consolidado (0 a 100 pontos);
   \item \texttt{network\_metrics}: Indicadores de conectividade, incluindo tempo de resposta ICMP (\textit{latency\_ms}), oscilação de atraso (\textit{jitter\_ms}) e percentual de perda de pacotes;
-  \item \texttt{tcp_services}: Dicionário relacionando cada porta TCP monitorada com seu status booleano de resposta (ex.: SSH :22, PostgreSQL :5432);
+  \item \texttt{tcp\_services}: Dicionário relacionando cada porta TCP monitorada com seu status booleano de resposta (ex.: SSH :22, PostgreSQL :5432);
   \item \texttt{snmp\_hardware}: Telemetria de hardware com os percentuais de uso de CPU, memória RAM, ocupação de disco e tráfego instantâneo em Bytes por segundo;
   \item \texttt{probable\_cause}: Diagnóstico em linguagem natural gerado pelo motor analítico (ex.: \textit{``Porta 5432 recusada + CPU saturada''}), orientando imediatamente a tomada de decisão da equipe técnica;
   \item \texttt{incident\_lifecycle}: Instruções de ciclo de vida do incidente (\texttt{OPEN} ou \texttt{CLOSED}) com duração acumulada da indisponibilidade.
@@ -899,7 +899,7 @@ onde $x_i = i$ representa o índice ordinal discreto da amostra temporal, $L_i$ 
   \end{itemize}
 \end{itemize}
 
-Complementarmente, a função \texttt{infer\_probable_cause()} (\texttt{Backend/routes/hosts.py}) correlaciona esses vetores analíticos em uma árvore de decisão determinística de alta performance:
+Complementarmente, a função \texttt{infer\_probable\_cause()} (\texttt{Backend/routes/hosts.py}) correlaciona esses vetores analíticos em uma árvore de decisão determinística de alta performance:
 \begin{enumerate}[leftmargin=1.25cm]
 \item \textbf{Atalho de Alto Desempenho (\textit{Fast-Path})}: Hosts saudáveis em estado \texttt{UP}, com ping responsivo, sem incidentes e com recursos locais abaixo de 90\% são rotulados instantaneamente como ``Operação normal'', sem onerar o banco de dados com varreduras recursivas;
 \item \textbf{Diagnóstico de Firewall}: Se a Equação \ref{eq:icmp_firewall_comp} for satisfeita, emite o diagnóstico transparente ``ICMP bloqueado por firewall / Serviço operando normalmente'';
@@ -908,7 +908,7 @@ Complementarmente, a função \texttt{infer\_probable_cause()} (\texttt{Backend/
 \end{enumerate}
 
 \subsection{FLUXOGRAMA DE DECISÕES E ORQUESTRAÇÃO DE EVENTOS AMQP}
-O ciclo de vida operacional do NetSpot fundamenta-se nos preceitos de Arquitetura Orientada a Eventos e Padrões de Integração Corporativa \cite{hohpe2004enterprise}, estruturado de forma desacoplada através do barramento de mensageria assíncrona RabbitMQ, orquestrado pela classe \texttt{QueueManager} (\texttt{Backend/mq_manager.py}), conforme ilustrado no fluxograma da Figura \ref{fig:fluxograma_decisoes}.
+O ciclo de vida operacional do NetSpot fundamenta-se nos preceitos de Arquitetura Orientada a Eventos e Padrões de Integração Corporativa \cite{hohpe2004enterprise}, estruturado de forma desacoplada através do barramento de mensageria assíncrona RabbitMQ, orquestrado pela classe \texttt{QueueManager} (\texttt{Backend/mq\_manager.py}), conforme ilustrado no fluxograma da Figura \ref{fig:fluxograma_decisoes}.
 
 \begin{figure}[H]
 \centering
@@ -922,10 +922,10 @@ A arquitetura de mensageria assenta-se em três pilares fundamentais de confiabi
 \begin{itemize}[leftmargin=1.25cm]
 \item \textbf{Filas Duráveis e Mensagens Persistentes}: O agendador enfileira tarefas de sondagem na fila durável \texttt{netspot.host\_checks}, enquanto as transições de estado e alarmes são publicados na fila \texttt{netspot.notifications}. Todas as mensagens utilizam modo de entrega persistente (\texttt{DeliveryMode.PERSISTENT}), assegurando que nenhuma notificação seja perdida mesmo em caso de reinício intempestivo do broker;
 \item \textbf{Controle de Fluxo e Dead Letter Queue (DLQ)}: O canal AMQP configura limite de pré-busca (\texttt{prefetch\_count=10}), impedindo o congestionamento de memória no consumidor assíncrono. Em caso de falhas irrecuperáveis no processamento de mensagens, os eventos são automaticamente roteados via \textit{Dead Letter Exchange} (\texttt{netspot.dlx}) para a fila de isolamento \texttt{netspot.dlq}, permitindo auditoria forense sem interromper o fluxo operacional contínuo;
-\item \textbf{Monitor de Autocura de Conexão (\textit{Self-Healing Connection})}: O método \texttt{_monitor_connection_loop()} executa um laço concorrente contínuo a cada 5 segundos. Caso identifique o fechamento acidental da conexão TCP ou do canal com o broker, o sistema aciona rotinas de reconexão automática exponencial e reinscreve transparentemente todos os consumidores de tarefas.
+\item \textbf{Monitor de Autocura de Conexão (\textit{Self-Healing Connection})}: O método \texttt{\_monitor\_connection\_loop()} executa um laço concorrente contínuo a cada 5 segundos. Caso identifique o fechamento acidental da conexão TCP ou do canal com o broker, o sistema aciona rotinas de reconexão automática exponencial e reinscreve transparentemente todos os consumidores de tarefas.
 \end{itemize}
 
-A gestão de alertas incorpora um algoritmo nativo de \textit{Anti-Flapping} com janela de amortecimento (\textit{cooldown}) parametrizável: quando um nó sofre instabilidades físicas repetidas (transitando ciclicamente entre \texttt{UP} e \texttt{DOWN}), o sistema abre o incidente formal no banco de dados e notifica o primeiro evento, suprimindo mensagens redundantes sucessivas dentro do período de histerese para proteger os operadores contra fadiga de alertas (\textit{alert fatigue}). As mensagens estruturadas são consumidas pelo N8N através de webhooks autenticados, formatadas em Markdown com ícones contextuais de severidade (🔴 Crítico/DOWN, 🟡 Atenção/DEGRADED, 🟢 Restabelecido/UP) e despachadas para canais do Telegram.
+A gestão de alertas incorpora um algoritmo nativo de \textit{Anti-Flapping} com janela de amortecimento (\textit{cooldown}) parametrizável: quando um nó sofre instabilidades físicas repetidas (transitando ciclicamente entre \texttt{UP} e \texttt{DOWN}), o sistema abre o incidente formal no banco de dados e notifica o primeiro evento, suprimindo mensagens redundantes sucessivas dentro do período de histerese para proteger os operadores contra fadiga de alertas (\textit{alert fatigue}). As mensagens estruturadas são consumidas pelo N8N através de webhooks autenticados, formatadas em Markdown com ícones contextuais de severidade (Crítico/DOWN, Atenção/DEGRADED, Restabelecido/UP) e despachadas para canais do Telegram.
 
 A gestão do ciclo de vida dos dados históricos no PostgreSQL é governada pelo módulo de retenção parametrizável (\texttt{NETSPOT\_RETENTION\_DAYS}), operando como um requisito não-funcional de sustentabilidade e desempenho contínuo do banco relacional. Um \textit{worker} assíncrono executa limpezas periódicas através de comandos SQL \texttt{DELETE} atômicos orientados por uma data de corte (\textit{cutoff}): expurgam-se registros de checagens pontuais (\texttt{checks}), métricas de telemetria SNMP (\texttt{snmp\_metrics}) e alertas resolvidos anteriores ao limite temporal definido, além de expurgar incidentes já concluídos (\texttt{incidents}). O dimensionamento padrão de 30 dias assegura um histórico operacional suficiente para análises estatísticas de disponibilidade sem comprometer a volumetria de disco, ao passo que a atribuição do valor \texttt{0} desativa a purga para cenários que exijam arquivamento perene.
 
