@@ -4891,6 +4891,7 @@ input[type=number] {
 .app-logo {
     height: 48px;
     width: auto;
+    aspect-ratio: 1762 / 909;
     object-fit: contain;
     transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -4936,6 +4937,7 @@ input[type=number] {
 .login-logo {
     max-height: 80px;
     width: auto;
+    aspect-ratio: 1726 / 902;
     object-fit: contain;
     transition: transform 0.2s ease;
 }
