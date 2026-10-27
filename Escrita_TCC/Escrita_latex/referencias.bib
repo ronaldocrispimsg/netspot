@@ -76,6 +76,41 @@
   year      = {2020},
 }
 
+@book{larman2005utilizando,
+  author    = {Craig Larman},
+  title     = {Utilizando UML e Padrões: Uma Introdução à Análise e ao Projeto Orientados a Objetos e ao Desenvolvimento Iterativo},
+  edition   = {3},
+  address   = {Porto Alegre},
+  publisher = {Bookman},
+  year      = {2007},
+}
+
+@book{martin2019arquitetura,
+  author    = {Robert C. Martin},
+  title     = {Arquitetura Limpa: O Guia do Artesão para Estrutura e Design de Software},
+  edition   = {1},
+  address   = {Rio de Janeiro},
+  publisher = {Alta Books},
+  year      = {2019},
+}
+
+@book{nygard2018release,
+  author    = {Michael T. Nygard},
+  title     = {Release It!: Design and Deploy Production-Ready Software},
+  edition   = {2},
+  address   = {Raleigh},
+  publisher = {Pragmatic Bookshelf},
+  year      = {2018},
+}
+
+@book{hohpe2004enterprise,
+  author    = {Gregor Hohpe and Bobby Woolf},
+  title     = {Enterprise Integration Patterns: Designing, Building, and Deploying Messaging Solutions},
+  address   = {Boston},
+  publisher = {Addison-Wesley},
+  year      = {2004},
+}
+
 % ---------------------------------------------------------------------------
 % ARTIGOS EM PERIÓDICOS (NBR 6023:2018, seção 7.4)
 % ---------------------------------------------------------------------------
@@ -138,6 +173,7 @@
   address = {Lajeado},
   volume  = {17},
   number  = {4},
+  pages   = {112--128},
   year    = {2025},
 }
 
@@ -147,7 +183,29 @@
              for Large-Scale Polling},
   journal = {IEEE Access},
   volume  = {9},
+  pages   = {143491--143503},
   year    = {2021},
+  doi     = {10.1109/ACCESS.2021.3121303},
+}
+
+@article{bonola2018kathara,
+  author  = {Marco Bonola and Lorenzo Bracciale and Pier Luigi Ventre and Stefano Salsano and Giuseppe Siracusano},
+  title   = {Kathar{\'a}: A Lightweight Network Emulation Tool Based on Docker Containers},
+  journal = {IEEE Access},
+  volume  = {6},
+  pages   = {65241--65253},
+  year    = {2018},
+  doi     = {10.1109/ACCESS.2018.2878235},
+}
+
+@article{bentley1977klee,
+  author  = {Jon Louis Bentley},
+  title   = {Algorithms for Klee's Rectangle Problems},
+  journal = {IEEE Transactions on Computers},
+  volume  = {C-28},
+  number  = {10},
+  pages   = {727--736},
+  year    = {1979},
 }
 
 @article{silva2024zabbix,
@@ -188,6 +246,16 @@
   year      = {2017},
 }
 
+@inproceedings{provos1999bcrypt,
+  author    = {Niels Provos and David Mazi{\`e}res},
+  title     = {A Future-Adaptable Password Scheme},
+  booktitle = {Proceedings of the FREENIX Track: 1999 USENIX Annual Technical Conference},
+  address   = {Monterey, CA},
+  publisher = {USENIX Association},
+  pages     = {81--91},
+  year      = {1999},
+}
+
 % ---------------------------------------------------------------------------
 % TRABALHOS ACADÊMICOS (NBR 6023:2018, seção 7.6)
 % ---------------------------------------------------------------------------
@@ -211,18 +279,19 @@
 }
 
 @misc{silva2024prototipo,
-  author = {Silva, J. R. P.},
-  title  = {Um protótipo de aplicação de monitoramento de rede com enfoque
-            no protocolo SNMP},
-  note   = {Trabalho acadêmico},
-  year   = {2024},
+  author       = {Silva, J. R. P.},
+  title        = {Um protótipo de aplicação de monitoramento de rede com enfoque no protocolo SNMP},
+  type         = {Trabalho de Conclusão de Curso (Graduação em Redes de Computadores)},
+  organization = {Instituto Federal de Educação, Ciência e Tecnologia},
+  address      = {Brasil},
+  year         = {2024},
 }
 
 @misc{utfpr2016implementacao,
   author       = {{UNIVERSIDADE TECNOLÓGICA FEDERAL DO PARANÁ}},
   shortauthor  = {{UTFPR}},
-  title        = {Implementação de um sistema de monitoramento utilizando
-                  Zabbix na rede local de ensino},
+  title        = {Implementação de um sistema de monitoramento utilizando Zabbix na rede local de ensino},
+  type         = {Monografia (Especialização em Redes de Computadores)},
   address      = {Curitiba},
   organization = {UTFPR},
   year         = {2016},
@@ -243,6 +312,52 @@
   year         = {1994},
 }
 
+@manual{w3c2018wcag21,
+  author       = {{WORLD WIDE WEB CONSORTIUM}},
+  shortauthor  = {{W3C}},
+  title        = {Web Content Accessibility Guidelines (WCAG) 2.1},
+  organization = {World Wide Web Consortium},
+  year         = {2018},
+  url          = {https://www.w3.org/TR/WCAG21/},
+  urlaccessdate= {7 maio 2026},
+}
+
+@techreport{case1990rfc1157,
+  author        = {Jeffrey D. Case and Mark Fedor and Martin L. Schoffstall and James R. Davin},
+  title         = {A Simple Network Management Protocol (SNMP)},
+  institution   = {Internet Engineering Task Force},
+  type          = {Request for Comments},
+  number        = {1157},
+  year          = {1990},
+  month         = may,
+  url           = {https://datatracker.ietf.org/doc/html/rfc1157},
+  urlaccessdate = {7 maio 2026},
+}
+
+@techreport{harrington2002rfc3411,
+  author        = {David Harrington and Randy Presuhn and Bert Wijnen},
+  title         = {An Architecture for Describing Simple Network Management Protocol (SNMP) Management Frameworks},
+  institution   = {Internet Engineering Task Force},
+  type          = {Request for Comments},
+  number        = {3411},
+  year          = {2002},
+  month         = dec,
+  url           = {https://datatracker.ietf.org/doc/html/rfc3411},
+  urlaccessdate = {7 maio 2026},
+}
+
+@techreport{schulzrinne2003rfc3550,
+  author        = {Henning Schulzrinne and Stephen L. Casner and Ron Frederick and Van Jacobson},
+  title         = {RTP: A Transport Protocol for Real-Time Applications},
+  institution   = {Internet Engineering Task Force},
+  type          = {Request for Comments},
+  number        = {3550},
+  year          = {2003},
+  month         = jul,
+  url           = {https://datatracker.ietf.org/doc/html/rfc3550},
+  urlaccessdate = {7 maio 2026},
+}
+
 @techreport{sipple1991tcpip,
   author        = {Sipple, C. A.},
   title         = {A TCP/IP Tutorial},
@@ -259,45 +374,12 @@
 % PÁGINAS E DOCUMENTOS ELETRÔNICOS (NBR 6023:2018, seção 7.12)
 % ---------------------------------------------------------------------------
 
-@misc{academiaderedes2026tcpip,
-  author        = {{ACADEMIA DE REDES}},
-  title         = {TCP/IP v4},
-  subtitle      = {conceitos e funcionamento},
-  year          = {2026},
-  url           = {https://academiaderedes.com/conteudos/protocolos-de-roteamento/tcp-ip-v4/},
-  urlaccessdate = {7 maio 2026},
-}
-
-@misc{cisco2024protocolos,
-  author        = {{CISCO}},
-  title         = {Protocolos básicos de rede na compreensão do modelo OSI},
-  year          = {2024},
-  url           = {https://community.cisco.com/t5/artigos-gerais/protocolos-b%C3%A1sicos-de-rede-na-compreens%C3%A3o-do-modelo-osi/ta-p/4802414},
-  urlaccessdate = {7 maio 2026},
-}
-
-@misc{hazelcast2026event,
-  author        = {{HAZELCAST}},
-  title         = {Event-Driven Architecture},
-  year          = {2026},
-  url           = {https://hazelcast.com/foundations/event-driven-architecture/event-driven-architecture/},
-  urlaccessdate = {7 maio 2026},
-}
-
 @misc{prometheus2026overview,
   author        = {{PROMETHEUS}},
   title         = {Prometheus Documentation},
   subtitle      = {overview},
   year          = {2026},
   url           = {https://prometheus.io/docs/introduction/overview/},
-  urlaccessdate = {7 maio 2026},
-}
-
-@misc{researchgate2014arquitetura,
-  author        = {{RESEARCHGATE}},
-  title         = {Arquitetura genérica de gerência SNMP},
-  year          = {2014},
-  url           = {https://www.researchgate.net/figure/Figura-3-Arquitetura-generica-de-gerencia-SNMP_fig11_274311473},
   urlaccessdate = {7 maio 2026},
 }
 
