@@ -230,6 +230,7 @@ With the growing expansion of connectivity, ensuring the availability and perfor
 \begin{longtable}{@{}>{\bfseries}p{2.2cm}p{11.5cm}@{}}
 AMQP & Advanced Message Queuing Protocol \\
 API & Application Programming Interface \\
+ARIA & Accessible Rich Internet Applications \\
 ARP & Address Resolution Protocol \\
 ASGI & Asynchronous Server Gateway Interface \\
 BNDES & Banco Nacional de Desenvolvimento Econômico e Social \\
@@ -243,12 +244,15 @@ DLQ & Dead Letter Queue \\
 DLX & Dead Letter Exchange \\
 DNS & Domain Name System \\
 DOM & Document Object Model \\
+DSR & Design Science Research \\
 DSS & Diagrama de Sequência de Sistema \\
 DTO & Data Transfer Object \\
 EDA & Event-Driven Architecture \\
+ES6 & ECMAScript 2015 (6ª Edição) \\
 FURPS+ & Funcionalidade, Usabilidade, Confiabilidade, Desempenho e Suportabilidade \\
 GRASP & General Responsibility Assignment Software Patterns \\
 HTML & HyperText Markup Language \\
+HTML5 & HyperText Markup Language versão 5 \\
 HTTP & HyperText Transfer Protocol \\
 HTTPS & HyperText Transfer Protocol Secure \\
 ICMP & Internet Control Message Protocol \\
@@ -261,7 +265,9 @@ JS & JavaScript \\
 JWT & JSON Web Token \\
 KPI & Key Performance Indicator \\
 LAN & Local Area Network \\
+LTS & Long Term Support \\
 MIB & Management Information Base \\
+MIME & Multipurpose Internet Mail Extensions \\
 MTTR & Mean Time to Repair (Tempo Médio de Reparo) \\
 NAT & Network Address Translation \\
 NOC & Network Operations Center \\
@@ -272,8 +278,10 @@ ORM & Object-Relational Mapping \\
 OSI & Open Systems Interconnection \\
 OWASP & Open Web Application Security Project \\
 PDU & Protocol Data Unit \\
+POSIX & Portable Operating System Interface \\
 QoS & Quality of Service \\
 RAM & Random Access Memory \\
+RBAC & Role-Based Access Control \\
 REST & Representational State Transfer \\
 RFC & Request for Comments \\
 RLS & Row Level Security \\
@@ -292,6 +300,7 @@ UML & Unified Modeling Language \\
 UTC & Coordinated Universal Time (Tempo Universal Coordenado) \\
 UUID & Universally Unique Identifier \\
 UX & User Experience \\
+WAI-ARIA & Web Accessibility Initiative -- Accessible Rich Internet Applications \\
 WCAG & Web Content Accessibility Guidelines \\
 W3C & World Wide Web Consortium \\
 XSS & Cross-Site Scripting \\
@@ -404,7 +413,7 @@ Contudo, ao analisar profundamente a literatura supracitada, constata-se uma lac
 Esta seção descreve os procedimentos metodológicos, o método de engenharia de software e a estratégia experimental adotados no desenvolvimento e na avaliação empírica do NetSpot.
 
 \subsection{CLASSIFICAÇÃO DA PESQUISA}
-Sob a ótica de sua finalidade primordial, esta pesquisa classifica-se como \textbf{aplicada}, uma vez que objetiva conceber, implementar e validar uma solução tecnológica funcional para um problema prático concreto vivenciado na administração de infraestruturas de TIC: o monitoramento proativo, leve e de alta disponibilidade em redes de pequeno e médio porte e laboratórios de ensino.
+Quanto à sua finalidade, esta pesquisa classifica-se como \textbf{aplicada}, uma vez que objetiva conceber, implementar e validar uma solução tecnológica funcional para um problema prático concreto vivenciado na administração de infraestruturas de TIC: o monitoramento proativo, leve e de alta disponibilidade em redes de pequeno e médio porte e laboratórios de ensino.
 
 Quanto à abordagem do problema, o trabalho adota natureza \textbf{quali-quantitativa (mista)}. A vertente qualitativa manifesta-se na modelagem arquitetural orientada a objetos, na análise ergonômica da experiência do operador NOC e na inferência heurística de causa raiz para incidentes operacionais. A vertente quantitativa evidencia-se na mensuração empírica e contínua de variáveis de telemetria de rede (RTT, \textit{jitter}, vazão de tráfego, percentual de SLA e \textit{Health Score}), bem como na aferição do consumo de recursos computacionais (taxa de ocupação de CPU e alocação de memória RAM) sob regimes controlados de estresse.
 
@@ -425,7 +434,7 @@ A elicitação e a estruturação dos contratos operacionais do sistema basearam
 A atribuição de responsabilidades operacionais nas camadas de domínio e de serviço seguiu os padrões GRASP formalizados por \citeonline{larman2005utilizando}, priorizando alta coesão e baixo acoplamento.
 
 \subsection{ESTRATÉGIA HÍBRIDA DE EXPERIMENTAÇÃO E CONTROLE}
-Para assegurar a validade ecológica e a robustez empírica dos resultados sem comprometer a integridade operacional da infraestrutura institucional, concebeu-se uma estratégia experimental híbrida e complementar, combinando a simulação virtualizada em larga escala com a experimentação física controlada.
+Para assegurar a validade experimental dos resultados sem interferir na operação pedagógica dos laboratórios institucionais, concebeu-se uma estratégia de validação híbrida, combinando a emulação virtualizada em larga escala com a experimentação física controlada.
 
 As estações de trabalho e servidores dos laboratórios de informática do IFNMG -- Campus Januária possuem grade horária contínua e prioritária dedicada às aulas pedagógicas dos cursos técnicos e superiores. Consequentemente, intervenções destrutivas prolongadas — tais como saturação massiva de enlaces, alteração de parâmetros de kernel de roteamento, desativação forçada de regras de firewall e injeção de sobrecarga de hardware — revelaram-se inviáveis para evitar qualquer prejuízo às atividades letivas.
 
@@ -493,7 +502,7 @@ O núcleo de persistência organiza-se em torno de 7 entidades principais (\text
   \begin{itemize}
   \item \textit{Identificação e Configuração de Rede}: \texttt{id} (chave primária indexada), \texttt{name} (rótulo identificador exclusivo), \texttt{address} (endereço IPv4, IPv6 ou FQDN), \texttt{port} (porta TCP padrão), \texttt{tcp\_ports} (vetor de portas monitoradas serializado em JSON), \texttt{http\_url} (URL web opcional) e flags booleanas \texttt{http\_enabled} e \texttt{snmp\_enabled};
   \item \textit{Conectividade Web e Latências Detalhadas}: \texttt{last\_http\_protocol} (protocolo negociado, ex.: HTTP/1.1 ou HTTP/2), \texttt{http\_latency} e \texttt{https\_latency} em milissegundos, \texttt{web\_tcp\_port}, \texttt{web\_tcp\_port\_latency}, \texttt{tcp\_http\_port\_latency}, \texttt{tcp\_https\_port\_latency} e os booleanos de conformidade \texttt{tcp\_http\_port\_ok} e \texttt{tcp\_https\_port\_ok};
-  \item \textit{Telemetria de Hardware SNMP}: \texttt{snmp\_community} (comunidade de acesso, padrão \texttt{"netspot"}), \texttt{last\_snmp\_check}, consumo percentual instantâneo de processador (\texttt{cpu\_usage}), memória RAM (\texttt{ram\_usage}) e disco principal (\texttt{disk\_usage}), folga de armazenamento (\texttt{disk\_remaining}), vazão agregada (\texttt{network\_traffic}) e taxas unidirecionais de entrada (\texttt{network\_in\_bps}) e saída (\texttt{network\_out\_bps}), além dos contadores brutos de octetos acumulados (\texttt{last\_net\_in\_octets} e \texttt{last\_net\_out\_octets}) e marcação temporal (\texttt{last\_net\_check});
+  \item \textit{Telemetria de Hardware SNMP}: \texttt{snmp\_community} (comunidade de acesso, padrão \texttt{``netspot''}), \texttt{last\_snmp\_check}, consumo percentual instantâneo de processador (\texttt{cpu\_usage}), memória RAM (\texttt{ram\_usage}) e disco principal (\texttt{disk\_usage}), folga de armazenamento (\texttt{disk\_remaining}), vazão agregada (\texttt{network\_traffic}) e taxas unidirecionais de entrada (\texttt{network\_in\_bps}) e saída (\texttt{network\_out\_bps}), além dos contadores brutos de octetos acumulados (\texttt{last\_net\_in\_octets} e \texttt{last\_net\_out\_octets}) e marcação temporal (\texttt{last\_net\_check});
   \item \textit{Estado Operacional, Contadores e Resolução}: \texttt{status} ($\in \{\text{UP, DOWN, DEGRADED}\}$), granularidades \texttt{status\_ping} e \texttt{status\_tcp}, classificação de urgência (\texttt{severity} $\in \{\text{HEALTHY, WARNING, DEGRADED, CRITICAL}\}$), índice sintético \texttt{health\_score} (0 a 100\%), contadores de persistência de falhas (\texttt{fail\_streak}) e sucessos consecutivos (\texttt{success\_streak}), latências pontuais (\texttt{latency\_ping}, \texttt{latency\_tcp}), carimbos temporais (\texttt{last\_check}, \texttt{last\_preventive\_alert}), mapeamento DNS resolvido (\texttt{last\_resolved\_ip}, \texttt{hostname\_resolved}) e auditoria de TTL (\texttt{dns\_ttl}, \texttt{dns\_ttl\_remaining}, \texttt{last\_ttl\_alert});
   \item \textit{Métricas Estatísticas e Ciclo de Vida}: SLA móvel das últimas 50 amostras (\texttt{sla\_rolling\_ping}, \texttt{sla\_rolling\_tcp}, \texttt{sla\_rolling\_http}), variação de latência em milissegundos (\texttt{jitter\_ms\_ping}, \texttt{jitter\_ms\_tcp}, \texttt{jitter\_ms\_http}), coeficiente angular de regressão (\texttt{slope}, \texttt{slope\_http}), tendência qualitativa (\texttt{trend} e \texttt{trend\_http} $\in \{\text{STABLE, DEGRADING, IMPROVING}\}$), controle de exclusão lógica (\texttt{deleted\_at}, permitindo recuperação na lixeira) e estado de aferição de linha de base (\texttt{baseline\_pending}).
   \item \textit{Desacoplamento e Métodos}: Sob as diretrizes de \textit{Clean Architecture}, os algoritmos estatísticos de cálculo de disponibilidade (\texttt{calculate\_sla()}), oscilação de latência (\texttt{calculate\_jitter()}), vazão de banda (\texttt{calculate\_bandwidth\_delta()}) e consolidação sintética (\texttt{compute\_health\_score()}) foram desacoplados do modelo ORM, residindo como serviços analíticos puros no módulo \texttt{Backend/metrics.py}. A entidade \texttt{Host} preserva o estado relacional e o ciclo de vida de persistência (\textit{soft delete} e restauração via carimbo em \texttt{deleted\_at}).
@@ -502,7 +511,7 @@ O núcleo de persistência organiza-se em torno de 7 entidades principais (\text
 \item \textbf{Incident (\texttt{incidents})}: Gerencia o ciclo de vida dos incidentes operacionais da infraestrutura. Registra o ativo impactado (\texttt{host\_name}), status operacional (\texttt{status} $\in \{\text{OPEN, CLOSED}\}$), diagnóstico causal (\texttt{reason}), instante de abertura da indisponibilidade (\texttt{started\_time}), momento do restabelecimento (\texttt{ended\_time}) e a duração total em segundos (\texttt{duration\_seconds}), viabilizando o cálculo do tempo médio de reparo (\textit{Mean Time to Repair} -- MTTR).
 \item \textbf{Alert (\texttt{alerts})}: Rastreia os eventos de alerta preventivos e corretivos, registrando o host associado (\texttt{host\_id}), tipo de alarme (\texttt{alert\_type}), transição de estado (\texttt{old\_status} para \texttt{new\_status}) e registro temporal (\texttt{timestamp}).
 \item \textbf{DNSCache (\texttt{dns\_cache})}: Provê resolução local de nomes para mitigar requisições repetitivas a servidores DNS raiz, controlando mapeamentos (\texttt{hostname}, \texttt{ip\_list}), tempo de vida nominal (\texttt{ttl}), instante da resolução (\texttt{resolved\_time}) e tempo de expiração (\texttt{expires\_time}).
-\item \textbf{User (\texttt{users})}: Suporta o módulo de autenticação e segurança, contendo \texttt{username}, \texttt{password\_hash} (criptografia com algoritmo Bcrypt com derivação de chaves e salt individualizado), contador de tentativas falhas de login (\texttt{attempts}), bloqueio por força bruta (\texttt{locked}, \texttt{locked\_until}) e sinalizador de troca obrigatória de credenciais no primeiro acesso (\texttt{must\_change\_password}).
+\item \textbf{User (\texttt{users})}: Suporta o módulo de autenticação e segurança, contendo \texttt{username}, \texttt{password\_hash} (criptografia com algoritmo Bcrypt \cite{provos1999bcrypt} com derivação de chaves e salt individualizado), contador de tentativas falhas de login (\texttt{attempts}), bloqueio por força bruta (\texttt{locked}, \texttt{locked\_until}) e sinalizador de troca obrigatória de credenciais no primeiro acesso (\texttt{must\_change\_password}).
 \item \textbf{SNMPMetric (\texttt{snmp\_metrics})}: Tabela dedicada ao armazenamento de séries temporais granulares de hardware (\texttt{host\_id}, \texttt{cpu}, \texttt{ram}, \texttt{disk}, \texttt{network\_in\_bps}, \texttt{network\_out\_bps}, \texttt{network\_total\_bps}, \texttt{timestamp}), alimentando os gráficos de tendências do painel.
 \end{itemize}
 
@@ -533,7 +542,7 @@ A Tabela \ref{tab:entidades_relacionais} sintetiza o mapeamento estrutural das e
 A lógica de aplicação distribui-se em classes de serviço desacopladas, estruturadas sob o padrão de injeção de dependência:
 
 \begin{itemize}[leftmargin=1.25cm]
-\item \textbf{\texttt{CircuitBreaker} (\texttt{Backend/services/circuit\_breaker.py})}: Encapsula a máquina de estados do disjuntor de \textit{polling} (\texttt{CLOSED}, \texttt{OPEN}, \texttt{HALF-OPEN}). Controla a contagem de falhas sucessivas (\texttt{failure\_threshold} = 5) e a janela de resguardo temporal (\texttt{recovery\_timeout} = 120 segundos). Métodos centrais: \texttt{can\_execute(host\_id)}, \texttt{record\_success(host\_id)}, \texttt{record\_failure(host\_id)} e \texttt{trip\_to\_open(host\_id)};
+\item \textbf{\texttt{CircuitBreaker} (\texttt{Backend/services/circuit\_breaker.py})}: Encapsula a máquina de estados do disjuntor de \textit{polling} (\texttt{CLOSED}, \texttt{OPEN}, \texttt{HALF-OPEN}) fundamentada no padrão de resiliência de \citeonline{nygard2018release}. Controla a contagem de falhas sucessivas (\texttt{failure\_threshold} = 5) e a janela de resguardo temporal (\texttt{recovery\_timeout} = 120 segundos). Métodos centrais: \texttt{can\_execute(host\_id)}, \texttt{record\_success(host\_id)}, \texttt{record\_failure(host\_id)} e \texttt{trip\_to\_open(host\_id)};
 \item \textbf{\texttt{MQManager} (\texttt{Backend/mq\_manager.py})}: Padrão \textit{Singleton} assíncrono gerenciador da conexão AMQP com o RabbitMQ via biblioteca \texttt{aio\_pika}. Responsável por declarar as trocas diretas (\texttt{netspot.direct}), filas normais (\texttt{netspot.host\_checks}, \texttt{netspot.notifications}) e a infraestrutura de exceção (\texttt{netspot.dlx} e \texttt{netspot.dlq}), além de executar o loop perpétuo de reconexão transparente (\texttt{\_monitor\_connection\_loop});
 \item \textbf{\texttt{MonitorEngine} / \texttt{Scheduler} (\texttt{Backend/scheduler.py})}: Orquestrador concorrente do ciclo de monitoramento. Utiliza as primitivas de concorrência do Python (\texttt{asyncio.gather}) para disparar checagens paralelas sem bloquear a \textit{event loop}, consultando o \textit{Circuit Breaker} antes da emissão de pacotes e despachando os eventos resultantes para o RabbitMQ;
 \item \textbf{\texttt{SNMPEngine} (\texttt{Backend/snmp\_engine.py})}: Camada polimórfica de consulta SNMP que encapsula a biblioteca PySNMP. Implementa estratégias específicas para a leitura de MIBs heterogêneas (Linux vs. Windows) e computa a taxa diferencial de tráfego de rede dividindo a variação de octetos acumulados pelo tempo decorrido;
@@ -546,13 +555,13 @@ Para garantir a integridade dos dados trafegados nas requisições HTTP e na men
 \begin{itemize}[leftmargin=1.25cm]
 \item \textbf{\texttt{HostCreate}}: Valida a entrada para cadastro de novos nós de rede, incluindo verificação de formato de endereço IP/FQDN, portas TCP opcionais, URLs de teste e parâmetros SNMP;
 \item \textbf{\texttt{HostUpdate}}: Provê esquema para atualização parcial de atributos do host, garantindo que campos não informados na requisição não sobrescrevam valores persistidos;
-\item \textbf{\texttt{NetworkDiscoveryRequest}}: Define os parâmetros para a varredura automática de redes locais em formato CIDR (ex.: \texttt{"192.168.1.0/24"});
+\item \textbf{\texttt{NetworkDiscoveryRequest}}: Define os parâmetros para a varredura automática de redes locais em formato CIDR (ex.: \texttt{``192.168.1.0/24''});
 \item \textbf{\texttt{NetworkImportRequest}}: Estrutura a importação em lote de múltiplos ativos identificados durante o escaneamento;
 \item \textbf{\texttt{EventEnvelopeDTO}}: Padroniza a estrutura formal do envelope de eventos que trafega entre o backend, o barramento RabbitMQ e os consumidores externos.
 \end{itemize}
 
 \subsubsection{Atribuição de Responsabilidades com Padrões GRASP e Contratos Formais}
-A arquitetura interna do backend foi desenhada segundo os princípios de atribuição de responsabilidades do método de \citeonline{wazlawick2011analise}, fundamentando-se nos 9 padrões GRASP (\textit{General Responsibility Assignment Software Patterns}) de Craig Larman:
+A arquitetura interna do backend foi desenhada segundo os princípios de atribuição de responsabilidades do método de \citeonline{wazlawick2011analise}, fundamentando-se nos 9 padrões GRASP (\textit{General Responsibility Assignment Software Patterns}) de \citeonline{larman2005utilizando} e nos princípios SOLID de \citeonline{martin2019arquitetura}:
 \begin{enumerate}[leftmargin=1.25cm]
 \item \textbf{Especialista na Informação (\textit{Information Expert})}: O cálculo estatístico de disponibilidade (\texttt{calculate\_host\_sla}), a oscilação de latência (\textit{Jitter} RFC 3550) e a sintetização do \textit{Health Score} residem exclusivamente no módulo analítico \texttt{Backend/metrics.py}, visto que este componente detém o histórico temporal de instâncias de \texttt{CheckResult};
 \item \textbf{Criador (\textit{Creator})}: O agendador \texttt{scheduler.py} atua como a classe criadora de \texttt{CheckResult} e \texttt{SNMPMetric}, pois agrega diretamente o ciclo de vida das sondagens físicas nos sockets de rede;
@@ -596,7 +605,7 @@ No âmbito do gerenciamento de serviços de TI (fundamentado nas diretrizes da I
 
 Diferentemente de ferramentas que tratam falhas como simples alarmes voláteis, o NetSpot implementa uma gestão rastreável com ciclo de vida autônomo em quatro fases:
 \begin{enumerate}[leftmargin=1.25cm]
-\item \textbf{Gatilho de Abertura}: Ocorre de forma imediata e automatizada no backend quando um host transita para o estado \texttt{DOWN} (indisponibilidade física ou interrupção de todas as portas essenciais) ou quando atinge o estado \texttt{DEGRADED} persistente (queda do \textit{Health Score} abaixo de 40\% ou saturação crítica de hardware acima de 85\%). O sistema cria um registro na tabela \texttt{incidents} com status \texttt{OPEN}, armazena o carimbo temporal de início (\texttt{started\_time}) e sintetiza a causa provável identificada pelo motor heurístico (ex.: "Timeout de handshake TCP", "Conexão recusada", "Queda física de enlace");
+\item \textbf{Gatilho de Abertura}: Ocorre de forma imediata e automatizada no backend quando um host transita para o estado \texttt{DOWN} (indisponibilidade física ou interrupção de todas as portas essenciais) ou quando atinge o estado \texttt{DEGRADED} persistente (queda do \textit{Health Score} abaixo de 40\% ou saturação crítica de hardware acima de 85\%). O sistema cria um registro na tabela \texttt{incidents} com status \texttt{OPEN}, armazena o carimbo temporal de início (\texttt{started\_time}) e sintetiza a causa provável identificada pelo motor heurístico (ex.: ``Timeout de handshake TCP'', ``Conexão recusada'', ``Queda física de enlace'');
 \item \textbf{Sinalização e Notificação}: O evento gera a emissão de um frame AMQP priorizado no RabbitMQ. A interface SPA exibe imediatamente uma insígnia destacada no cartão do host (\texttt{INCIDENTE ABERTO}), atualiza o contador do painel de resumo e envia alertas sonoros/visuais via Web Notifications API, enquanto o N8N despacha a notificação formatada para o canal de suporte no Telegram;
 \item \textbf{Acompanhamento}: Durante a permanência da anomalia, o incidente permanece catalogado na central de incidentes (\texttt{incidents.html}), consolidando a \textit{timeline} do evento para auditoria operacional;
 \item \textbf{Resolução e Encerramento Autônomo}: Assim que as checagens sucessivas confirmam a recuperação plena do dispositivo para o estado \texttt{UP}, o sistema altera o status do incidente para \texttt{CLOSED}, registra o horário exato de término (\texttt{ended\_time}) e computa o tempo total de indisponibilidade (\texttt{duration\_seconds}), viabilizando o cômputo contínuo do MTTR (\textit{Mean Time to Repair}) da infraestrutura.
@@ -620,13 +629,13 @@ Para facilitar o entendimento conceitual, o protocolo pode ser compreendido atra
 \begin{enumerate}[leftmargin=1.25cm]
 \item \textbf{O Envelope Externo: Cabeçalho da Mensagem (\textit{Message Header})}: Assim como o envelope de uma carta física contém o remetente, o endereço do destinatário, o carimbo postal de data/hora e o selo de urgência, o cabeçalho do NetSpot reúne os metadados indispensáveis para roteamento e triagem rápida pelo RabbitMQ e N8N:
   \begin{itemize}
-  \item \texttt{protocol\_version}: Versão formal da especificação de mensageria da aplicação (\texttt{"1.0"});
+  \item \texttt{protocol\_version}: Versão formal da especificação de mensageria da aplicação (\texttt{1.0});
   \item \texttt{event\_id}: Identificador exclusivo universal (UUID) gerado na origem para rastreabilidade e auditoria em logs centralizados;
-  \item \texttt{event\_type}: Natureza do evento emitido, permitindo a triagem imediata nas filas de mensageria (\texttt{"INCIDENT\_TRIGGERED"}, \texttt{"CHECK\_COMPLETED"}, \texttt{"INCIDENT\_RESOLVED"} ou \texttt{"HEALTH\_DEGRADED"});
+  \item \texttt{event\_type}: Natureza do evento emitido, permitindo a triagem imediata nas filas de mensageria (\texttt{INCIDENT\_TRIGGERED}, \texttt{CHECK\_COMPLETED}, \texttt{INCIDENT\_RESOLVED} ou \texttt{HEALTH\_DEGRADED});
   \item \texttt{timestamp}: Carimbo temporal exato da amostragem em fuso horário UTC (formato ISO-8601);
-  \item \texttt{source\_service}: Nome do microsserviço que gerou o evento na malha containerizada (\texttt{"netspot-backend"});
-  \item \texttt{priority}: Prioridade operacional no barramento AMQP (\texttt{"HIGH"} para abertura de incidentes e \texttt{"NORMAL"} para telemetria rotineira);
-  \item \texttt{severity}: Classificação do grau de impacto no ativo (\texttt{"HEALTHY"}, \texttt{"WARNING"}, \texttt{"DEGRADED"} ou \texttt{"CRITICAL"});
+  \item \texttt{source\_service}: Nome do microsserviço que gerou o evento na malha containerizada (\texttt{netspot-backend});
+  \item \texttt{priority}: Prioridade operacional no barramento AMQP (\texttt{HIGH} para abertura de incidentes e \texttt{NORMAL} para telemetria rotineira);
+  \item \texttt{severity}: Classificação do grau de impacto no ativo (\texttt{HEALTHY}, \texttt{WARNING}, \texttt{DEGRADED} ou \texttt{CRITICAL});
   \item \texttt{correlation\_id}: Identificador para correlacionar eventos encadeados (ex.: associar o alarme de recuperação ao incidente original).
   \end{itemize}
 
@@ -635,9 +644,9 @@ Para facilitar o entendimento conceitual, o protocolo pode ser compreendido atra
   \item \texttt{host\_name / ip\_address}: Identificação cadastral e endereço de rede do equipamento examinado;
   \item \texttt{health\_score}: Índice estatístico de integridade consolidado (0 a 100 pontos);
   \item \texttt{network\_metrics}: Indicadores de conectividade, incluindo tempo de resposta ICMP (\textit{latency\_ms}), oscilação de atraso (\textit{jitter\_ms}) e percentual de perda de pacotes;
-  \item \texttt{tcp\_services}: Dicionário relacionando cada porta TCP monitorada com seu status booleano de resposta (ex.: SSH :22, PostgreSQL :5432);
+  \item \texttt{tcp_services}: Dicionário relacionando cada porta TCP monitorada com seu status booleano de resposta (ex.: SSH :22, PostgreSQL :5432);
   \item \texttt{snmp\_hardware}: Telemetria de hardware com os percentuais de uso de CPU, memória RAM, ocupação de disco e tráfego instantâneo em Bytes por segundo;
-  \item \texttt{probable\_cause}: Diagnóstico em linguagem natural gerado pelo motor analítico (ex.: \textit{"Porta 5432 recusada + CPU saturada"}), orientando imediatamente a tomada de decisão da equipe técnica;
+  \item \texttt{probable\_cause}: Diagnóstico em linguagem natural gerado pelo motor analítico (ex.: \textit{``Porta 5432 recusada + CPU saturada''}), orientando imediatamente a tomada de decisão da equipe técnica;
   \item \texttt{incident\_lifecycle}: Instruções de ciclo de vida do incidente (\texttt{OPEN} ou \texttt{CLOSED}) com duração acumulada da indisponibilidade.
   \end{itemize}
 \end{enumerate}
@@ -784,13 +793,13 @@ Tráfego de Rede (RX/TX) & \texttt{ifInOctets} / \texttt{ifOutOctets} (\texttt{.
 \fonte{Autoria própria (2026).}
 \end{table}
 
-A taxa instantânea de tráfego de rede em Bits por segundo (bps) é derivada pela diferença de octetos acumulados entre duas medições consecutivas ($t_1$ e $t_2$), multiplicada por 8 (conversão de bytes para bits) e normalizada pelo intervalo decorrido $\Delta t = t_2 - t_1$:
+A taxa instantânea de tráfego de rede em Bits por segundo (bps) é derivada pela Equação \ref{eq:vazao_bps}, computada pela diferença de octetos acumulados entre duas medições consecutivas ($t_1$ e $t_2$), multiplicada por 8 (conversão de bytes para bits) e normalizada pelo intervalo decorrido $\Delta t = t_2 - t_1$:
 \begin{equation}
 \label{eq:vazao_bps}
 \text{Vazão (bps)} = \frac{\Delta\text{Octetos} \times 8}{\Delta t}
 \end{equation}
 
-Para prevenir distorções severas na telemetria decorrentes do estouro de contadores acumulativos de rede (\textit{counter rollover/overflow}) — comum em contadores de 32 bits (\texttt{Counter32}), que atingem seu valor máximo de $2^{32}-1 = 4.294.967.295$ octetos em poucas horas em links de alta velocidade —, o algoritmo implementado em \texttt{Backend/snmp\_engine.py} aplica tratamento modular aritmético:
+Para prevenir distorções severas na telemetria decorrentes do estouro de contadores acumulativos de rede (\textit{counter rollover/overflow}) — comum em contadores de 32 bits (\texttt{Counter32}), que atingem seu valor máximo de $2^{32}-1 = 4.294.967.295$ octetos em poucas horas em links de alta velocidade —, o algoritmo implementado em \texttt{Backend/snmp\_engine.py} aplica o tratamento modular aritmético expresso na Equação \ref{eq:delta_octets}:
 \begin{equation}
 \label{eq:delta_octets}
 \Delta\text{Octetos} = 
@@ -816,7 +825,7 @@ O \textit{Health Score} reflete o índice consolidado de integridade operacional
 A pontuação compõe-se das seguintes regras operacionais implementadas no backend:
 \begin{itemize}[leftmargin=1.25cm]
 \item \textbf{Conectividade ICMP ($P_{\text{ICMP}}$)}: Concede 30 pontos básicos em caso de sucesso no ping. Adiciona bônus integral de 15 pontos se a latência for inferior a 100 ms (incluindo o tratamento exato de containers locais e enlaces de rede de altíssima velocidade com RTT medido de 0.0 ms, garantindo pontuação máxima sem distorções numéricas), ou bônus de 8 pontos se a latência situar-se entre 100 e 300 ms.
-\item \textbf{Tratamento Compensatório de Firewall ICMP}: Em redes corporativas e acadêmicas, é frequente que roteadores de borda ou firewalls com inspeção de estado (\textit{Stateful Inspection}) descartem intencionalmente pacotes ICMP \textit{Echo Request} (Tipo 8) para ocultar o host contra varreduras de perímetro, mantendo todavia portas L4 (TCP) ou L7 (HTTP) totalmente acessíveis. Para evitar o fenômeno deletério de "falso-positivo de host DOWN", o algoritmo detecta essa contingência heurística:
+\item \textbf{Tratamento Compensatório de Firewall ICMP}: Em redes corporativas e acadêmicas, é frequente que roteadores de borda ou firewalls com inspeção de estado (\textit{Stateful Inspection}) descartem intencionalmente pacotes ICMP \textit{Echo Request} (Tipo 8) para ocultar o host contra varreduras de perímetro, mantendo todavia portas L4 (TCP) ou L7 (HTTP) totalmente acessíveis. Para evitar o fenômeno deletério de ``falso-positivo de host DOWN'', o algoritmo detecta essa contingência heurística:
 \begin{equation}
 \label{eq:icmp_firewall_comp}
 \text{ICMP}_{\text{blocked}} = \neg \text{Sucesso}_{\text{ICMP}} \land \left(\text{Sucesso}_{\text{TCP}} \lor \text{Sucesso}_{\text{HTTP}}\right)
@@ -835,7 +844,7 @@ O score resultante determina a classificação de severidade operacional do ativ
 \end{itemize}
 
 \subsubsection{Cálculo de Disponibilidade e SLA Móvel (Rolling SLA)}
-O NetSpot calcula o índice percentual de conformidade de SLA (\textit{Service Level Agreement}) através de janelas móveis deslizantes (\textit{rolling window}) compostas pelas últimas $K = 50$ checagens registradas no banco de dados para cada protocolo individualmente (Ping, TCP e HTTP):
+O NetSpot calcula o índice percentual de conformidade de SLA (\textit{Service Level Agreement}) através da Equação \ref{eq:sla_rolling}, que formaliza janelas móveis deslizantes (\textit{rolling window}) compostas pelas últimas $K = 50$ checagens registradas no banco de dados para cada protocolo individualmente (Ping, TCP e HTTP):
 \begin{equation}
 \label{eq:sla_rolling}
 \text{SLA}_{\text{rolling}} = \left( \frac{1}{K} \sum_{i=1}^{K} \mathbb{I}(\text{sucesso}_i) \right) \times 100\%
@@ -845,12 +854,12 @@ onde $\mathbb{I}(\cdot)$ é a função indicadora binária que assume valor 1 qu
 \subsubsection{Algoritmo de SLA por União de Intervalos Temporais (Interval Merging)}
 Para além das janelas pontuais de amostras, o cálculo do SLA histórico consolidado da infraestrutura implementa o \textbf{Algoritmo de União de Intervalos de Tempo (\textit{Interval Merging})} (\texttt{Backend/metrics.py}). Ferramentas simplistas costumam somar isoladamente a duração de cada incidente ocorrido em uma janela temporal; todavia, quando falhas afetam múltiplos serviços simultaneamente no mesmo host (ex.: queda simultânea de portas TCP e HTTP), a simples soma aritmética duplica o tempo computado, podendo gerar aberrações matemáticas como índices de indisponibilidade superiores a 100\%. 
 
-Para solucionar essa incompatibilidade, o NetSpot formaliza o cálculo ordenando os intervalos temporais de incidentes $[T_{\text{início}}, T_{\text{fim}}]$ e fundindo os segmentos contíguos ou sobrepostos:
+Para solucionar essa incompatibilidade, o NetSpot formaliza o cálculo ordenando os intervalos temporais de incidentes $[T_{\text{início}}, T_{\text{fim}}]$ e fundindo os segmentos contíguos ou sobrepostos conforme a Equação \ref{eq:interval_merging}:
 \begin{equation}
 \label{eq:interval_merging}
 \text{Downtime}_{\text{total}} = \mu\left( \bigcup_{k=1}^{P} [T_{\text{início}, k}, \, T_{\text{fim}, k}] \right)
 \end{equation}
-onde $\mu(\cdot)$ representa a medida linear de tempo da união disjunta dos intervalos. A disponibilidade real do ativo em uma janela de observação de duração $W$ é expressa de forma matematicamente estrita por:
+onde $\mu(\cdot)$ representa a medida linear de tempo da união disjunta dos intervalos. A disponibilidade real do ativo em uma janela de observação de duração $W$ é expressa de forma matematicamente estrita pela Equação \ref{eq:sla_consolidado}:
 \begin{equation}
 \label{eq:sla_consolidado}
 \text{SLA}_{\text{consolidado}} = \max\left(0.0, \, 100.0 \times \left(1.0 - \frac{\text{Downtime}_{\text{total}}}{W}\right)\right)
@@ -858,7 +867,7 @@ onde $\mu(\cdot)$ representa a medida linear de tempo da união disjunta dos int
 assegurando precisão métrica auditável e em estrita consonância com os contratos formais de nível de serviço exigidos em ambientes corporativos.
 
 \subsubsection{Mensuração Formal de Jitter (Variação Estatística de Latência)}
-O \textit{Jitter} de rede é medido através da média aritmética das variações absolutas de latência entre pares sucessivos de amostras em uma janela de $M = 10$ medições válidas de RTT:
+O \textit{Jitter} de rede é medido através da Equação \ref{eq:jitter_calc}, que obtém a média aritmética das variações absolutas de latência entre pares sucessivos de amostras em uma janela de $M = 10$ medições válidas de RTT, em consonância com os preceitos da RFC 3550 \cite{schulzrinne2003rfc3550}:
 \begin{equation}
 \label{eq:jitter_calc}
 \text{Jitter} = \frac{1}{M-1} \sum_{j=1}^{M-1} |L_{j+1} - L_j|
@@ -866,7 +875,7 @@ O \textit{Jitter} de rede é medido através da média aritmética das variaçõ
 onde $L_j$ denota o tempo de resposta em milissegundos da amostra $j$. Essa formulação permite capturar variações anômalas no enfileiramento de pacotes nos roteadores intermediários antes mesmo que ocorra descarte efetivo por estouro de buffer (\textit{bufferbloat}).
 
 \subsubsection{Análise de Tendência por Regressão Linear (OLS) e Causa Provável}
-Para antecipar degradações severas antes da interrupção completa do serviço, o módulo \texttt{Backend/metrics.py} aplica o método dos Mínimos Quadrados Ordinários (\textit{Ordinary Least Squares} -- OLS) sobre a série temporal das últimas $N$ latências válidas ($N \ge 5$, janela padrão $N = 10$). A inclinação da reta de ajuste linear (\textit{slope}) é expressa por:
+Para antecipar degradações severas antes da interrupção completa do serviço, o módulo \texttt{Backend/metrics.py} aplica o método dos Mínimos Quadrados Ordinários (\textit{Ordinary Least Squares} -- OLS) sobre a série temporal das últimas $N$ latências válidas ($N \ge 5$, janela padrão $N = 10$). A inclinação da reta de ajuste linear (\textit{slope}) é expressa formalmente pela Equação \ref{eq:ols_slope}:
 \begin{equation}
 \label{eq:ols_slope}
 \text{slope} = \frac{\sum_{i=0}^{N-1} (x_i - \bar{x})(L_i - \bar{L})}{\sum_{i=0}^{N-1} (x_i - \bar{x})^2}
@@ -892,10 +901,10 @@ onde $x_i = i$ representa o índice ordinal discreto da amostra temporal, $L_i$ 
 
 Complementarmente, a função \texttt{infer\_probable_cause()} (\texttt{Backend/routes/hosts.py}) correlaciona esses vetores analíticos em uma árvore de decisão determinística de alta performance:
 \begin{enumerate}[leftmargin=1.25cm]
-\item \textbf{Atalho de Alto Desempenho (\textit{Fast-Path})}: Hosts saudáveis em estado \texttt{UP}, com ping responsivo, sem incidentes e com recursos locais abaixo de 90\% são rotulados instantaneamente como "Operação normal", sem onerar o banco de dados com varreduras recursivas;
-\item \textbf{Diagnóstico de Firewall}: Se a Equação \ref{eq:icmp_firewall_comp} for satisfeita, emite o diagnóstico transparente "ICMP bloqueado por firewall / Serviço operando normalmente";
-\item \textbf{Isolamento de Indisponibilidade (\texttt{DOWN})}: Segrega a falha em categorias precisas: "Falha na resolução DNS", "Serviço HTTP instável (HTTP 5xx)", "Porta TCP indisponível" ou "Host sem resposta ICMP";
-\item \textbf{Diagnóstico de Sobrecarga e Instabilidade}: Identifica esgotamento de hardware por SNMP (CPU $\ge 95\%$, RAM $\ge 92\%$ ou Disco $\ge 95\%$) gerando "Sobrecarga de recursos locais (CPU/RAM/Disco)", ou variações anômalas de rede ($\text{Jitter} \ge 120$ ms ou $\text{SLA} < 95\%$) gerando "Instabilidade de rede (jitter/perda)".
+\item \textbf{Atalho de Alto Desempenho (\textit{Fast-Path})}: Hosts saudáveis em estado \texttt{UP}, com ping responsivo, sem incidentes e com recursos locais abaixo de 90\% são rotulados instantaneamente como ``Operação normal'', sem onerar o banco de dados com varreduras recursivas;
+\item \textbf{Diagnóstico de Firewall}: Se a Equação \ref{eq:icmp_firewall_comp} for satisfeita, emite o diagnóstico transparente ``ICMP bloqueado por firewall / Serviço operando normalmente'';
+\item \textbf{Isolamento de Indisponibilidade (\texttt{DOWN})}: Segrega a falha em categorias precisas: ``Falha na resolução DNS'', ``Serviço HTTP instável (HTTP 5xx)'', ``Porta TCP indisponível'' ou ``Host sem resposta ICMP'';
+\item \textbf{Diagnóstico de Sobrecarga e Instabilidade}: Identifica esgotamento de hardware por SNMP (CPU $\ge 95\%$, RAM $\ge 92\%$ ou Disco $\ge 95\%$) gerando ``Sobrecarga de recursos locais (CPU/RAM/Disco)'', ou variações anômalas de rede ($\text{Jitter} \ge 120$ ms ou $\text{SLA} < 95\%$) gerando ``Instabilidade de rede (jitter/perda)''.
 \end{enumerate}
 
 \subsection{FLUXOGRAMA DE DECISÕES E ORQUESTRAÇÃO DE EVENTOS AMQP}
@@ -1012,12 +1021,12 @@ A aplicação emprega técnicas avançadas de engenharia de software para concil
 \end{itemize}
 
 \subsubsection{Acessibilidade Digital (WCAG 2.1 AA) e Usabilidade Ergonômica}
-Com o propósito de atender às diretrizes internacionais de acessibilidade na web (\textit{Web Content Accessibility Guidelines} -- WCAG 2.1 nível AA) e oferecer conforto visual e cognitivo aos operadores, a interface do NetSpot incorpora os seguintes padrões de engenharia de front-end:
+Com o propósito de atender às diretrizes internacionais de acessibilidade na web (\textit{Web Content Accessibility Guidelines} -- WCAG 2.1 nível AA \cite{w3c2018wcag21}) e oferecer conforto visual e cognitivo aos operadores, a interface do NetSpot incorpora os seguintes padrões de engenharia de front-end:
 \begin{itemize}[leftmargin=1.25cm]
 \item \textbf{Relação de Contraste Cromático}: Tanto no tema escuro quanto no tema claro, a paleta de cores assegura uma taxa de contraste superior ao limiar mínimo de 4.5:1 exigido pela WCAG para textos e elementos interativos normais (alcançando marcas de 5.6:1 e superiores nos selos de status, métricas numéricas e tipografia secundária);
 \item \textbf{Navegação Teclado-Cêntrica e Foco Visível}: Todos os elementos interativos (links, botões, campos de entrada e seletores) contam com indicadores de foco customizados de alta visibilidade através do pseudo-seletor CSS \texttt{:focus-visible} com contorno em ciano vívido (\texttt{\#38bdf8}), viabilizando operação ágil e completa do painel sem necessidade de dispositivo apontador (mouse);
 \item \textbf{Confinamento de Foco em Diálogos Modais (\textit{Focus Trap})}: Os modais de edição, cadastro, histórico, descoberta e lixeira implementam interceptação programática do foco por JavaScript. Ao abrir uma janela sobreposta, o foco é transferido automaticamente ao primeiro elemento acionável e mantido em laço fechado durante a navegação pela tecla \texttt{Tab}, prevenindo dispersão para elementos ocultos ao fundo. O fechamento é suportado universalmente pela tecla \texttt{Escape}, restaurando o foco ao botão de origem;
-\item \textbf{Semântica ARIA e Rótulos Descritivos}: A árvore de acessibilidade é enriquecida com atributos WAI-ARIA (\texttt{aria-label}, \texttt{aria-hidden}, \texttt{role="dialog"} e \texttt{aria-live}), garantindo que leitores de tela interpretem adequadamente transições de status, botões de ícone puro e gráficos vetoriais;
+\item \textbf{Semântica ARIA e Rótulos Descritivos}: A árvore de acessibilidade é enriquecida com atributos WAI-ARIA (\texttt{aria-label}, \texttt{aria-hidden}, \texttt{role='dialog'} e \texttt{aria-live}), garantindo que leitores de tela interpretem adequadamente transições de status, botões de ícone puro e gráficos vetoriais;
 \item \textbf{Ergonomia dos Cartões 3D e Indicadores de Estado}: Cada cartão de host dispõe de um indicador numérico sutil de face ativa (\texttt{1/3}, \texttt{2/3} e \texttt{3/3}), acompanhado de dicas de contexto (\textit{tooltips}) e botões de paginação dedicados, eliminando a ambiguidade visual durante rotações tridimensionais;
 \item \textbf{Ações em Massa e Proteção contra Exclusão Involuntária}: O módulo de Descoberta de Rede disponibiliza botões ergonômicos de seleção e desmarcação global (\textit{Selecionar Todos} e \textit{Desmarcar Todos}), enquanto a lixeira de ativos conta com diálogo secundário de confirmação de segurança antes da execução do expurgo definitivo, prevenindo perda acidental de dados.
 \end{itemize}
@@ -1047,7 +1056,7 @@ O acesso ao sistema é protegido por autenticação baseada em JSON Web Tokens (
 
 Complementarmente, a camada de apresentação incorpora diretrizes de defesa em profundidade (\textit{Defense in Depth}) recomendadas pelas boas práticas da OWASP:
 \begin{itemize}[leftmargin=1.25cm]
-\item \textbf{Mitigação de Cross-Site Scripting (XSS)}: Todas as saídas de texto dinâmicas interpoladas no DOM (incluindo nomes de hosts, estados operacionais, tipos de incidente e diagnósticos heurísticos de falha) são processadas por uma rotina de sanitização neutra (\texttt{escapeHtml()}), que converte caracteres especiais de marcação (\texttt{\&}, \texttt{<}, \texttt{>}, \texttt{"}, \texttt{'}) em entidades HTML inócuas, impedindo o sequestro de sessões ou a execução de scripts maliciosos injetados por pacotes de rede adulterados;
+\item \textbf{Mitigação de Cross-Site Scripting (XSS)}: Todas as saídas de texto dinâmicas interpoladas no DOM (incluindo nomes de hosts, estados operacionais, tipos de incidente e diagnósticos heurísticos de falha) são processadas por uma rotina de sanitização neutra (\texttt{escapeHtml()}), que converte caracteres especiais de marcação (\texttt{\&}, \texttt{<}, \texttt{>}, \texttt{\textquotedbl}, \texttt{'}) em entidades HTML inócuas, impedindo o sequestro de sessões ou a execução de scripts maliciosos injetados por pacotes de rede adulterados;
 \item \textbf{Hardening e Segurança do Servidor Proxy Nginx}: O servidor Nginx Alpine é configurado com cabeçalhos HTTP estritos de proteção contra ataques de sobreposição de quadros (\texttt{X-Frame-Options: SAMEORIGIN}), ataques de farejamento de tipos MIME (\texttt{X-Content-Type-Options: nosniff}), proteção ativa contra XSS no navegador (\texttt{X-XSS-Protection}) e política de referência restritiva (\texttt{Referrer-Policy: strict-origin-when-cross-origin});
 \item \textbf{Compactação de Ativos e Bloqueio de Arquivos Internos}: A entrega de ativos estáticos (HTML, CSS, JavaScript e SVG) emprega compactação assíncrona \textit{gzip} (nível 6), minimizando a latência de transferência na rede local. Ademais, o servidor bloqueia estritamente com código HTTP 404 qualquer tentativa de acesso direto a arquivos de infraestrutura e variáveis de ambiente (como \texttt{Dockerfile}, \texttt{nginx.conf} e arquivos ocultos do ecossistema Docker).
 \end{itemize}
@@ -1056,9 +1065,9 @@ Complementarmente, a camada de apresentação incorpora diretrizes de defesa em 
 A validação técnica do NetSpot foi conduzida em três frentes complementares: simulação em ambiente virtualizado de larga escala com o framework Kathará (abrangendo a topologia padrão de 40 nós e a topologia de estresse em alta densidade com 126 nós monitorados), validação em ambiente físico real realizada no Laboratório 2 do prédio do Ensino Superior do IFNMG -- Campus Januária, e verificação formal de código através de uma suíte exaustiva de 86 testes automatizados via Pytest.
 
 \subsection{LABORATÓRIO DE SIMULAÇÃO KATHARÁ}
-Para avaliar a escalabilidade, a estabilidade sob carga e o comportamento dos mecanismos de resiliência em topologias complexas com saltos múltiplos de roteamento, foi projetado e executado um laboratório de emulação de larga escala utilizando o framework Kathará, configurado no arquivo \texttt{lab.conf}.
+Para avaliar a escalabilidade, a estabilidade sob carga e o comportamento dos mecanismos de resiliência em topologias complexas com saltos múltiplos de roteamento, foi projetado e executado um laboratório de emulação de larga escala utilizando o framework Kathará \cite{bonola2018kathara}, configurado no arquivo \texttt{lab.conf}.
 
-O ambiente emula um total de 47 dispositivos de rede interconectados, dos quais 40 são nós finais monitorados ativamente (30 estações de trabalho e 10 servidores dedicados de serviços), operando sobre 4 roteadores intermediários e 3 switches de agregação com comutação de camada 2:
+O ambiente emula um total de 47 dispositivos de rede interconectados, dos quais 40 são nós finais monitorados ativamente (30 estações de trabalho e 10 servidores dedicados de serviços), operando sobre 4 roteadores intermediários e 3 switches de agregação com comutação de camada 2, cuja topologia lógica está ilustrada na Figura \ref{fig:laboratorio_kathara}:
 
 \begin{figure}[H]
 \centering
