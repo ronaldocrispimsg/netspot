@@ -793,46 +793,49 @@ Tráfego de Rede (RX/TX) & \texttt{ifInOctets} / \texttt{ifOutOctets} (\texttt{.
 \fonte{Autoria própria (2026).}
 \end{table}
 
-A taxa instantânea de tráfego de rede em Bits por segundo (bps) é derivada pela Equação \ref{eq:vazao_bps}, computada pela diferença de octetos acumulados entre duas medições consecutivas ($t_1$ e $t_2$), multiplicada por 8 (conversão de bytes para bits) e normalizada pelo intervalo decorrido $\Delta t = t_2 - t_1$:
+A taxa instantânea de tráfego de rede em Bits por segundo (bps) é derivada pela Equação \ref{eq:vazao_bps}, computada pela multiplicação da variação de octetos por 8 (conversão de bytes para bits) e dividida pelo intervalo decorrido ($\Delta t = t_2 - t_1$):
 \begin{equation}
 \label{eq:vazao_bps}
-\text{Vazão (bps)} = \frac{\Delta\text{Octetos} \times 8}{\Delta t}
+\text{Vazão (bps)} = (\Delta\text{Octetos} * 8) / \Delta t
 \end{equation}
 
-Para prevenir distorções severas na telemetria decorrentes do estouro de contadores acumulativos de rede (\textit{counter rollover/overflow}) — comum em contadores de 32 bits (\texttt{Counter32}), que atingem seu valor máximo de $2^{32}-1 = 4.294.967.295$ octetos em poucas horas em links de alta velocidade —, o algoritmo implementado em \texttt{Backend/snmp\_engine.py} aplica o tratamento modular aritmético expresso na Equação \ref{eq:delta_octets}:
+Para prevenir distorções na telemetria decorrentes do estouro de contadores acumulativos de rede (\textit{counter rollover/overflow}) — comum em contadores de 32 bits (\texttt{Counter32}), que atingem seu valor máximo de 4.294.967.295 octetos em poucas horas em links de alta velocidade —, o algoritmo implementado em \texttt{Backend/snmp\_engine.py} calcula a variação conforme a Equação \ref{eq:delta_octets}:
 \begin{equation}
 \label{eq:delta_octets}
-\Delta\text{Octetos} = 
-\begin{cases} 
-\text{Octetos}_{t_2} - \text{Octetos}_{t_1}, & \text{se } \text{Octetos}_{t_2} \ge \text{Octetos}_{t_1} \\
-(2^B + \text{Octetos}_{t_2}) - \text{Octetos}_{t_1}, & \text{se } \text{Octetos}_{t_2} < \text{Octetos}_{t_1} \text{ (estouro de contador)}
-\end{cases}
+\Delta\text{Octetos} = \text{Octetos}_{\text{atual}} - \text{Octetos}_{\text{anterior}}
 \end{equation}
-onde $B \in \{32, 64\}$ representa a largura em bits do contador SNMP utilizado pela interface (privilegiando-se contadores de 64 bits \texttt{ifHCInOctets} quando suportados pelo agente remoto).
+Caso ocorra o estouro do contador de 32 bits ($\text{Octetos}_{\text{atual}} < \text{Octetos}_{\text{anterior}}$), o valor da variação é corrigido somando-se a capacidade total do contador ($4.294.967.296$):
+\begin{equation*}
+\Delta\text{Octetos} = (4294967296 - \text{Octetos}_{\text{anterior}}) + \text{Octetos}_{\text{atual}}
+\end{equation*}
 
 Adicionalmente, para preservar a estabilidade operacional contra hosts que desabilitaram o serviço SNMP ou que apresentem instabilidade intermitente de credenciais, o motor incorpora um algoritmo de \textit{Backoff Exponencial} (\texttt{register\_snmp\_failure()}): ao atingir 3 falhas consecutivas de consulta, o ativo entra em pausa temporária de checagem SNMP de 300 segundos ($5$ minutos), dobrando progressivamente a cada novo ciclo de insucesso até o teto máximo de 3.600 segundos ($1$ hora), poupando tráfego de rede e consumo de CPU no servidor de monitoramento.
 
 \subsection{MODELAGEM MATEMÁTICA E MÉTRICAS NOC}
-A análise de telemetria do NetSpot apoia-se em formulações matemáticas determinísticas e probabilísticas implementadas no módulo \texttt{Backend/metrics.py} e correlacionadas em \texttt{Backend/routes/hosts.py}:
+A análise de telemetria do NetSpot apoia-se em formulações aritméticas simples implementadas no módulo \texttt{Backend/metrics.py} e correlacionadas em \texttt{Backend/routes/hosts.py}:
 
 \subsubsection{Algoritmo do Health Score (Score de Saúde)}
-O \textit{Health Score} reflete o índice consolidado de integridade operacional do ativo, computado dinamicamente em uma escala de 0 a 100 pontos com regras de pontuação aditiva e penalidades de acordo com a Equação \ref{eq:health_score_calc}:
+O \textit{Health Score} reflete o índice consolidado de integridade operacional do ativo, computado dinamicamente em uma escala de 0 a 100 pontos pela razão entre a pontuação obtida e a pontuação máxima possível, conforme a Equação \ref{eq:health_score_calc}:
 \begin{equation}
 \label{eq:health_score_calc}
-\text{HS} = \max\left(0, \, \min\left(100, \, P_{\text{ICMP}} + P_{\text{TCP}} + P_{\text{HTTP}}\right)\right)
+\text{Health Score} = (\text{Pontos Obtidos} / \text{Pontos Máximos}) * 100
 \end{equation}
+onde a pontuação obtida corresponde à soma das pontuações dos protocolos monitorados:
+\begin{equation*}
+\text{Pontos Obtidos} = \text{Pontos}_{\text{ICMP}} + \text{Pontos}_{\text{TCP}} + \text{Pontos}_{\text{HTTP}}
+\end{equation*}
 
 A pontuação compõe-se das seguintes regras operacionais implementadas no backend:
 \begin{itemize}[leftmargin=1.25cm]
 \item \textbf{Conectividade ICMP ($P_{\text{ICMP}}$)}: Concede 30 pontos básicos em caso de sucesso no ping. Adiciona bônus integral de 15 pontos se a latência for inferior a 100 ms (incluindo o tratamento exato de containers locais e enlaces de rede de altíssima velocidade com RTT medido de 0.0 ms, garantindo pontuação máxima sem distorções numéricas), ou bônus de 8 pontos se a latência situar-se entre 100 e 300 ms.
-\item \textbf{Tratamento Compensatório de Firewall ICMP}: Em redes corporativas e acadêmicas, é frequente que roteadores de borda ou firewalls com inspeção de estado (\textit{Stateful Inspection}) descartem intencionalmente pacotes ICMP \textit{Echo Request} (Tipo 8) para ocultar o host contra varreduras de perímetro, mantendo todavia portas L4 (TCP) ou L7 (HTTP) totalmente acessíveis. Para evitar o fenômeno deletério de ``falso-positivo de host DOWN'', o algoritmo detecta essa contingência heurística:
+\item \textbf{Tratamento Compensatório de Firewall ICMP}: Em redes corporativas e acadêmicas, é frequente que roteadores de borda ou firewalls com inspeção de estado (\textit{Stateful Inspection}) descartem intencionalmente pacotes ICMP \textit{Echo Request} (Tipo 8) para ocultar o host contra varreduras de perímetro, mantendo todavia portas L4 (TCP) ou L7 (HTTP) totalmente acessíveis. Para evitar o fenômeno deletério de falso-positivo de host inativo, o algoritmo detecta essa contingência conforme a Equação \ref{eq:icmp_firewall_comp}:
 \begin{equation}
 \label{eq:icmp_firewall_comp}
-\text{ICMP}_{\text{blocked}} = \neg \text{Sucesso}_{\text{ICMP}} \land \left(\text{Sucesso}_{\text{TCP}} \lor \text{Sucesso}_{\text{HTTP}}\right)
+\text{ICMP Bloqueado} = (1 - \text{Sucesso}_{\text{Ping}}) * (\text{Sucesso}_{\text{TCP}} + \text{Sucesso}_{\text{HTTP}})
 \end{equation}
-Caso $\text{ICMP}_{\text{blocked}}$ seja verdadeiro, o sistema não penaliza a saúde do equipamento, concedendo o sucesso efetivo da conectividade com latência neutra compensatória de 80 ms.
+onde cada indicador assume valor 1 para sucesso e 0 para falha. Caso o resultado seja maior que zero (indicando falha de ping simultânea ao êxito em portas TCP ou HTTP), o sistema não penaliza a saúde do equipamento, concedendo o sucesso efetivo da conectividade com latência neutra compensatória de 80 ms.
 \item \textbf{Serviços TCP ($P_{\text{TCP}}$)}: Concede 30 pontos caso as portas de transporte configuradas respondam com sucesso no \textit{handshake}.
-\item \textbf{Serviços Web HTTP ($P_{\text{HTTP}}$)}: Concede 25 pontos em caso de resposta 200 OK, com acréscimo de 10 pontos de bônus caso o tempo de resposta seja inferior a 500 ms. Aplica penalidade severa de $-20$ pontos para respostas da família 5xx (erros internos de servidor) e penalidade de $-10$ pontos para a família 4xx (erros de cliente ou recursos inexistentes).
+\item \textbf{Serviços Web HTTP ($P_{\text{HTTP}}$)}: Concede 25 pontos em caso de resposta 200 OK, com acréscimo de 10 pontos de bônus caso o tempo de resposta seja inferior a 500 ms. Aplica penalidade de $-20$ pontos para respostas da família 5xx (erros internos de servidor) e penalidade de $-10$ pontos para a família 4xx (erros de cliente ou recursos inexistentes).
 \end{itemize}
 
 O score resultante determina a classificação de severidade operacional do ativo:
@@ -847,22 +850,22 @@ O score resultante determina a classificação de severidade operacional do ativ
 O NetSpot calcula o índice percentual de conformidade de SLA (\textit{Service Level Agreement}) através da Equação \ref{eq:sla_rolling}, que formaliza janelas móveis deslizantes (\textit{rolling window}) compostas pelas últimas $K = 50$ checagens registradas no banco de dados para cada protocolo individualmente (Ping, TCP e HTTP):
 \begin{equation}
 \label{eq:sla_rolling}
-\text{SLA}_{\text{rolling}} = \left( \frac{1}{K} \sum_{i=1}^{K} \mathbb{I}(\text{sucesso}_i) \right) \times 100\%
+\text{SLA Móvel} = (\text{Checagens com Sucesso} / \text{Total de Checagens}) * 100
 \end{equation}
-onde $\mathbb{I}(\cdot)$ é a função indicadora binária que assume valor 1 quando a checagem obteve êxito e 0 em caso de falha. A preservação de janelas móveis no nível de aplicação permite absorver intermitências transitórias sem descaracterizar a confiabilidade estatística de longo prazo do equipamento.
+A preservação de janelas móveis no nível de aplicação permite absorver intermitências transitórias sem descaracterizar a confiabilidade estatística de longo prazo do equipamento.
 
 \subsubsection{Algoritmo de SLA por União de Intervalos Temporais (Interval Merging)}
-Para além das janelas pontuais de amostras, o cálculo do SLA histórico consolidado da infraestrutura implementa o \textbf{Algoritmo de União de Intervalos de Tempo (\textit{Interval Merging})} (\texttt{Backend/metrics.py}). Ferramentas simplistas costumam somar isoladamente a duração de cada incidente ocorrido em uma janela temporal; todavia, quando falhas afetam múltiplos serviços simultaneamente no mesmo host (ex.: queda simultânea de portas TCP e HTTP), a simples soma aritmética duplica o tempo computado, podendo gerar aberrações matemáticas como índices de indisponibilidade superiores a 100\%. 
+Para além das janelas pontuais de amostras, o cálculo do SLA histórico consolidado da infraestrutura implementa o \textbf{Algoritmo de União de Intervalos de Tempo (\textit{Interval Merging})} (\texttt{Backend/metrics.py}). Ferramentas simplistas costumam somar isoladamente a duração de cada incidente ocorrido em uma janela temporal; todavia, quando falhas afetam múltiplos serviços simultaneamente no mesmo host (ex.: queda simultânea de portas TCP e HTTP), a simples soma aritmética duplica o tempo computado, gerando distorções no cálculo.
 
-Para solucionar essa incompatibilidade, o NetSpot formaliza o cálculo ordenando os intervalos temporais de incidentes $[T_{\text{início}}, T_{\text{fim}}]$ e fundindo os segmentos contíguos ou sobrepostos conforme a Equação \ref{eq:interval_merging}:
+Para solucionar essa incompatibilidade, o NetSpot formaliza o cálculo ordenando os intervalos temporais de incidentes $[\text{Início}, \text{Fim}]$ e fundindo os segmentos contíguos ou sobrepostos para calcular a duração real de indisponibilidade conforme a Equação \ref{eq:interval_merging}:
 \begin{equation}
 \label{eq:interval_merging}
-\text{Downtime}_{\text{total}} = \mu\left( \bigcup_{k=1}^{P} [T_{\text{início}, k}, \, T_{\text{fim}, k}] \right)
+\text{Downtime Total} = (\text{Fim}_1 - \text{Início}_1) + (\text{Fim}_2 - \text{Início}_2) + \dots + (\text{Fim}_k - \text{Início}_k)
 \end{equation}
-onde $\mu(\cdot)$ representa a medida linear de tempo da união disjunta dos intervalos. A disponibilidade real do ativo em uma janela de observação de duração $W$ é expressa de forma matematicamente estrita pela Equação \ref{eq:sla_consolidado}:
+onde cada par $(\text{Fim}_i - \text{Início}_i)$ representa a duração de cada intervalo de indisponibilidade após a união dos segmentos sobrepostos. A disponibilidade real do ativo em uma janela de observação de tempo total $T$ é expressa pela Equação \ref{eq:sla_consolidado}:
 \begin{equation}
 \label{eq:sla_consolidado}
-\text{SLA}_{\text{consolidado}} = \max\left(0.0, \, 100.0 \times \left(1.0 - \frac{\text{Downtime}_{\text{total}}}{W}\right)\right)
+\text{SLA Consolidado} = ((\text{Tempo Total} - \text{Downtime Total}) / \text{Tempo Total}) * 100
 \end{equation}
 assegurando precisão métrica auditável e em estrita consonância com os contratos formais de nível de serviço exigidos em ambientes corporativos.
 
@@ -870,16 +873,27 @@ assegurando precisão métrica auditável e em estrita consonância com os contr
 O \textit{Jitter} de rede é medido através da Equação \ref{eq:jitter_calc}, que obtém a média aritmética das variações absolutas de latência entre pares sucessivos de amostras em uma janela de $M = 10$ medições válidas de RTT, em consonância com os preceitos da RFC 3550 \cite{schulzrinne2003rfc3550}:
 \begin{equation}
 \label{eq:jitter_calc}
-\text{Jitter} = \frac{1}{M-1} \sum_{j=1}^{M-1} |L_{j+1} - L_j|
+\text{Jitter} = (\text{Diferença}_1 + \text{Diferença}_2 + \dots + \text{Diferença}_k) / \text{Total de Pares}
 \end{equation}
-onde $L_j$ denota o tempo de resposta em milissegundos da amostra $j$. Essa formulação permite capturar variações anômalas no enfileiramento de pacotes nos roteadores intermediários antes mesmo que ocorra descarte efetivo por estouro de buffer (\textit{bufferbloat}).
+onde cada diferença é calculada pela variação absoluta entre amostras consecutivas:
+\begin{equation*}
+\text{Diferença}_i = |\text{Latência}_{i+1} - \text{Latência}_i|
+\end{equation*}
+Essa formulação permite capturar variações anômalas no enfileiramento de pacotes nos roteadores intermediários antes mesmo que ocorra descarte efetivo por estouro de buffer (\textit{bufferbloat}).
 
 \subsubsection{Análise de Tendência por Regressão Linear (OLS) e Causa Provável}
-Para antecipar degradações severas antes da interrupção completa do serviço, o módulo \texttt{Backend/metrics.py} aplica o método dos Mínimos Quadrados Ordinários (\textit{Ordinary Least Squares} -- OLS) sobre a série temporal das últimas $N$ latências válidas ($N \ge 5$, janela padrão $N = 10$). A inclinação da reta de ajuste linear (\textit{slope}) é expressa formalmente pela Equação \ref{eq:ols_slope}:
+Para antecipar degradações severas antes da interrupção completa do serviço, o módulo \texttt{Backend/metrics.py} aplica o método dos Mínimos Quadrados Ordinários (\textit{Ordinary Least Squares} -- OLS) sobre a série temporal das últimas $N$ latências válidas ($N \ge 5$, janela padrão $N = 10$). A inclinação da reta de ajuste linear (\textit{slope}) é expressa de forma simplificada pela Equação \ref{eq:ols_slope}:
 \begin{equation}
 \label{eq:ols_slope}
-\text{slope} = \frac{\sum_{i=0}^{N-1} (x_i - \bar{x})(L_i - \bar{L})}{\sum_{i=0}^{N-1} (x_i - \bar{x})^2}
+\text{Slope} = \text{Numerador} / \text{Denominador}
 \end{equation}
+onde o numerador e o denominador são computados pelas variações em relação às médias aritméticas ($\bar{x}$ para o tempo e $\bar{L}$ para a latência):
+\begin{equation*}
+\text{Numerador} = ((x_1 - \bar{x}) * (L_1 - \bar{L})) + \dots + ((x_N - \bar{x}) * (L_N - \bar{L}))
+\end{equation*}
+\begin{equation*}
+\text{Denominador} = ((x_1 - \bar{x}) * (x_1 - \bar{x})) + \dots + ((x_N - \bar{x}) * (x_N - \bar{x}))
+\end{equation*}
 onde $x_i = i$ representa o índice ordinal discreto da amostra temporal, $L_i$ a latência observada, e $\bar{x}$, $\bar{L}$ denotam as respectivas médias aritméticas. A interpretação operacional do coeficiente angular obtido orienta a classificação preventiva:
 
 \begin{itemize}[leftmargin=1.25cm]
