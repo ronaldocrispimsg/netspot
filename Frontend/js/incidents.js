@@ -269,7 +269,7 @@ window.addEventListener("DOMContentLoaded", async () => {
             icon.innerHTML = `<path d="M12 3a9 9 0 109 9 9.75 9.75 0 00-.67-3.4 6.78 6.78 0 01-7.93-7.93A9.75 9.75 0 0012 3z" fill="currentColor"/>`;
             icon.removeAttribute("stroke");
         } else {
-            icon.innerHTML = `<circle cx="12" cy="12" r="4" fill="#f9ab00"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" stroke="#f9ab00" stroke-width="2" stroke-linecap="round"/>`;
+            icon.innerHTML = `<circle cx="12" cy="12" r="4" fill="var(--warning)"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" stroke="var(--warning)" stroke-width="2" stroke-linecap="round"/>`;
         }
     }
 })();

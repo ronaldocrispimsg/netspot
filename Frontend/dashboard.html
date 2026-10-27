@@ -80,7 +80,7 @@
             <label for="http_url" class="visually-hidden">URL HTTP/HTTPS</label>
             <input id="http_url" placeholder="URL HTTP opcional (ex.: http://10.0.1.10:80/)" title="Se preenchida, o NetSpot envia requisição GET e afere a latência web.">
 
-            <small class="discovery-helper-text" style="grid-column: 1 / -1; margin-top: -2px; margin-bottom: 4px;">
+            <small class="discovery-helper-text discovery-helper-full">
                 <strong>Dica DHCP:</strong> Prefira cadastrar o <strong>Hostname (DNS)</strong> para rastrear trocas de IP automaticamente.
             </small>
 
@@ -140,7 +140,7 @@
             <small>Nenhuma descoberta executada.</small>
         </div>
         <div class="network-discovery-actions">
-            <button id="selectAllDiscoveryBtn" type="button" class="btn-secondary-action" style="display: none;">
+            <button id="selectAllDiscoveryBtn" type="button" class="btn-secondary-action hidden">
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><polyline points="9 11 12 14 22 4"></polyline></svg>
                 <span>Selecionar todos</span>
             </button>
@@ -212,15 +212,15 @@
         <table class="noc-table" role="table">
           <thead>
             <tr>
-              <th scope="col" style="width: 48px;">Status</th>
-              <th scope="col">Dispositivo</th>
-              <th scope="col" style="width: 120px;">Saúde</th>
-              <th scope="col" style="width: 105px;">SLA (10m)</th>
-              <th scope="col" style="width: 90px;">Ping</th>
-              <th scope="col" style="width: 110px;">Web Check</th>
-              <th scope="col" style="width: 130px;">Portas TCP</th>
-              <th scope="col">Causa Provável</th>
-              <th scope="col" style="width: 155px; text-align: right;">Ações</th>
+              <th scope="col" class="noc-th-status">Status</th>
+              <th scope="col" class="noc-th-device">Dispositivo</th>
+              <th scope="col" class="noc-th-health">Saúde</th>
+              <th scope="col" class="noc-th-sla">SLA (10m)</th>
+              <th scope="col" class="noc-th-ping">Ping</th>
+              <th scope="col" class="noc-th-web">Web Check</th>
+              <th scope="col" class="noc-th-tcp">Portas TCP</th>
+              <th scope="col" class="noc-th-cause">Causa Provável</th>
+              <th scope="col" class="noc-th-actions">Ações</th>
             </tr>
           </thead>
           <tbody id="nocTableBody"></tbody>
@@ -256,7 +256,7 @@
 
     <label class="modal-label" for="modal-ip">Endereço / IP (ou Hostname/FQDN)</label>
     <input id="modal-ip" placeholder="Hostname ou IP (ex.: pc1.lab.local)" title="Dica: Em redes com DHCP, prefira o Hostname (DNS) para acompanhar mudanças de IP automaticamente.">
-    <small class="discovery-helper-text" style="margin-top: 2px; margin-bottom: 8px;">
+    <small class="discovery-helper-text dhcp-helper-modal">
       <strong>Dica DHCP:</strong> Prefira o <strong>Hostname (DNS)</strong> para acompanhar mudanças de IP.
     </small>
 
@@ -331,7 +331,7 @@
         <svg class="eye-closed hidden" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle><line x1="2" y1="2" x2="22" y2="22"></line></svg>
       </button>
     </div>
-    <small class="discovery-helper-text" style="margin-top: -6px; margin-bottom: 8px;">
+    <small class="discovery-helper-text pwd-helper-modal">
       Mínimo de 4 caracteres.
     </small>
 
@@ -422,7 +422,7 @@
       <h3 id="confirmEmptyTrashTitle">Excluir todos da lixeira</h3>
       <button type="button" class="modal-close-btn" onclick="closeConfirmEmptyTrashModal()" title="Fechar" aria-label="Fechar"><span aria-hidden="true">&times;</span></button>
     </div>
-    <p class="confirm-modal-text">Tem certeza de que deseja excluir permanentemente <strong>todos os hosts</strong> que estão na lixeira?<br><small style="color: var(--text-muted, #59616e);">Essa ação não poderá ser desfeita.</small></p>
+    <p class="confirm-modal-text">Tem certeza de que deseja excluir permanentemente <strong>todos os hosts</strong> que estão na lixeira?<br><small class="confirm-modal-subnote">Essa ação não poderá ser desfeita.</small></p>
     <div class="modal-actions">
       <button type="button" class="modal-btn-danger" id="confirmEmptyTrashBtn" onclick="confirmEmptyTrash()">Sim, excluir todos</button>
       <button type="button" class="modal-btn-secondary" onclick="closeConfirmEmptyTrashModal()">Cancelar</button>

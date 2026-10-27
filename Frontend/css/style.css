@@ -437,17 +437,18 @@ section {
 input {
     padding: 10px 12px;
     margin: 4px;
-    border: 1px solid #cbd5e1;
+    border: 1px solid var(--line);
     border-radius: 8px;
-    background: #fff;
+    background: var(--bg-panel);
+    color: var(--text-main);
     transition: border-color .2s, box-shadow .2s;
 }
 
 input:focus,
 select:focus {
     outline: none;
-    border-color: #bdbdbd;
-    box-shadow: 0 0 0 3px rgba(120, 120, 120, 0.16);
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
 /* =========================
@@ -2260,8 +2261,8 @@ CARDS HOST
     justify-content: center;
     border: none;
     border-radius: 4px;
-    background: #ef4444;
-    color: white;
+    background: var(--danger);
+    color: #ffffff;
     font-size: 16px;
     font-weight: bold;
     cursor: pointer;
@@ -2279,7 +2280,7 @@ CARDS HOST
 }
 
 .host-delete-btn:hover {
-    background: #dc2626;
+    filter: brightness(0.9);
     transform: scale(1.08);
 }
 
@@ -3129,6 +3130,43 @@ TOASTS
     border-bottom: 2px solid var(--line);
     z-index: 3;
     user-select: none;
+}
+
+/* NOC Table Column Headers */
+.noc-th-status { width: 48px; }
+.noc-th-device { min-width: 140px; }
+.noc-th-health { width: 120px; }
+.noc-th-sla { width: 105px; }
+.noc-th-ping { width: 90px; }
+.noc-th-web { width: 110px; }
+.noc-th-tcp { width: 130px; }
+.noc-th-cause { min-width: 140px; }
+.noc-th-actions { width: 155px; text-align: right; }
+
+/* Form & Helper Text Utilities */
+.discovery-helper-full {
+    grid-column: 1 / -1;
+    margin-top: -2px;
+    margin-bottom: 4px;
+}
+
+.dhcp-helper-modal {
+    margin-top: 2px;
+    margin-bottom: 8px;
+}
+
+.pwd-helper-modal {
+    margin-top: -6px;
+    margin-bottom: 8px;
+}
+
+.pwd-first-access-subtitle {
+    text-align: left;
+    margin-bottom: 12px;
+}
+
+.confirm-modal-subnote {
+    color: var(--text-muted);
 }
 
 .noc-table tbody tr {
