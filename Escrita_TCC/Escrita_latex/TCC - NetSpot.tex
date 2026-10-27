@@ -342,6 +342,17 @@ A relevância desta pesquisa fundamenta-se na caracterização técnica do porte
 
 Nesse contexto, constata-se uma demanda concreta por soluções especializadas no estilo NOC Lite — ferramentas leves, objetivas e intuitivas — que priorizem a praticidade imediata de implantação (\textit{turn-key}), a observabilidade proativa em tempo real e a facilidade de uso, sem impor custos financeiros de licenciamento ou sobrecarga severa de hardware. O NetSpot preenche essa lacuna ao adotar uma arquitetura orientada a eventos assíncrona, desacoplada e conteinerizada, garantindo que o consumo de CPU do servidor de monitoramento permaneça abaixo de 10\% e a ocupação de memória sob 600 MB, proporcionando uma alternativa de engenharia prática, resiliente e acessível para administradores de rede de instituições de ensino e empresas de pequeno e médio porte.
 
+\subsection{ESTRUTURA DO TRABALHO}
+O presente documento está organizado em seis seções articuladas de maneira lógica e sequencial:
+\begin{itemize}[leftmargin=1.25cm]
+\item \textbf{Seção 1 (Introdução)}: Apresenta a contextualização do problema de gerenciamento de redes em ambientes de menor porte, os objetivos geral e específicos, a justificativa técnica e socioeconômica e a organização do texto;
+\item \textbf{Seção 2 (Referencial Teórico)}: Discute os modelos de referência em camadas (OSI e TCP/IP), o gerenciamento de falhas e desempenho sob o modelo FCAPS, a arquitetura do protocolo SNMP e os principais trabalhos correlatos presentes na literatura;
+\item \textbf{Seção 3 (Metodologia)}: Formaliza a classificação da pesquisa científica, o método de engenharia de software segundo Wazlawick, a estratégia experimental híbrida (emulação Kathará e validação física no IFNMG) e os instrumentos de telemetria e verificação;
+\item \textbf{Seção 4 (Arquitetura e Implementação do NetSpot)}: Detalha a modelagem de classes orientada a objetos, os microsserviços do sistema, o motor assíncrono de coleta, a modelagem matemática das métricas NOC, a resiliência operacional e o desenvolvimento do frontend;
+\item \textbf{Seção 5 (Ambiente de Experimentação e Resultados)}: Descreve os ensaios empíricos nos cenários do Kathará (40 e 126 nós) e na infraestrutura física real do IFNMG, analisando a suíte de 86 testes automatizados e o consumo de recursos computacionais;
+\item \textbf{Seção 6 (Considerações Finais)}: Sintetiza os resultados obtidos, as contribuições da pesquisa, as limitações do protótipo atual e as perspectivas para trabalhos futuros.
+\end{itemize}
+
 \section{REFERENCIAL TEÓRICO}
 Esta seção apresenta os fundamentos teóricos que sustentam o projeto do NetSpot, abordando arquitetura de redes, o modelo de gerenciamento FCAPS, a especificação do protocolo SNMP e os trabalhos correlatos na literatura.
 
@@ -353,7 +364,7 @@ A organização da comunicação em redes de computadores fundamenta-se no conce
 \caption{Modelo de referência OSI}
 \label{fig:modelo_osi}
 \includegraphics[width=0.70\textwidth,height=0.50\textheight,keepaspectratio]{image4.png}
-\fonte{\citeonline{cisco2024protocolos}.}
+\fonte{Adaptado de \citeonline{tanenbaum2021redes} e \citeonline{forouzan2010comunicacao}.}
 \end{figure}
 
 Na prática, a Internet consolidou-se sobre a arquitetura TCP/IP (RFC 1180), estruturada em quatro camadas operacionais \cite{sipple1991tcpip}. Na camada de aplicação, operam protocolos como HTTP/HTTPS e DNS, além do SNMP para gerenciamento. Na camada de transporte, o TCP provê entrega orientada a conexão e confiável, enquanto o UDP prioriza velocidade e baixo \textit{overhead}, sendo o transporte padrão das consultas SNMP. Na camada de rede, o protocolo ICMP viabiliza diagnósticos essenciais como o teste de conectividade \textit{Ping} \cite{forouzan2010comunicacao}, estruturado em camadas como exibido na Figura \ref{fig:modelo_tcp_ip}.
@@ -363,13 +374,13 @@ Na prática, a Internet consolidou-se sobre a arquitetura TCP/IP (RFC 1180), est
 \caption{Camadas do modelo TCP/IP}
 \label{fig:modelo_tcp_ip}
 \includegraphics[width=0.85\textwidth,height=0.50\textheight,keepaspectratio]{image5.png}
-\fonte{\citeonline{academiaderedes2026tcpip}.}
+\fonte{Adaptado de \citeonline{kurose2013redes} e \citeonline{sipple1991tcpip}.}
 \end{figure}
 
 \subsection{GERENCIAMENTO DE REDES E PROTOCOLO SNMP}
 O modelo FCAPS (\textit{Fault, Configuration, Accounting, Performance, Security}), definido pela ISO, categoriza a administração de redes em cinco áreas funcionais. O NetSpot concentra sua atuação no Gerenciamento de Desempenho (\textit{Performance Management}) e no Gerenciamento de Falhas (\textit{Fault Management}), visando identificar e mitigar anomalias operacionais de maneira preditiva \cite{tanenbaum2021redes}.
 
-O protocolo SNMP (\textit{Simple Network Management Protocol}) é o padrão da indústria para monitoramento de ativos. Trabalhando na camada de aplicação e propriando-se primariamente da leveza do UDP, o protocolo opera de forma centralizada através de três grandes componentes: Gerente (estação de monitoramento), pelos Agentes (softwares/deamons que rodam nos equipamentos monitorados) e as MIBs \textit{Management Information Bases}. A MIB atua como um banco de dados virtual hierárquico, organizado por identificadores de objeto OIDs (\textit{Object Identifiers}), cujo papel é armazenar de maneira sistemática todas as variáveis, métricas e estatísticas relativas ao estado do dispositivo.
+O protocolo SNMP (\textit{Simple Network Management Protocol}), formalizado inicialmente pela IETF na RFC 1157 \cite{case1990rfc1157} e estruturado arquiteturalmente na RFC 3411 \cite{harrington2002rfc3411}, é o padrão da indústria para monitoramento de ativos. Trabalhando na camada de aplicação e apropriando-se primariamente da leveza do UDP, o protocolo opera de forma centralizada através de três grandes componentes: Gerente (estação de monitoramento), pelos Agentes (softwares/daemons que rodam nos equipamentos monitorados) e as MIBs (\textit{Management Information Bases}). A MIB atua como um banco de dados virtual hierárquico, organizado por identificadores de objeto OIDs (\textit{Object Identifiers}), cujo papel é armazenar de maneira sistemática todas as variáveis, métricas e estatísticas relativas ao estado do dispositivo.
 A flexibilidade do SNMP advém da sua simplicidade operacional baseada em PDUs (\textit{Protocol Data Units}) como \texttt{GetRequest} (para solicitar a leitura do valor de uma variável), \texttt{SetRequest} (para alterar ou configurar um parâmetro remotamente) e \texttt{Trap} (uma notificação assíncrona, não solicitada pelo gerente, em que o agente envia o alerta sobre um evento excepcional ou falha iminente), conforme sintetizado na Figura \ref{fig:arquitetura_snmp}.
 
 \begin{figure}[H]
@@ -377,7 +388,7 @@ A flexibilidade do SNMP advém da sua simplicidade operacional baseada em PDUs (
 \caption{Arquitetura SNMP}
 \label{fig:arquitetura_snmp}
 \includegraphics[width=0.82\textwidth]{image1.jpg}
-\fonte{\citeonline{researchgate2014arquitetura}.}
+\fonte{Adaptado de \citeonline{basso2020administracao} e \citeonline{harrington2002rfc3411}.}
 \end{figure}
 
 Enquanto as versões SNMPv1 e v2c baseiam sua segurança na troca de strings de comunidade em texto claro (\textit{plaintext}), vulneráveis a ataques de interceptação (\textit{sniffing}), a versão SNMPv3 introduz o modelo USM (\textit{User-based Security Model}), provendo autenticação criptográfica (MD5/SHA) e privacidade dos dados via encriptação (DES/AES), garantindo a conformidade com requisitos modernos de segurança da informação.
@@ -388,6 +399,51 @@ Inúmeros trabalhos científicos e técnicos vêm explorando metodologias de mon
 A relevância do monitoramento específico é corroborada por \citeonline{silva2024prototipo}, que validou a criação de um protótipo de detecção de oscilações de sinal focado estritamente na realidade de provedores (ISPs) de pequeno porte. Dentro da área de soluções leves (\textit{lightweight}), destacam-se a proposta de \citeonline{yahya2017lightweight} que, frente às fortes limitações da Internet das Coisas (IoT), conseguiram diminuir pacotes SNMP em 40\% reduzindo também a exigência de CPU dos dispositivos restritos, e o estudo de \citeonline{roquero2021performance} com a formulação de algoritmos inteligentes de \textit{polling} visando escalabilidade eficiente para grandes datacenters sem elevação extrema de custos computacionais. Na busca por mitigação de latência durante o processamento corporativo, \citeonline{espinel2022design} obtiveram sucesso distribuindo as atividades do SNMP através de um modelo multi-agente operado em camadas (coletor, consolidador e aplicação). Para o monitoramento com alertas, os frameworks analisados por \citeonline{khan2013efficient}, \citeonline{liu2012monitoring} e \citeonline{liu2013design} reforçam a eficácia de correlacionar métricas SNMP contínuas com alertas disparados instantaneamente após falhas na rede.
 
 Contudo, ao analisar profundamente a literatura supracitada, constata-se uma lacuna nítida frente à demanda de estruturas de pequeno e médio portes, nas quais implantar plataformas corporativas de alta complexidade torna-se contraproducente devido à agressiva requisição de recursos dedicados, curva de aprendizado íngreme e esforço contínuo de manutenção. O diferencial inerente do NetSpot reside precisamente na concepção de uma ferramenta no conceito NOC Lite: focada na extrema praticidade operacional, facilidade de uso com interface intuitiva, baixo consumo computacional e implantação descomplicada via contêineres, sustentada por uma Arquitetura Orientada a Eventos (EDA) assíncrona em Python (3.11/3.12) com resiliência auto-regenerativa (\textit{Circuit Breaker}, \textit{Self-Healing}, DLQ e \textit{Anti-Spam}) e automação de alertas preventivos.
+
+\section{METODOLOGIA}
+Esta seção descreve os procedimentos metodológicos, o método de engenharia de software e a estratégia experimental adotados no desenvolvimento e na avaliação empírica do NetSpot.
+
+\subsection{CLASSIFICAÇÃO DA PESQUISA}
+Sob a ótica de sua finalidade primordial, esta pesquisa classifica-se como \textbf{aplicada}, uma vez que objetiva conceber, implementar e validar uma solução tecnológica funcional para um problema prático concreto vivenciado na administração de infraestruturas de TIC: o monitoramento proativo, leve e de alta disponibilidade em redes de pequeno e médio porte e laboratórios de ensino.
+
+Quanto à abordagem do problema, o trabalho adota natureza \textbf{quali-quantitativa (mista)}. A vertente qualitativa manifesta-se na modelagem arquitetural orientada a objetos, na análise ergonômica da experiência do operador NOC e na inferência heurística de causa raiz para incidentes operacionais. A vertente quantitativa evidencia-se na mensuração empírica e contínua de variáveis de telemetria de rede (RTT, \textit{jitter}, vazão de tráfego, percentual de SLA e \textit{Health Score}), bem como na aferição do consumo de recursos computacionais (taxa de ocupação de CPU e alocação de memória RAM) sob regimes controlados de estresse.
+
+No que tange aos seus objetivos operacionais, a pesquisa caracteriza-se como \textbf{descritivo-exploratória}, detalhando os comportamentos de resiliência e os impactos de anomalias induzidas em ativos físicos e virtuais. Sob o prisma dos procedimentos técnicos, o estudo ancora-se no método experimental fundamentado no paradigma de \textit{Design Science Research} (DSR) e na Engenharia de Software, cujo ciclo metodológico compreende a identificação do problema, a especificação de requisitos, a síntese do artefato computacional e sua rigorosa validação em ambientes simulados e reais.
+
+\subsection{MÉTODO DE ENGENHARIA E MODELAGEM DE SOFTWARE}
+O desenvolvimento do NetSpot orientou-se pelo método de Análise e Projeto de Sistemas de Informação Orientados a Objetos formalizado por \citeonline{wazlawick2011analise}, articulado às boas práticas contemporâneas de Engenharia de Software \cite{engsoftmoderna} e aos preceitos da Arquitetura Limpa \cite{martin2019arquitetura}.
+
+A elicitação e a estruturação dos contratos operacionais do sistema basearam-se no modelo conceitual FURPS+:
+\begin{itemize}[leftmargin=1.25cm]
+\item \textbf{Funcionalidade (\textit{Functionality})}: Descoberta automática de nós em sub-redes IPv4 locais (\textit{LAN Discovery}), sondagens ativas multicamada concorrentes (ICMP \textit{Ping}, verificação de portas de transporte TCP, requisições L7 HTTP/HTTPS com inspeção de cabeçalhos) e telemetria profunda de hardware via protocolo SNMP (UCD-SNMP-MIB e HOST-RESOURCES-MIB);
+\item \textbf{Usabilidade (\textit{Usability})}: Interface web em arquitetura SPA (\textit{Single Page Application}) com cartões tridimensionais de telemetria, modo alternativo de Tabela NOC para visualização massiva de densidade, transição suave de temas visual (\textit{Dark and White}) e conformidade estrita com as diretrizes de acessibilidade W3C WCAG 2.1 nível AA \cite{w3c2018wcag21};
+\item \textbf{Confiabilidade e Resiliência (\textit{Reliability})}: Tolerância a falhas via barramento desacoplado RabbitMQ com \textit{Dead Letter Queue} (DLQ), disjuntor de proteção (\textit{Circuit Breaker}) para prevenção de falhas em cascata \cite{nygard2018release}, algoritmo heurístico de supressão compensatória para firewalls de inspeção de estado e filtro anti-flapping composto para contenção de tempestades de alertas;
+\item \textbf{Desempenho (\textit{Performance})}: Motor de I/O assíncrono em Python (3.11/3.12) suportado por \texttt{asyncio}, garantindo ciclos completos de varredura sobre dezenas de nós em janela inferior a 2 segundos, mantendo consumo estável abaixo de 600 MB de RAM e teto de CPU sob 12\%;
+\item \textbf{Suportabilidade (\textit{Supportability})}: Modularização em cinco microsserviços containerizados via Docker, permitindo implantação imediata (\textit{turn-key}) e reprodutível sem dependência de configurações prévias complexas no sistema operacional hospedeiro.
+\end{itemize}
+
+A atribuição de responsabilidades operacionais nas camadas de domínio e de serviço seguiu os padrões GRASP formalizados por \citeonline{larman2005utilizando}, priorizando alta coesão e baixo acoplamento.
+
+\subsection{ESTRATÉGIA HÍBRIDA DE EXPERIMENTAÇÃO E CONTROLE}
+Para assegurar a validade ecológica e a robustez empírica dos resultados sem comprometer a integridade operacional da infraestrutura institucional, concebeu-se uma estratégia experimental híbrida e complementar, combinando a simulação virtualizada em larga escala com a experimentação física controlada.
+
+As estações de trabalho e servidores dos laboratórios de informática do IFNMG -- Campus Januária possuem grade horária contínua e prioritária dedicada às aulas pedagógicas dos cursos técnicos e superiores. Consequentemente, intervenções destrutivas prolongadas — tais como saturação massiva de enlaces, alteração de parâmetros de kernel de roteamento, desativação forçada de regras de firewall e injeção de sobrecarga de hardware — revelaram-se inviáveis para evitar qualquer prejuízo às atividades letivas.
+
+Frente a essa contingência real, a metodologia estruturou-se em duas frentes empíricas:
+\begin{enumerate}[leftmargin=1.25cm]
+\item \textbf{Emulação Virtualizada em Larga Escala com o Framework Kathar{\'a} \cite{bonola2018kathara}}:
+Permitiu submeter o NetSpot a condições extremas de rede através de dois laboratórios reprodutíveis: a topologia canônica de 40 nós monitorados distribuídos em três domínios de broadcast com roteadores Quagga/FRRouting intermediários, e o cenário de estresse em alta densidade com 126 nós monitorados simultaneamente sob o bloco de endereçamento \texttt{10.0.0.0/22}. Nesse ambiente, foram injetadas anomalias intencionais e controladas utilizando utilitários de perturbação de tráfego (\texttt{tc} para injeção de atraso e descarte aleatório de pacotes) e sobrecarga computacional (\texttt{stress-ng});
+\item \textbf{Validação Física em Ambiente Real (Laboratório 2 do IFNMG -- Campus Januária)}:
+Conduzida durante as janelas de disponibilidade programada dos laboratórios de ensino, a experimentação física abrangeu estações de trabalho reais interconectadas à rede local acadêmica sob ecossistemas heterogêneos (Ubuntu Linux e Windows 10/11 Pro). O sistema foi avaliado quanto à sua capacidade de descobrir os ativos automaticamente através de varredura de sub-rede, resolver OIDs SNMP polimórficos de hardware em tempo real e notificar anomalias decorrentes da desconexão física deliberada de cabos de rede e derrubada de serviços locais.
+\end{enumerate}
+
+\subsection{INSTRUMENTOS DE COLETA, TELEMETRIA E CRITÉRIOS DE VALIDAÇÃO}
+Os dados empíricos foram coletados e armazenados continuamente através dos seguintes mecanismos:
+\begin{itemize}[leftmargin=1.25cm]
+\item \textbf{Telemetria de Rede e Protocolos}: Amostragem contínua de tempos de resposta RTT (ICMP e TCP) e L7 (HTTP), sintetizados estatisticamente através do cálculo de \textit{Jitter} conforme a RFC 3550 \cite{schulzrinne2003rfc3550}, mensuração de conformidade de SLA via união de intervalos contíguos de tempo (\textit{Interval Merging}) baseada no problema da medida de Klee \cite{bentley1977klee} e estimativa de tendência preditiva por Mínimos Quadrados Ordinários (OLS);
+\item \textbf{Telemetria de Consumo Computacional}: Monitoramento dos recursos alocados pelo servidor de gerência através das ferramentas nativas \texttt{docker stats} e \texttt{htop}, registrando o percentual de ocupação de CPU, o consumo absoluto de memória RAM e a taxa de I/O em disco ao longo de execuções prolongadas;
+\item \textbf{Verificação Formal de Regras de Negócio e Segurança}: Auditoria exaustiva da suíte de 86 testes automatizados desenvolvida em Pytest (\texttt{Backend/tests/}), contemplando a validação de algoritmos analíticos, o ciclo de estados do disjuntor de resiliência e a proteção contra regressões críticas de segurança (RLS, RBAC, criptografia de credenciais via Bcrypt \cite{provos1999bcrypt} e blindagem contra injeção de scripts maliciosos XSS).
+\end{itemize}
 
 \section{ARQUITETURA E IMPLEMENTAÇÃO DO NETSPOT}
 O \textbf{NetSpot (NOC Lite)} foi concebido e implementado sob os preceitos fundamentais da Análise e Projeto de Sistemas Orientados a Objetos formalizados por \citeonline{wazlawick2011analise}, articulados aos princípios da \textit{Clean Architecture} \cite{engsoftmoderna}, aos padrões SOLID e à orquestração de microsserviços containerizados orientados a eventos. O sistema estabelece uma abordagem estritamente desacoplada na qual as regras de negócio centrais independem de bibliotecas externas, frameworks de apresentação ou especificidades de bancos de dados.
@@ -843,7 +899,7 @@ Complementarmente, a função \texttt{infer\_probable_cause()} (\texttt{Backend/
 \end{enumerate}
 
 \subsection{FLUXOGRAMA DE DECISÕES E ORQUESTRAÇÃO DE EVENTOS AMQP}
-O ciclo de vida operacional do NetSpot fundamenta-se nos preceitos de Arquitetura Orientada a Eventos \cite{hazelcast2026event}, estruturado de forma desacoplada através do barramento de mensageria assíncrona RabbitMQ, orquestrado pela classe \texttt{QueueManager} (\texttt{Backend/mq_manager.py}), conforme ilustrado no fluxograma da Figura \ref{fig:fluxograma_decisoes}.
+O ciclo de vida operacional do NetSpot fundamenta-se nos preceitos de Arquitetura Orientada a Eventos e Padrões de Integração Corporativa \cite{hohpe2004enterprise}, estruturado de forma desacoplada através do barramento de mensageria assíncrona RabbitMQ, orquestrado pela classe \texttt{QueueManager} (\texttt{Backend/mq_manager.py}), conforme ilustrado no fluxograma da Figura \ref{fig:fluxograma_decisoes}.
 
 \begin{figure}[H]
 \centering
