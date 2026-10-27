@@ -1433,6 +1433,17 @@ function initViewMode() {
         saved = localStorage.getItem("netspot_view_mode") || "cards";
     } catch (_) {}
     setViewMode(saved);
+
+    const btnCards = document.getElementById("viewCardsBtn");
+    const btnTable = document.getElementById("viewTableBtn");
+    if (btnCards && !btnCards.dataset.listenerBound) {
+        btnCards.addEventListener("click", () => setViewMode("cards"));
+        btnCards.dataset.listenerBound = "true";
+    }
+    if (btnTable && !btnTable.dataset.listenerBound) {
+        btnTable.addEventListener("click", () => setViewMode("table"));
+        btnTable.dataset.listenerBound = "true";
+    }
 }
 
 function focusHostCard(hostName) {
