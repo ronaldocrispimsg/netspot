@@ -261,6 +261,8 @@ window.addEventListener("DOMContentLoaded", async () => {
     }
     
     function updateThemeIcon(isDarkState) {
+        const btn = document.getElementById("themeToggleBtn");
+        if (btn) btn.setAttribute("aria-pressed", isDarkState ? "true" : "false");
         const icon = document.getElementById("themeToggleIcon");
         if (!icon) return;
         if (isDarkState) {

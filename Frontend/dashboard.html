@@ -25,7 +25,7 @@
 <body>
 <header class="app-topbar">
     <div class="app-topbar-inner">
-        <button id="openMenuBtn" class="topbar-action-btn account-btn" type="button" title="Painel da Conta: Alterar senha e Sair" aria-label="Painel da Conta: Alterar senha e Sair">
+        <button id="openMenuBtn" class="topbar-action-btn account-btn" type="button" title="Painel da Conta: Alterar senha e Sair" aria-label="Painel da Conta: Alterar senha e Sair" aria-expanded="false" aria-controls="sidebarMenu">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
                 <circle cx="12" cy="7" r="4"></circle>
@@ -39,7 +39,7 @@
             </a>
         </div>
         <div class="topbar-right-group">
-            <button id="themeToggleBtn" class="theme-switch-pill" type="button" title="Alternar tema claro/escuro" aria-label="Alternar tema claro/escuro">
+            <button id="themeToggleBtn" class="theme-switch-pill" type="button" title="Alternar tema claro/escuro" aria-label="Alternar tema claro/escuro" aria-pressed="false">
                 <svg class="theme-switch-icon-sun" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
                 <svg class="theme-switch-icon-moon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3a9 9 0 109 9 9.75 9.75 0 00-.67-3.4 6.78 6.78 0 01-7.93-7.93A9.75 9.75 0 0012 3z"/></svg>
                 <span class="theme-switch-thumb">
@@ -248,7 +248,7 @@
   <div class="modal-content">
     <div class="modal-header">
       <h3 id="editModalTitle">Editar host</h3>
-      <button type="button" class="modal-close-btn" onclick="closeModal()" title="Fechar" aria-label="Fechar">&times;</button>
+      <button type="button" class="modal-close-btn" onclick="closeModal()" title="Fechar" aria-label="Fechar"><span aria-hidden="true">&times;</span></button>
     </div>
 
     <label class="modal-label" for="modal-name">Nome do Host</label>
@@ -311,13 +311,13 @@
   <div class="modal-content">
     <div class="modal-header">
       <h3 id="changePwdModalTitle">Alterar senha</h3>
-      <button type="button" class="modal-close-btn" onclick="closeChangePwdModal()" title="Fechar" aria-label="Fechar">&times;</button>
+      <button type="button" class="modal-close-btn" onclick="closeChangePwdModal()" title="Fechar" aria-label="Fechar"><span aria-hidden="true">&times;</span></button>
     </div>
 
     <label class="modal-label" for="current-pwd">Senha Atual</label>
     <div class="password-input-wrap">
       <input id="current-pwd" type="password" placeholder="Senha atual" autocomplete="current-password" title="Digite sua senha atual de acesso">
-      <button type="button" class="password-toggle-btn" onclick="togglePasswordVisibility('current-pwd', this)" title="Mostrar senha" aria-label="Mostrar senha">
+      <button type="button" class="password-toggle-btn" onclick="togglePasswordVisibility('current-pwd', this)" title="Mostrar senha" aria-label="Mostrar senha" aria-pressed="false">
         <svg class="eye-open" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
         <svg class="eye-closed hidden" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle><line x1="2" y1="2" x2="22" y2="22"></line></svg>
       </button>
@@ -326,7 +326,7 @@
     <label class="modal-label" for="new-pwd">Nova Senha</label>
     <div class="password-input-wrap">
       <input id="new-pwd" type="password" placeholder="Nova senha (mín. 4 caracteres)" autocomplete="new-password" title="A nova senha deve possuir no mínimo 4 caracteres">
-      <button type="button" class="password-toggle-btn" onclick="togglePasswordVisibility('new-pwd', this)" title="Mostrar senha" aria-label="Mostrar senha">
+      <button type="button" class="password-toggle-btn" onclick="togglePasswordVisibility('new-pwd', this)" title="Mostrar senha" aria-label="Mostrar senha" aria-pressed="false">
         <svg class="eye-open" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
         <svg class="eye-closed hidden" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle><line x1="2" y1="2" x2="22" y2="22"></line></svg>
       </button>
@@ -338,7 +338,7 @@
     <label class="modal-label" for="confirm-pwd">Confirmar Nova Senha</label>
     <div class="password-input-wrap">
       <input id="confirm-pwd" type="password" placeholder="Confirmar nova senha" autocomplete="new-password" title="Repita a nova senha exatamente como digitada acima">
-      <button type="button" class="password-toggle-btn" onclick="togglePasswordVisibility('confirm-pwd', this)" title="Mostrar senha" aria-label="Mostrar senha">
+      <button type="button" class="password-toggle-btn" onclick="togglePasswordVisibility('confirm-pwd', this)" title="Mostrar senha" aria-label="Mostrar senha" aria-pressed="false">
         <svg class="eye-open" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
         <svg class="eye-closed hidden" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle><line x1="2" y1="2" x2="22" y2="22"></line></svg>
       </button>
@@ -359,20 +359,20 @@
   <div class="modal-content trash-modal-content">
     <div class="trash-modal-header">
       <h3 id="trashModalTitle">Gerenciar Lixeira e Exclusão</h3>
-      <button type="button" class="modal-close-btn" onclick="closeTrashModal()" aria-label="Fechar lixeira">&times;</button>
+      <button type="button" class="modal-close-btn" onclick="closeTrashModal()" aria-label="Fechar lixeira"><span aria-hidden="true">&times;</span></button>
     </div>
 
     <div class="trash-modal-tabs" role="tablist" aria-label="Abas da lixeira">
-      <button id="tabBulkDeactivateBtn" class="trash-tab-btn" type="button" role="tab" aria-selected="false" onclick="switchTrashModalTab('deactivate')">
+      <button id="tabBulkDeactivateBtn" class="trash-tab-btn" type="button" role="tab" aria-selected="false" aria-controls="trashTabDeactivate" onclick="switchTrashModalTab('deactivate')">
         Enviar para lixeira (Ativos)
       </button>
-      <button id="tabTrashItemsBtn" class="trash-tab-btn active" type="button" role="tab" aria-selected="true" onclick="switchTrashModalTab('trash')">
+      <button id="tabTrashItemsBtn" class="trash-tab-btn active" type="button" role="tab" aria-selected="true" aria-controls="trashTabItems" onclick="switchTrashModalTab('trash')">
         Itens na lixeira
       </button>
     </div>
 
     <!-- Aba 1: Seleção em lote de hosts ativos para enviar à lixeira -->
-    <div id="trashTabDeactivate" class="trash-tab-panel hidden" role="tabpanel">
+    <div id="trashTabDeactivate" class="trash-tab-panel hidden" role="tabpanel" aria-labelledby="tabBulkDeactivateBtn">
       <div class="bulk-deactivate-search-row">
         <label for="bulkDeactivateSearchInput" class="visually-hidden">Filtrar hosts ativos</label>
         <input id="bulkDeactivateSearchInput" type="text" placeholder="Filtrar hosts ativos por nome ou IP..." title="Filtrar lista de hosts ativos">
@@ -400,7 +400,7 @@
     </div>
 
     <!-- Aba 2: Itens atualmente na lixeira -->
-    <div id="trashTabItems" class="trash-tab-panel" role="tabpanel">
+    <div id="trashTabItems" class="trash-tab-panel" role="tabpanel" aria-labelledby="tabTrashItemsBtn">
       <div class="trash-modal-toolbar">
         <button id="emptyTrashBtn" class="trash-empty-btn danger-btn" type="button" onclick="openConfirmEmptyTrashModal()" title="Excluir permanentemente todos os hosts da lixeira">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
@@ -420,7 +420,7 @@
   <div class="modal-content confirm-modal-content">
     <div class="modal-header">
       <h3 id="confirmEmptyTrashTitle">Excluir todos da lixeira</h3>
-      <button type="button" class="modal-close-btn" onclick="closeConfirmEmptyTrashModal()" title="Fechar" aria-label="Fechar">&times;</button>
+      <button type="button" class="modal-close-btn" onclick="closeConfirmEmptyTrashModal()" title="Fechar" aria-label="Fechar"><span aria-hidden="true">&times;</span></button>
     </div>
     <p class="confirm-modal-text">Tem certeza de que deseja excluir permanentemente <strong>todos os hosts</strong> que estão na lixeira?<br><small style="color: var(--text-muted, #59616e);">Essa ação não poderá ser desfeita.</small></p>
     <div class="modal-actions">

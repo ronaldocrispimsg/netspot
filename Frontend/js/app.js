@@ -983,7 +983,7 @@ function buildHostCardHTML(h) {
     else if (h.severity === "CRITICAL") sevClass = "sev-critical";
     const severityIndicatorHtml = h.icmp_blocked_but_service_up
         ? ""
-        : `<span class="severity-indicator ${sevClass}">✚</span>`;
+        : `<span class="severity-indicator ${sevClass}" aria-hidden="true">✚</span>`;
 
     const availability10m = h.availability_10m != null
         ? h.availability_10m.toFixed(2)
@@ -996,7 +996,7 @@ function buildHostCardHTML(h) {
     const snmpChartBoxHtml = snmpConfigured ? `
         <div id="snmp-chart-box-${escapeHtml(h.name)}" class="chart-box hidden" style="margin-top: 10px;">
             <div class="chart-title">Histórico SNMP</div>
-            <canvas id="snmp-chart-${escapeHtml(h.name)}" height="120"></canvas>
+            <canvas id="snmp-chart-${escapeHtml(h.name)}" height="120" role="img" aria-label="Histórico de métricas SNMP do host ${escapeHtml(h.name)}">Gráfico de métricas SNMP indisponível em modo texto.</canvas>
         </div>
     ` : "";
 
@@ -1032,7 +1032,7 @@ function buildHostCardHTML(h) {
                         title="Excluir host"
                         aria-label="Excluir host"
                         onclick='softDeleteHost(${Number(h.id)}, ${escapeJsSingleQuotedAttr(h.name)})'
-                    >✕</button>
+                    ><span aria-hidden="true">✕</span></button>
                 </div>
             </div>
 
@@ -1128,16 +1128,16 @@ function buildHostCardHTML(h) {
 
         <div id="chart-container-${escapeHtml(h.name)}" class="chart-box hidden" style="margin-top: 10px;">
             <div class="chart-title">Latência dos checks</div>
-            <canvas id="chart-${escapeHtml(h.name)}" height="120"></canvas>
+            <canvas id="chart-${escapeHtml(h.name)}" height="120" role="img" aria-label="Histórico de latência e ping do host ${escapeHtml(h.name)}">Gráfico de latência indisponível em modo texto.</canvas>
         </div>
         ${snmpChartBoxHtml}
         <div id="availability-chart-type-box-${escapeHtml(h.name)}" class="chart-box hidden">
             <div class="chart-title">Disponibilidade por tipo</div>
-            <canvas id="availability-chart-type-${escapeHtml(h.name)}" height="120"></canvas>
+            <canvas id="availability-chart-type-${escapeHtml(h.name)}" height="120" role="img" aria-label="Disponibilidade por protocolo de ${escapeHtml(h.name)}">Gráfico de disponibilidade por protocolo indisponível em modo texto.</canvas>
         </div>
         <div id="availability-chart-box-${escapeHtml(h.name)}" class="chart-box hidden">
             <div class="chart-title">Disponibilidade geral</div>
-            <canvas id="availability-chart-${escapeHtml(h.name)}" height="120"></canvas>
+            <canvas id="availability-chart-${escapeHtml(h.name)}" height="120" role="img" aria-label="Disponibilidade geral dos últimos 10 minutos de ${escapeHtml(h.name)}">Gráfico de disponibilidade geral indisponível em modo texto.</canvas>
         </div>
         <div id="history-${escapeHtml(h.name)}" class="history-box hidden"></div>
     `;
@@ -1174,7 +1174,7 @@ function updateHostCardInPlace(card, h) {
 
     const severityIndicatorHtml = h.icmp_blocked_but_service_up
         ? ""
-        : `<span class="severity-indicator ${sevClass}">✚</span>`;
+        : `<span class="severity-indicator ${sevClass}" aria-hidden="true">✚</span>`;
 
     // 1. Preservar o estado da face ativa e atualizar a classe visual do card
     const currentFace = card.dataset.face || "1";
@@ -1301,7 +1301,7 @@ function updateHostCardInPlace(card, h) {
             chartBox.style.marginTop = "10px";
             chartBox.innerHTML = `
                 <div class="chart-title">Histórico SNMP</div>
-                <canvas id="snmp-chart-${escapeHtml(h.name)}" height="120"></canvas>
+                <canvas id="snmp-chart-${escapeHtml(h.name)}" height="120" role="img" aria-label="Histórico de métricas SNMP do host ${escapeHtml(h.name)}">Gráfico de métricas SNMP indisponível em modo texto.</canvas>
             `;
             const latBox = document.getElementById(`chart-container-${h.name}`);
             if (latBox && latBox.parentNode) {
@@ -1463,7 +1463,7 @@ function buildNocTableRowHTML(h) {
     else if (h.severity === "CRITICAL") sevClass = "sev-critical";
     const severityIndicatorHtml = h.icmp_blocked_but_service_up
         ? ""
-        : `<span class="severity-indicator ${sevClass}">✚</span>`;
+        : `<span class="severity-indicator ${sevClass}" aria-hidden="true">✚</span>`;
 
     const availability10m = h.availability_10m != null
         ? h.availability_10m.toFixed(2)
@@ -1508,7 +1508,7 @@ function buildNocTableRowHTML(h) {
     }
 
     const incidentHtml = h.has_open_incident
-        ? `<span class="noc-incident-dot" title="Existe incidente em aberto para este host">!</span>`
+        ? `<span class="noc-incident-dot" title="Existe incidente em aberto para este host" aria-label="Incidente em aberto"><span aria-hidden="true">!</span></span>`
         : "";
 
     return `
@@ -2973,6 +2973,7 @@ function togglePasswordVisibility(inputId, btnEl) {
         const label = isPassword ? "Ocultar senha" : "Mostrar senha";
         btnEl.title = label;
         btnEl.setAttribute("aria-label", label);
+        btnEl.setAttribute("aria-pressed", isPassword ? "true" : "false");
     }
 }
 
@@ -3609,6 +3610,8 @@ function openSidebarMenu() {
     menu.classList.remove("hidden");
     menu.setAttribute("aria-hidden", "false");
     overlay.classList.remove("hidden");
+    const openBtn = document.getElementById("openMenuBtn");
+    if (openBtn) openBtn.setAttribute("aria-expanded", "true");
 }
 
 function closeSidebarMenu() {
@@ -3618,6 +3621,8 @@ function closeSidebarMenu() {
     menu.classList.add("hidden");
     menu.setAttribute("aria-hidden", "true");
     overlay.classList.add("hidden");
+    const openBtn = document.getElementById("openMenuBtn");
+    if (openBtn) openBtn.setAttribute("aria-expanded", "false");
 }
 
 async function restoreHost(hostId, hostName) {
@@ -4347,6 +4352,8 @@ if (logoutBtn) {
     }
     
     function updateThemeIcon(isDarkState) {
+        const btn = document.getElementById("themeToggleBtn");
+        if (btn) btn.setAttribute("aria-pressed", isDarkState ? "true" : "false");
         const icon = document.getElementById("themeToggleIcon");
         if (!icon) return;
         if (isDarkState) {
