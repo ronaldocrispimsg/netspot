@@ -768,6 +768,31 @@ O objetivo deste guia não é fornecer respostas decoradas, mas sim fundamentar 
 
 ---
 
+### Pergunta 4.10: "Ferramentas como Zabbix e Prometheus são muito maduras, consolidadas e reconhecidamente leves no nível de máquina. Por que propor o NetSpot em vez de utilizar uma delas?"
+
+* **Intenção da Banca:** Verificar se o aluno conhece a realidade das ferramentas de mercado, se não reproduz mitos simplistas (como chamar Zabbix e Prometheus de "pesados", quando na verdade são compilados em C e Go de altíssimo desempenho) e se sabe defender com maturidade a verdadeira proposta de valor do NetSpot.
+* **Onde encontrar a base no texto do TCC:**
+  - Seção 1.3: *Justificativa* (linhas 341–353).
+  - Seção 2.3: *Trabalhos Correlatos* (linhas 405–411).
+  - Seção 5.3: *Consumo de Recursos, Desempenho e Comparativo Operacional* (linhas 1181–1213 e Tabela 7).
+* **Evidências no Repositório / Código:**
+  - [`docker-compose.yml`](file:///home/crispim/Documentos/netspot/docker-compose.yml): Implantação *turn-key* completa de 5 serviços em comando único (`docker compose up -d`).
+  - [`Frontend/`](file:///home/crispim/Documentos/netspot/Frontend/): Interface SPA integrada sem necessidade de Grafana desacoplado.
+  - [`N8N/workflows/`](file:///home/crispim/Documentos/netspot/N8N/workflows/): Fluxos de notificação prontos para Telegram sem compilação de regras de Alertmanager.
+* **Roteiro e Argumentos-Chave para a Resposta:**
+  1. **Reconhecimento Técnico do Estado da Arte:**
+     - Inicie concordando com a premissa da banca: *"Zabbix (escrito em C) e Prometheus (escrito em Go) são de fato extremamente eficientes e leves em termos de processador e memória. O NetSpot não nasceu com a premissa de que eles são 'pesados' em consumo de máquina"*.
+  2. **A Verdadeira Barreira: Custo de Tempo Humano (Instalação e Manutenção):**
+     - O gargalo que o NetSpot resolve em escolas, prefeituras e pequenas e médias empresas (MPEs) é a **complexidade de instalação inicial e a curva íngreme de manutenção contínua**:
+       - **No Zabbix:** Exige provisionar e dimensionar um SGBD dedicado (PostgreSQL/MySQL com particionamento manual), instalar e configurar agentes em cada ativo, gerenciar dezenas de macros e triggers, e criar ou importar templates de MIBs complexas;
+       - **No Prometheus:** Exige orquestrar múltiplos serviços desacoplados (Prometheus Server, Alertmanager, Grafana para visualização, node_exporter, snmp_exporter com compilação prévia de MIBs via snmp.yml), além de exigir o domínio da linguagem de consulta PromQL;
+     - Para um administrador generalista de TI ou suporte de rede em uma escola ou pequena empresa sem equipe dedicada de NOC, manter essa pilha exige horas excessivas de engenharia especializada.
+  3. **A Proposta NOC Lite do NetSpot:**
+     - Uma solução pronta para uso (*turn-key*) em um único comando `docker compose up -d`: banco relacional pré-configurado com expurgo automático (`RetentionService`), barramento AMQP resiliente, alertas automáticos formatados no Telegram via N8N, descoberta visual de LAN com um clique e interface ergonômica com cartões 3D;
+     - Elimina completamente arquivos YAML manuais de exporters, compilação de MIBs ou linguagens de consulta proprietárias, entregando observabilidade proativa e cálculo de SLA instantâneo out-of-the-box.
+
+---
+
 ## Diretrizes de Postura e Articulação Durante a Arguição
 
 1. **Segurança e Firmeza:** Inicie cada resposta de forma afirmativa e direta ("Sim, essa decisão foi pautada pelo requisito de..."). Evite expressões de insegurança como "Acho que...", "Talvez..." ou "Fiz assim porque foi mais fácil".
