@@ -48,6 +48,7 @@ services:
       - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD:-guest}
       - KATHARA_ROUTER_IP=${KATHARA_ROUTER_IP:-172.17.0.2}
       - KATHARA_SUBNETS=${KATHARA_SUBNETS:-10.0.0.0/16,100.0.0.0/16}
+      - NETSPOT_DEFAULT_SUBNET=${NETSPOT_DEFAULT_SUBNET:-192.168.1.0/24}
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz')\" || exit 1"]
       interval: 10s

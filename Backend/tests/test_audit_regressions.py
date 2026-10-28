@@ -332,8 +332,8 @@ def test_empty_trash_endpoint():
     assert len(session.deleted) == 2
 
 
-def test_validate_private_subnet_supports_slash_20():
-    from Backend.routes.hosts import _validate_private_subnet
+def test_validate_private_subnet_supports_slash_20(monkeypatch):
+    from Backend.routes.hosts import _validate_private_subnet, _detect_local_network
     from fastapi import HTTPException
     import pytest
 
@@ -352,6 +352,15 @@ def test_validate_private_subnet_supports_slash_20():
         _validate_private_subnet("10.0.0.0/16")
     assert exc_info.value.status_code == 400
     assert "Subnet muito grande" in exc_info.value.detail
+
+    # 4. _detect_local_network rejeita faixas de bridge Docker (172.20.0.0/16) e adota 192.168.1.0/24
+    monkeypatch.delenv("NETSPOT_DEFAULT_SUBNET", raising=False)
+    monkeypatch.delenv("DEFAULT_DISCOVERY_SUBNET", raising=False)
+    assert _detect_local_network() == "192.168.1.0/24"
+
+    # 5. _detect_local_network respeita NETSPOT_DEFAULT_SUBNET configurada
+    monkeypatch.setenv("NETSPOT_DEFAULT_SUBNET", "10.0.1.0/24")
+    assert _detect_local_network() == "10.0.1.0/24"
 
 
 def test_parse_nmap_hosts_xml_extracts_active_ips():

@@ -766,7 +766,16 @@ async function preloadDiscoverySubnet() {
         }
         const data = await res.json();
         const subnet = String(data?.subnet || "").trim();
-        if (isValidIpv4Cidr(subnet) && !String(subnetInput.value || "").trim()) {
+        const isOversizedOrDocker = (s) => {
+            const parts = s.split("/");
+            if (parts.length !== 2) return false;
+            const prefix = Number(parts[1]);
+            if (prefix < 20) return true;
+            if (s.startsWith("172.") && prefix <= 16) return true;
+            return false;
+        };
+
+        if (isValidIpv4Cidr(subnet) && !isOversizedOrDocker(subnet) && !String(subnetInput.value || "").trim()) {
             subnetInput.value = subnet;
         } else if (!String(subnetInput.value || "").trim()) {
             subnetInput.value = "192.168.1.0/24";

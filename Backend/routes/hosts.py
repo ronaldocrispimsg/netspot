@@ -603,7 +603,17 @@ def _prepare_discovery_result(db: Session, raw_hosts: list[dict]) -> list[dict]:
     return prepared
 
 
-def _detect_local_network() -> str | None:
+def _detect_local_network() -> str:
+    # 1. Prioridade máxima: Configuração explícita via variável de ambiente
+    configured = (os.getenv("NETSPOT_DEFAULT_SUBNET") or os.getenv("DEFAULT_DISCOVERY_SUBNET") or "").strip()
+    if configured:
+        try:
+            net = ipaddress.ip_network(configured, strict=False)
+            if _is_rfc1918_private(net) and net.num_addresses <= _MAX_DISCOVERY_ADDRESSES:
+                return str(net)
+        except ValueError:
+            pass
+
     outbound_ip = None
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
@@ -647,21 +657,29 @@ def _detect_local_network() -> str | None:
             if not _is_rfc1918_private(network):
                 continue
 
+            # Rejeita redes que excedem o teto operacional de varredura (ex.: /16 com 65.536 hosts)
+            if network.num_addresses > _MAX_DISCOVERY_ADDRESSES:
+                continue
+
+            # Rejeita faixas do pool de bridge interna do Docker (172.16.0.0/12)
+            if any(network.subnet_of(rng) for rng in (ipaddress.ip_network("172.16.0.0/12"),)):
+                continue
+
             candidates.append({
                 "iface": iface,
                 "ip": ip,
                 "cidr": str(network),
             })
 
-    if not candidates:
-        return None
+    if candidates:
+        if outbound_ip:
+            for candidate in candidates:
+                if candidate["ip"] == outbound_ip:
+                    return candidate["cidr"]
+        return candidates[0]["cidr"]
 
-    if outbound_ip:
-        for candidate in candidates:
-            if candidate["ip"] == outbound_ip:
-                return candidate["cidr"]
-
-    return candidates[0]["cidr"]
+    # Fallback seguro para LAN padrão (evita capturar bridge interna do Docker 172.20.0.0/16)
+    return "192.168.1.0/24"
 
 
 def _reset_host_operational_state(host: Host) -> None:
