@@ -12,9 +12,14 @@ SYNC_DATABASE_URL = DATABASE_URL
 if SYNC_DATABASE_URL.startswith("postgresql://"):
     SYNC_DATABASE_URL = SYNC_DATABASE_URL.replace("postgresql://", "postgresql+psycopg2://", 1)
 
+sync_connect_args = {}
+if "postgresql" in SYNC_DATABASE_URL:
+    sync_connect_args = {"options": "-c lock_timeout=4000ms"}
+
 # Engine síncrono (para endpoints FastAPI síncronos)
 engine = create_engine(
     SYNC_DATABASE_URL,
+    connect_args=sync_connect_args,
     pool_pre_ping=True,    # PING PREVENTIVO: Testa conexão antes de reusar do pool
     pool_recycle=1800,     # RECICLAGEM AUTOMÁTICA: Recicla conexões a cada 30 min (1800s)
     pool_size=20,          # Tamanho base do pool de conexões
@@ -35,12 +40,17 @@ if ASYNC_DATABASE_URL.startswith("postgresql+psycopg2://"):
 elif ASYNC_DATABASE_URL.startswith("postgresql://"):
     ASYNC_DATABASE_URL = ASYNC_DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
 
+async_connect_args = {}
+if "postgresql" in ASYNC_DATABASE_URL:
+    async_connect_args = {"server_settings": {"lock_timeout": "4000ms"}}
+
 async_engine = create_async_engine(
     ASYNC_DATABASE_URL,
+    connect_args=async_connect_args,
     pool_pre_ping=True,
     pool_recycle=1800,
-    pool_size=20,
-    max_overflow=10,
+    pool_size=35,
+    max_overflow=30,
     pool_timeout=30
 )
 

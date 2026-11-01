@@ -18,12 +18,17 @@ class QueueManager:
         self.notification_queue = None
         self.consumer_tasks = []
         self._monitor_task = None
+        self._loop = None
 
     async def connect(self, max_attempts: int = 10, delay_seconds: float = 3.0) -> bool:
         """
         Conecta ou reconecta ao RabbitMQ utilizando aio_pika.connect_robust.
         Configura Dead Letter Exchange (DLX) e Dead Letter Queue (DLQ) para mensagens mortas/com erro.
         """
+        try:
+            self._loop = asyncio.get_running_loop()
+        except RuntimeError:
+            pass
         host = os.getenv("RABBITMQ_HOST", "rabbitmq")
         port = int(os.getenv("RABBITMQ_PORT", "5672"))
         user = os.getenv("RABBITMQ_USER", "guest")
@@ -69,8 +74,9 @@ class QueueManager:
                     arguments=queue_args
                 )
 
-                # Controle de concorrência e limite de prefetch
-                await self.channel.set_qos(prefetch_count=10)
+                # Controle de concorrência e limite de prefetch (32 checagens paralelas para suportar 126+ hosts em <2s)
+                prefetch_limit = int(os.getenv("NETSPOT_MQ_PREFETCH_COUNT", "32"))
+                await self.channel.set_qos(prefetch_count=prefetch_limit)
 
                 logger.info("Conectado ao RabbitMQ com sucesso (Filas principais e DLQ ativas)!")
                 
@@ -107,7 +113,7 @@ class QueueManager:
         """
         while True:
             try:
-                await asyncio.sleep(5)
+                await asyncio.sleep(10)
                 is_conn_closed = self.connection is None or self.connection.is_closed
                 is_chan_closed = self.channel is None or self.channel.is_closed
 
@@ -177,6 +183,15 @@ class QueueManager:
             routing_key="netspot.host_checks"
         )
 
+    def publish_host_checks_sync(self, host_ids: list[int]):
+        if not host_ids:
+            return
+        loop = getattr(self, "_loop", None)
+        if loop and loop.is_running():
+            for hid in host_ids:
+                if hid:
+                    asyncio.run_coroutine_threadsafe(self.publish_host_check(int(hid)), loop)
+
     async def publish_notification(self, payload: dict | str):
         if not await self._ensure_connection_active():
             logger.error("Não é possível publicar notificação: RabbitMQ indisponível.")
@@ -195,14 +210,23 @@ class QueueManager:
         )
 
     def publish_notification_sync(self, payload: dict | str):
+        loop = getattr(self, "_loop", None)
+        if loop and loop.is_running():
+            asyncio.run_coroutine_threadsafe(self.publish_notification(payload), loop)
+            return
+
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                asyncio.run_coroutine_threadsafe(self.publish_notification(payload), loop)
+            running_loop = asyncio.get_running_loop()
+            if running_loop.is_running():
+                asyncio.run_coroutine_threadsafe(self.publish_notification(payload), running_loop)
                 return
         except RuntimeError:
             pass
-        asyncio.run(self.publish_notification(payload))
+
+        try:
+            asyncio.run(self.publish_notification(payload))
+        except Exception as e:
+            logger.warning(f"Falha ao despachar notificação síncrona: {e}")
 
     async def close(self):
         if self._monitor_task and not self._monitor_task.done():

@@ -59,7 +59,22 @@ function renderIncidents(items) {
     if (!box) return;
 
     if (!items.length) {
-        setIncidentsState("Nenhum incidente encontrado.", "empty");
+        const searchTerm = document.getElementById("incidentsSearch")?.value || "";
+        const isFiltered = Boolean(searchTerm.trim()) || currentFilter !== "all";
+        box.innerHTML = `
+            <div class="empty-state-box">
+                <div class="empty-state-icon">
+                    <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="12" y1="8" x2="12" y2="12"></line>
+                        <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                    </svg>
+                </div>
+                <h3 class="empty-state-title">${isFiltered ? "Nenhum incidente encontrado" : "Sem incidentes registrados"}</h3>
+                <p class="empty-state-desc">${isFiltered ? "Nenhum incidente corresponde ao filtro ou termo pesquisado." : "Todos os dispositivos monitorados operaram com estabilidade."}</p>
+                ${isFiltered ? `<button type="button" class="btn-clear-filter" onclick="clearIncidentFilters()">Limpar filtros</button>` : ""}
+            </div>
+        `;
         return;
     }
 
@@ -171,8 +186,34 @@ async function loadIncidents(silent = false) {
     }
 }
 
+function clearIncidentFilters() {
+    const searchInput = document.getElementById("incidentsSearch");
+    if (searchInput) searchInput.value = "";
+    currentFilter = "all";
+    const chipsContainer = document.getElementById("incidentStatusChips");
+    if (chipsContainer) {
+        chipsContainer.querySelectorAll(".status-chip").forEach((chip) => {
+            chip.classList.toggle("active", chip.getAttribute("data-status") === "all");
+        });
+    }
+    applyFilters();
+}
+
 window.addEventListener("DOMContentLoaded", async () => {
     initStatusChips();
+
+    // Lê parâmetros de URL caso venha do dashboard (ex.: ?status=open ou ?status=closed)
+    const urlParams = new URLSearchParams(window.location.search);
+    const initialStatus = urlParams.get("status");
+    if (initialStatus && ["all", "open", "closed"].includes(initialStatus)) {
+        currentFilter = initialStatus;
+        const chipsContainer = document.getElementById("incidentStatusChips");
+        if (chipsContainer) {
+            chipsContainer.querySelectorAll(".status-chip").forEach((chip) => {
+                chip.classList.toggle("active", chip.getAttribute("data-status") === initialStatus);
+            });
+        }
+    }
 
     const searchInput = document.getElementById("incidentsSearch");
     if (searchInput) searchInput.addEventListener("input", applyFilters);
@@ -184,12 +225,12 @@ window.addEventListener("DOMContentLoaded", async () => {
 
     await loadIncidents();
 
-    // Auto-refresh leve a cada 20 segundos em segundo plano (se a aba estiver visível)
+    // Auto-refresh padronizado a cada 10 segundos em segundo plano (se a aba estiver visível)
     setInterval(() => {
         if (!document.hidden) {
             loadIncidents(true);
         }
-    }, 20000);
+    }, 10000);
 });
 
 /* ==========================================================================
@@ -220,13 +261,15 @@ window.addEventListener("DOMContentLoaded", async () => {
     }
     
     function updateThemeIcon(isDarkState) {
+        const btn = document.getElementById("themeToggleBtn");
+        if (btn) btn.setAttribute("aria-pressed", isDarkState ? "true" : "false");
         const icon = document.getElementById("themeToggleIcon");
         if (!icon) return;
         if (isDarkState) {
             icon.innerHTML = `<path d="M12 3a9 9 0 109 9 9.75 9.75 0 00-.67-3.4 6.78 6.78 0 01-7.93-7.93A9.75 9.75 0 0012 3z" fill="currentColor"/>`;
             icon.removeAttribute("stroke");
         } else {
-            icon.innerHTML = `<circle cx="12" cy="12" r="4" fill="#f9ab00"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" stroke="#f9ab00" stroke-width="2" stroke-linecap="round"/>`;
+            icon.innerHTML = `<circle cx="12" cy="12" r="4" fill="var(--warning)"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" stroke="var(--warning)" stroke-width="2" stroke-linecap="round"/>`;
         }
     }
 })();

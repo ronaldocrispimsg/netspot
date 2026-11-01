@@ -19,9 +19,6 @@ dist/
 *.swp
 *.swo
 
-# ===== Agentes e Arquivos Internos =====
-.agents/
-
 # ===== OS =====
 .DS_Store
 Thumbs.db
@@ -48,6 +45,10 @@ poetry.lock
 .pytest_cache/
 .mypy_cache/
 
+# ===== Agentes e Arquivos Internos =====
+.agents/
+arquitetura.md
+
 # ===== Docker volumes data =====
 Database/postgres_data/
 RabbitMQ/data/
@@ -55,13 +56,12 @@ RabbitMQ/log/
 N8N/data/
 
 # ===== Documentação / TCC & Scripts Auxiliares =====
+*.pdf
 Escrita_TCC/
 RELATORIO-UIUX.md
+docs/RELATORIO-UIUX.md
 scripts/script_para_gerar_diagramas.py
 script_para_gerar_diagramas.py
-
-RabbitMQ/data/
-N8N/data/
-Database/postgres_data/
+scripts/audit_latex.py
 estrutura.txt
 *Zone.Identifier

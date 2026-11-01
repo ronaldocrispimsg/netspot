@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 
 TELEGRAM_BOT_TOKEN = os.getenv("NETSPOT_TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("NETSPOT_TELEGRAM_CHAT_ID")
+NOTIFICATIONS_ENABLED = os.getenv("NETSPOT_NOTIFICATIONS_ENABLED", "1") != "0"
 TELEGRAM_ANTISPAM_ENABLED = os.getenv("NETSPOT_TELEGRAM_ANTISPAM_ENABLED", "1") != "0"
 TELEGRAM_ANTISPAM_WINDOW_SECONDS = int(os.getenv("NETSPOT_TELEGRAM_ANTISPAM_WINDOW_SECONDS", "120"))
 TELEGRAM_ANTISPAM_MAX_ENTRIES = int(os.getenv("NETSPOT_TELEGRAM_ANTISPAM_MAX_ENTRIES", "5000"))
@@ -240,7 +241,12 @@ def build_incident_closed_message(host, timestamp=None, incident_type=None):
 def _message_fingerprint(message) -> str:
     import json
     if isinstance(message, dict):
-        normalized = json.dumps(message, sort_keys=True)
+        filtered = {
+            k: v
+            for k, v in message.items()
+            if k not in ("timestamp", "ts", "created_at")
+        }
+        normalized = json.dumps(filtered, sort_keys=True)
     else:
         normalized = " ".join(str(message or "").split())
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
@@ -257,8 +263,10 @@ def is_flapping_suppressed(message, now_ts: float, window_seconds: int = 300, ma
     e suprime disparos repetitivos para evitar fadiga de alertas (Alert Fatigue).
     """
     host_key = None
+    event_key = "default"
     if isinstance(message, dict):
         host_key = message.get("host_name") or message.get("host_id") or message.get("address")
+        event_key = str(message.get("event") or "default").strip().lower()
     elif isinstance(message, str):
         import re
         m = re.search(r"Host:\s*([^\n]+)", message)
@@ -268,19 +276,23 @@ def is_flapping_suppressed(message, now_ts: float, window_seconds: int = 300, ma
     if not host_key:
         return False
 
+    state_key = f"{host_key}:{event_key}"
+
     with _FLAPPING_LOCK:
-        history = _FLAPPING_STATE.get(host_key, [])
+        history = _FLAPPING_STATE.get(state_key, [])
         history = [ts for ts in history if now_ts - ts <= window_seconds]
+        if len(history) >= max_changes:
+            _FLAPPING_STATE[state_key] = history
+            return True
+
         history.append(now_ts)
-        _FLAPPING_STATE[host_key] = history
+        _FLAPPING_STATE[state_key] = history
 
         if len(_FLAPPING_STATE) > 1000:
             stale_keys = [k for k, h in _FLAPPING_STATE.items() if not h or now_ts - h[-1] > window_seconds]
             for k in stale_keys:
                 _FLAPPING_STATE.pop(k, None)
 
-        if len(history) > max_changes:
-            return True
         return False
 
 
@@ -310,9 +322,7 @@ def _is_suppressed_by_antispam(message, now_ts: float) -> bool:
     return False
 
 def send_telegram_alert(message):
-    token = TELEGRAM_BOT_TOKEN
-    chat_id = TELEGRAM_CHAT_ID
-    if not token or not chat_id:
+    if not NOTIFICATIONS_ENABLED:
         return False
 
     now_ts = time.time()
@@ -325,9 +335,7 @@ def send_telegram_alert(message):
     return True
 
 async def send_telegram_alert_async(message):
-    token = TELEGRAM_BOT_TOKEN
-    chat_id = TELEGRAM_CHAT_ID
-    if not token or not chat_id:
+    if not NOTIFICATIONS_ENABLED:
         return False
 
     now_ts = time.time()

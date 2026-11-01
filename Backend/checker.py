@@ -12,12 +12,26 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 from Backend.models import DNSCache
 
+def _is_literal_ip(address: str) -> bool:
+    for family in (socket.AF_INET, socket.AF_INET6):
+        try:
+            socket.inet_pton(family, str(address or "").strip())
+            return True
+        except Exception:
+            pass
+    return False
+
 def resolve_dns_real_sync(address):
+    if _is_literal_ip(address):
+        return [str(address).strip()], 0
+    resolver = dns.resolver.Resolver()
+    resolver.lifetime = 1.5
+    resolver.timeout = 1.0
     try:
-        answers = dns.resolver.resolve(address, "A")
+        answers = resolver.resolve(address, "A")
     except:
         try:
-            answers = dns.resolver.resolve(address, "AAAA")
+            answers = resolver.resolve(address, "AAAA")
         except:
             return [], None
 
@@ -85,6 +99,8 @@ def resolve_dns_cached_sync(address: str, db):
     return ips, ttl, ttl
 
 async def resolve_dns_real(address):
+    if _is_literal_ip(address):
+        return [str(address).strip()], 0
     try:
         answers = await dns.asyncresolver.resolve(address, "A")
     except:
@@ -158,7 +174,7 @@ async def resolve_dns_cached(address: str, db):
 
     return ips, ttl, ttl
 
-async def ping_host(ip: str, count: int = 3, timeout: int = 5, max_ms=5000):
+async def ping_host(ip: str, count: int = 1, timeout: int = 2, max_ms=5000):
     is_windows = platform.system().lower() == "windows"
     
     if is_windows:
@@ -229,7 +245,7 @@ async def ping_host(ip: str, count: int = 3, timeout: int = 5, max_ms=5000):
             "latency": None
         }
 
-async def tcp_check(ip: str, port: int, timeout: int = 5):
+async def tcp_check(ip: str, port: int, timeout: int = 2):
     start = time.time()
 
     try:
@@ -289,7 +305,7 @@ async def _http_attempt(client: httpx.AsyncClient, url: str, timeout=1):
     except Exception as e:
         return {"success": False, "latency": None, "status_code": None, "error": str(e)}
 
-async def _http_with_retries(client: httpx.AsyncClient, url: str, retries: int = 3, timeout: int = 1):
+async def _http_with_retries(client: httpx.AsyncClient, url: str, retries: int = 1, timeout: int = 2):
     last_result = None
     for _ in range(max(1, retries)):
         result = await _http_attempt(client, url, timeout=timeout)
@@ -298,7 +314,7 @@ async def _http_with_retries(client: httpx.AsyncClient, url: str, retries: int =
             return result
     return last_result or {"success": False, "latency": None, "status_code": None, "error": "http_failed"}
 
-async def http_check(url: str, timeout=1, retries=3):
+async def http_check(url: str, timeout=2, retries=1):
     parsed = urlparse(url if "://" in url else f"//{url}")
     has_explicit_scheme = parsed.scheme in ("http", "https")
 
@@ -315,14 +331,16 @@ async def http_check(url: str, timeout=1, retries=3):
         https_url = f"https://{base}"
         http_url = f"http://{base}"
 
-        https_result = await _http_with_retries(client, https_url, retries=retries, timeout=timeout)
+        https_result, http_result = await asyncio.gather(
+            _http_with_retries(client, https_url, retries=retries, timeout=timeout),
+            _http_with_retries(client, http_url, retries=retries, timeout=timeout),
+        )
         if https_result.get("success"):
             https_result["protocol"] = "https"
             https_result["https_latency"] = https_result.get("latency")
-            https_result["http_latency"] = None
+            https_result["http_latency"] = http_result.get("latency") if http_result.get("success") else None
             return https_result
 
-        http_result = await _http_with_retries(client, http_url, retries=retries, timeout=timeout)
         http_result["protocol"] = "http"
         http_result["https_latency"] = https_result.get("latency") if https_result.get("success") else None
         http_result["http_latency"] = http_result.get("latency") if http_result.get("success") else None

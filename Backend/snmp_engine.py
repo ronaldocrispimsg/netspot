@@ -14,18 +14,39 @@ from pysnmp.hlapi.v3arch.asyncio import (
 )
 
 from Backend.models import SNMPMetric
+from Backend.snmp.oid_cache import get_cached_oids, set_cached_oid, clear_oid_cache
 
 
 SNMP_BURST_FAIL_LIMIT = 3
 SNMP_BACKOFF_BASE_SECONDS = 300
 SNMP_BACKOFF_MAX_SECONDS = 3600
 SNMP_BACKOFF_STATE = {}
-SNMP_TIMEOUT_SECONDS = 2
-SNMP_RETRIES = 3
+SNMP_TIMEOUT_SECONDS = 1
+SNMP_RETRIES = 1
 COUNTER32_MODULO = 2 ** 32
 COUNTER64_FAILOVER_THRESHOLD = 3
 COUNTER64_REPROBE_INTERVAL = 30
 SNMP_NET_COUNTER_STATE = {}
+_SHARED_SNMP_ENGINE = None
+_SHARED_SNMP_LOOP = None
+
+
+def _get_shared_snmp_engine():
+    global _SHARED_SNMP_ENGINE, _SHARED_SNMP_LOOP
+    try:
+        current_loop = asyncio.get_running_loop()
+    except RuntimeError:
+        current_loop = None
+
+    if _SHARED_SNMP_ENGINE is None or _SHARED_SNMP_LOOP is not current_loop:
+        if _SHARED_SNMP_ENGINE is not None:
+            try:
+                _SHARED_SNMP_ENGINE.close_dispatcher()
+            except Exception:
+                pass
+        _SHARED_SNMP_ENGINE = SnmpEngine()
+        _SHARED_SNMP_LOOP = current_loop
+    return _SHARED_SNMP_ENGINE
 
 
 def snmp_has_usable_data(snmp_data):
@@ -54,6 +75,7 @@ def get_snmp_state(host_id):
 
 
 def reset_snmp_backoff(host_id=None):
+    clear_oid_cache(host_id)
     if host_id is None:
         total = len(SNMP_BACKOFF_STATE)
         SNMP_BACKOFF_STATE.clear()
@@ -98,7 +120,7 @@ def register_snmp_failure(host_id, host_name):
 
 
 async def get_snmp_value(ip, community, oid):
-    snmp_engine = SnmpEngine()
+    snmp_engine = _get_shared_snmp_engine()
     try:
         comm = (community or "netspot").strip() or "netspot"
         error_indication, error_status, error_index, var_binds = await get_cmd(
@@ -125,53 +147,48 @@ async def get_snmp_value(ip, community, oid):
     except Exception as e:
         print(f"Erro SNMP em {ip}: {e}")
         return None
-    finally:
-        snmp_engine.close_dispatcher()
 
 
 async def walk_snmp(ip, community, oid):
-    snmp_engine = SnmpEngine()
+    snmp_engine = _get_shared_snmp_engine()
     results = []
     current_oid = oid
     comm = (community or "netspot").strip() or "netspot"
 
-    try:
-        while True:
-            error_indication, error_status, error_index, var_binds = await next_cmd(
-                snmp_engine,
-                CommunityData(comm, mpModel=1),
-                await UdpTransportTarget.create(
-                    (ip, 161),
-                    timeout=SNMP_TIMEOUT_SECONDS,
-                    retries=SNMP_RETRIES,
-                ),
-                ContextData(),
-                ObjectType(ObjectIdentity(current_oid)),
-                lexicographicMode=False,
-            )
+    while True:
+        error_indication, error_status, error_index, var_binds = await next_cmd(
+            snmp_engine,
+            CommunityData(comm, mpModel=1),
+            await UdpTransportTarget.create(
+                (ip, 161),
+                timeout=SNMP_TIMEOUT_SECONDS,
+                retries=SNMP_RETRIES,
+            ),
+            ContextData(),
+            ObjectType(ObjectIdentity(current_oid)),
+            lexicographicMode=False,
+        )
 
-            if error_indication or error_status or not var_binds:
+        if error_indication or error_status or not var_binds:
+            break
+
+        reached_end = False
+        for var_bind in var_binds:
+            oid_name = str(var_bind[0])
+            oid_value = str(var_bind[1])
+
+            if not oid_name.startswith(f"{oid}."):
+                reached_end = True
                 break
 
-            reached_end = False
-            for var_bind in var_binds:
-                oid_name = str(var_bind[0])
-                oid_value = str(var_bind[1])
+            if "No Such" in oid_value:
+                continue
 
-                if not oid_name.startswith(f"{oid}."):
-                    reached_end = True
-                    break
+            results.append((oid_name, oid_value))
+            current_oid = oid_name
 
-                if "No Such" in oid_value:
-                    continue
-
-                results.append((oid_name, oid_value))
-                current_oid = oid_name
-
-            if reached_end:
-                break
-    finally:
-        snmp_engine.close_dispatcher()
+        if reached_end:
+            break
 
     return results
 
@@ -287,16 +304,24 @@ def _to_float(value):
 
 
 async def _read_interface_octets_64(ip, community, iface_index):
-    in_64 = _to_float(await get_snmp_value(ip, community, f"1.3.6.1.2.1.31.1.1.1.6.{iface_index}"))
-    out_64 = _to_float(await get_snmp_value(ip, community, f"1.3.6.1.2.1.31.1.1.1.10.{iface_index}"))
+    raw_in, raw_out = await asyncio.gather(
+        get_snmp_value(ip, community, f"1.3.6.1.2.1.31.1.1.1.6.{iface_index}"),
+        get_snmp_value(ip, community, f"1.3.6.1.2.1.31.1.1.1.10.{iface_index}"),
+    )
+    in_64 = _to_float(raw_in)
+    out_64 = _to_float(raw_out)
     if in_64 is not None and out_64 is not None:
         return in_64, out_64
     return None, None
 
 
 async def _read_interface_octets_32(ip, community, iface_index):
-    in_32 = _to_float(await get_snmp_value(ip, community, f"1.3.6.1.2.1.2.2.1.10.{iface_index}"))
-    out_32 = _to_float(await get_snmp_value(ip, community, f"1.3.6.1.2.1.2.2.1.16.{iface_index}"))
+    raw_in, raw_out = await asyncio.gather(
+        get_snmp_value(ip, community, f"1.3.6.1.2.1.2.2.1.10.{iface_index}"),
+        get_snmp_value(ip, community, f"1.3.6.1.2.1.2.2.1.16.{iface_index}"),
+    )
+    in_32 = _to_float(raw_in)
+    out_32 = _to_float(raw_out)
     if in_32 is not None and out_32 is not None:
         return in_32, out_32
     return None, None
@@ -428,7 +453,9 @@ async def update_host_snmp(host, db):
     }
 
     comm = (host.snmp_community or "netspot").strip() or "netspot"
-    ip = host.address
+    ip = getattr(host, "last_resolved_ip", None) or host.address
+    host_id = getattr(host, "id", None)
+    cached_oids = (get_cached_oids(host_id) or {}) if host_id is not None else {}
 
     # ---------- 1. CPU (UCD-SNMP Linux, HOST-RESOURCES Windows, Cisco, Mikrotik, Fortinet, Huawei, Juniper, HP) ----------
     cpu_idle = await get_snmp_value(ip, comm, "1.3.6.1.4.1.2021.11.11.0")
@@ -455,6 +482,11 @@ async def update_host_snmp(host, db):
                 host.cpu_usage = data["cpu"]
 
     if data["cpu"] is None:
+        # Se nem UCD-SNMP nem HOST-RESOURCES responderam e o host ainda não possui OIDs cacheados,
+        # verifica rapidamente sysUpTime.0 para abortar cedo caso a porta UDP 161 esteja fechada/inacessível.
+        if not cached_oids and await get_snmp_value(ip, comm, "1.3.6.1.2.1.1.3.0") is None:
+            return data
+
         # OIDs de CPU de Roteadores/Switches/Firewalls (Mikrotik, Cisco, Fortinet, Huawei, Juniper, HP)
         additional_cpu_oids = [
             "1.3.6.1.4.1.14988.1.1.1.3.1.0",        # Mikrotik RouterOS v7
@@ -475,10 +507,16 @@ async def update_host_snmp(host, db):
                 break
 
     # ---------- 2. RAM (UCD-SNMP Linux, HOST-RESOURCES Windows, Cisco, Fortinet, Huawei, Juniper) ----------
-    ram_total = _to_float(await get_snmp_value(ip, comm, "1.3.6.1.4.1.2021.4.5.0"))
-    ram_free = _to_float(await get_snmp_value(ip, comm, "1.3.6.1.4.1.2021.4.6.0"))
-    ram_buffer = _to_float(await get_snmp_value(ip, comm, "1.3.6.1.4.1.2021.4.14.0"))
-    ram_cache = _to_float(await get_snmp_value(ip, comm, "1.3.6.1.4.1.2021.4.15.0"))
+    raw_ram_total, raw_ram_free, raw_ram_buffer, raw_ram_cache = await asyncio.gather(
+        get_snmp_value(ip, comm, "1.3.6.1.4.1.2021.4.5.0"),
+        get_snmp_value(ip, comm, "1.3.6.1.4.1.2021.4.6.0"),
+        get_snmp_value(ip, comm, "1.3.6.1.4.1.2021.4.14.0"),
+        get_snmp_value(ip, comm, "1.3.6.1.4.1.2021.4.15.0"),
+    )
+    ram_total = _to_float(raw_ram_total)
+    ram_free = _to_float(raw_ram_free)
+    ram_buffer = _to_float(raw_ram_buffer)
+    ram_cache = _to_float(raw_ram_cache)
 
     if ram_total is not None and ram_free is not None and ram_total > 0:
         buffer = ram_buffer or 0.0
@@ -489,18 +527,30 @@ async def update_host_snmp(host, db):
 
     if data["ram"] is None:
         # Fallback para HOST-RESOURCES Physical Memory (Windows/Linux/Mikrotik)
-        ram_index = await get_ram_storage_index(ip, comm)
+        ram_index = cached_oids.get("ram_index")
+        if not ram_index:
+            ram_index = await get_ram_storage_index(ip, comm)
+            if ram_index and host_id is not None:
+                set_cached_oid(host_id, "ram_index", ram_index)
         if ram_index:
-            ram_size = _to_float(await get_snmp_value(ip, comm, f"1.3.6.1.2.1.25.2.3.1.5.{ram_index}"))
-            ram_used = _to_float(await get_snmp_value(ip, comm, f"1.3.6.1.2.1.25.2.3.1.6.{ram_index}"))
+            raw_ram_size, raw_ram_used = await asyncio.gather(
+                get_snmp_value(ip, comm, f"1.3.6.1.2.1.25.2.3.1.5.{ram_index}"),
+                get_snmp_value(ip, comm, f"1.3.6.1.2.1.25.2.3.1.6.{ram_index}"),
+            )
+            ram_size = _to_float(raw_ram_size)
+            ram_used = _to_float(raw_ram_used)
             if ram_size is not None and ram_used is not None and ram_size > 0:
                 data["ram"] = round((ram_used / ram_size) * 100, 2)
                 host.ram_usage = data["ram"]
 
     if data["ram"] is None:
         # Fallback Cisco Memory Pool
-        cisco_used = _to_float(await get_snmp_value(ip, comm, "1.3.6.1.4.1.9.9.48.1.1.1.5.1"))
-        cisco_free = _to_float(await get_snmp_value(ip, comm, "1.3.6.1.4.1.9.9.48.1.1.1.6.1"))
+        raw_cisco_used, raw_cisco_free = await asyncio.gather(
+            get_snmp_value(ip, comm, "1.3.6.1.4.1.9.9.48.1.1.1.5.1"),
+            get_snmp_value(ip, comm, "1.3.6.1.4.1.9.9.48.1.1.1.6.1"),
+        )
+        cisco_used = _to_float(raw_cisco_used)
+        cisco_free = _to_float(raw_cisco_free)
         if cisco_used is not None and cisco_free is not None and (cisco_used + cisco_free) > 0:
             data["ram"] = round((cisco_used / (cisco_used + cisco_free)) * 100, 2)
             host.ram_usage = data["ram"]
@@ -520,10 +570,18 @@ async def update_host_snmp(host, db):
                 break
 
     # ---------- 3. DISCO (Linux '/' ou Windows 'C:') ----------
-    storage_index = await get_storage_index(ip, comm)
+    storage_index = cached_oids.get("storage_index")
+    if not storage_index:
+        storage_index = await get_storage_index(ip, comm)
+        if storage_index and host_id is not None:
+            set_cached_oid(host_id, "storage_index", storage_index)
     if storage_index:
-        disk_total = _to_float(await get_snmp_value(ip, comm, f"1.3.6.1.2.1.25.2.3.1.5.{storage_index}"))
-        disk_used = _to_float(await get_snmp_value(ip, comm, f"1.3.6.1.2.1.25.2.3.1.6.{storage_index}"))
+        raw_disk_total, raw_disk_used = await asyncio.gather(
+            get_snmp_value(ip, comm, f"1.3.6.1.2.1.25.2.3.1.5.{storage_index}"),
+            get_snmp_value(ip, comm, f"1.3.6.1.2.1.25.2.3.1.6.{storage_index}"),
+        )
+        disk_total = _to_float(raw_disk_total)
+        disk_used = _to_float(raw_disk_used)
 
         if disk_total is not None and disk_used is not None:
             total = disk_total
@@ -535,7 +593,11 @@ async def update_host_snmp(host, db):
                 host.disk_remaining = round(100 - data["disk"], 2)
 
     # ---------- 4. REDE (Melhor interface) ----------
-    iface_index = await get_best_interface_index(ip, comm)
+    iface_index = cached_oids.get("iface_index")
+    if not iface_index:
+        iface_index = await get_best_interface_index(ip, comm)
+        if iface_index and host_id is not None:
+            set_cached_oid(host_id, "iface_index", iface_index)
     now = datetime.now(timezone.utc).replace(tzinfo=None)
 
     if iface_index:
@@ -602,7 +664,8 @@ async def update_host_snmp(host, db):
     )
     db.add(metric)
 
-    await trim_snmp_history(db, host.id, limit=500)
+    if (getattr(host, "success_streak", 0) or 0) % 20 == 1:
+        await trim_snmp_history(db, host.id, limit=500)
 
     await db.flush()
     return data

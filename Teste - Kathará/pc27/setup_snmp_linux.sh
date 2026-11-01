@@ -21,41 +21,47 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
-# 1.1 Aguardar DHCP / Conectividade de rede
-if command -v ping &> /dev/null; then
-    echo -e "${YELLOW}Aguardando obtenção de IP/DHCP e conectividade...${NC}"
-    MAX_ATTEMPTS=30
-    ATTEMPT=0
-    while ! ping -c 1 -W 2 8.8.8.8 &>/dev/null && ! ping -c 1 -W 2 100.0.1.254 &>/dev/null && [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
-        sleep 2
-        ATTEMPT=$((ATTEMPT + 1))
-    done
-fi
+# 1.1 e 2. Instalar snmpd apenas se ainda não estiver presente no sistema
+echo -e "\n${YELLOW}[1/4] Verificando / instalando pacote nativo snmpd...${NC}"
+if ! command -v snmpd &> /dev/null; then
+    if command -v ping &> /dev/null; then
+        echo -e "${YELLOW}Aguardando obtenção de IP/DHCP e conectividade...${NC}"
+        MAX_ATTEMPTS=15
+        ATTEMPT=0
+        while ! ping -c 1 -W 1 8.8.8.8 &>/dev/null && ! ping -c 1 -W 1 100.0.1.254 &>/dev/null && [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+            sleep 1
+            ATTEMPT=$((ATTEMPT + 1))
+        done
+    fi
 
-# 2. Instalar snmpd respeitando a distribuição
-echo -e "\n${YELLOW}[1/4] Instalando pacote nativo snmpd...${NC}"
-if command -v apt-get &> /dev/null; then
-    export DEBIAN_FRONTEND=noninteractive
-    apt-get update -qq
-    apt-get install -y -qq snmpd snmp
-elif command -v dnf &> /dev/null; then
-    dnf install -y -q net-snmp net-snmp-utils
-elif command -v yum &> /dev/null; then
-    yum install -y -q net-snmp net-snmp-utils
-elif command -v pacman &> /dev/null; then
-    pacman -Sy --noconfirm net-snmp
+    if command -v apt-get &> /dev/null; then
+        export DEBIAN_FRONTEND=noninteractive
+        sed -i '/bullseye-security/d' /etc/apt/sources.list 2>/dev/null || true
+        apt-get update -qq
+        apt-get install -y -qq snmpd snmp
+    elif command -v dnf &> /dev/null; then
+        dnf install -y -q net-snmp net-snmp-utils
+    elif command -v yum &> /dev/null; then
+        yum install -y -q net-snmp net-snmp-utils
+    elif command -v pacman &> /dev/null; then
+        pacman -Sy --noconfirm net-snmp
+    fi
 fi
-echo -e "${GREEN}   ✔ Pacote snmpd instalado com sucesso!${NC}"
+echo -e "${GREEN}   ✔ Pacote snmpd disponível com sucesso!${NC}"
 
 # 3. Configurar arquivo de configuração /etc/snmp/snmpd.conf com acesso TOTAL MIB (.1)
-echo -e "\n${YELLOW}[2/4] Configurando Community 'netspot' em /etc/snmp/snmpd.conf...${NC}"
+COMMUNITY="${1:-netspot}"
+echo -e "\n${YELLOW}[2/4] Configurando Community '${COMMUNITY}' em /etc/snmp/snmpd.conf...${NC}"
 if [ -f /etc/snmp/snmpd.conf ]; then
     cp /etc/snmp/snmpd.conf /etc/snmp/snmpd.conf.bak.$(date +%Y%m%d%H%M%S) 2>/dev/null || true
 fi
 
 cat <<EOF > /etc/snmp/snmpd.conf
 agentAddress udp:161
-rocommunity netspot default .1
+rocommunity ${COMMUNITY} default .1
+sysName $(hostname)
+sysLocation NetSpot Lab
+sysContact admin@lab.local
 EOF
 echo -e "${GREEN}   ✔ Arquivo /etc/snmp/snmpd.conf configurado com acesso completo MIB (.1)!${NC}"
 
